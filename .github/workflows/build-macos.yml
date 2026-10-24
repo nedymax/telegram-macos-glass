@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 360
     concurrency:
       group: build-macos-${{ github.ref }}-xcode${{ matrix.xcode }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -65,6 +65,12 @@ jobs:
         if: matrix.xcode == '27'
         run: |
           bash scripts/xcode27.sh apply
+          for script in core-xprojects/wallet-engine/wallet-engine/build.sh core-xprojects/mtproto-engine/mtproto-engine/build.sh; do
+            sed -i '' '3a\
+          if [ -z "${CLEAN_ENGINE_ENV:-}" ]; then exec env -i CLEAN_ENGINE_ENV=1 HOME="$HOME" USER="${USER:-}" PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" DEVELOPER_DIR="${DEVELOPER_DIR:-}" sh "$0" "$@"; fi
+          ' "$script"
+            sed -n 1,6p "$script"
+          done
           if ! xcodebuild -showComponent MetalToolchain | grep -qi "installed"; then
             xcodebuild -downloadComponent MetalToolchain
           fi
