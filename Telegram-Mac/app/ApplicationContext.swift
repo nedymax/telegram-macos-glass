@@ -1480,6 +1480,9 @@ final class AuthorizedApplicationContext: NSObject, SplitViewDelegate {
 
 extension Window {
     func applyCornerRadius(for mode: Window.ChromeMode) {
+        guard !System.edgeToEdgeSidebar else {
+            return
+        }
         if #available(macOS 27.0, *) {
             let selector = Selector(("_setCornerRadius:"))
             if self.responds(to: selector) {
