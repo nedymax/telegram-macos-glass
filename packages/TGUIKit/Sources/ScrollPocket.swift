@@ -55,6 +55,7 @@ public final class ScrollPocketArea: View {
     public required init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         isEventLess = true
+        backgroundColor = presentation.colors.background.withAlphaComponent(ScrollPocketArea.tintAlpha)
         element.setAccessibilityElement(false)
         element.frame = bounds
         addSubview(element)
@@ -62,6 +63,13 @@ public final class ScrollPocketArea: View {
 
     public required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    public static let tintAlpha: CGFloat = 0.35
+
+    public override func updateLocalizationAndTheme(theme: PresentationTheme) {
+        super.updateLocalizationAndTheme(theme: theme)
+        backgroundColor = theme.colors.background.withAlphaComponent(ScrollPocketArea.tintAlpha)
     }
 
     public override func layout() {
