@@ -2,6 +2,11 @@ name: Build macOS app
 
 on:
   workflow_dispatch:
+    inputs:
+      xcode26:
+        description: Also build with Xcode 26
+        type: boolean
+        default: false
   push:
     branches:
       - 'feature/**'
@@ -17,13 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - xcode: '27'
-            runner: xcode-27
-            xcode_app: /Applications/Xcode_27.app
-          - xcode: '26'
-            runner: macos-26
-            xcode_app: /Applications/Xcode_26.6.app
+        include: ${{ fromJSON(inputs.xcode26 && '[{"xcode":"27","runner":"xcode-27","xcode_app":"/Applications/Xcode_27.app"},{"xcode":"26","runner":"macos-26","xcode_app":"/Applications/Xcode_26.6.app"}]' || '[{"xcode":"27","runner":"xcode-27","xcode_app":"/Applications/Xcode_27.app"}]') }}
 
     steps:
       - name: Check out
@@ -76,24 +75,27 @@ jobs:
             xcodebuild -downloadComponent MetalToolchain
           fi
 
-      - name: Native framework cache key
-        id: frameworks-key
+      - name: Cache keys
+        id: keys
         run: |
           SUBMODULES="$(git submodule status --recursive | shasum -a 256 | cut -d' ' -f1)"
           XCODE_HASH="$(xcodebuild -version | shasum -a 256 | cut -d' ' -f1)"
-          echo "prefix=frameworks-$XCODE_HASH-$SUBMODULES-" >> "$GITHUB_OUTPUT"
+          echo "frameworks=frameworks-$XCODE_HASH-$SUBMODULES-" >> "$GITHUB_OUTPUT"
           echo "xcode=$XCODE_HASH" >> "$GITHUB_OUTPUT"
+          echo "cas=compilation-cache-$XCODE_HASH-" >> "$GITHUB_OUTPUT"
 
       - name: Restore native frameworks
+        id: restore-frameworks
         uses: actions/cache/restore@v4
         with:
           path: |
             core-xprojects/*/build
             packages/WalletEngine/wallet_engineFFI.xcframework
-          key: ${{ steps.frameworks-key.outputs.prefix }}${{ hashFiles('scripts/configure_frameworks.sh', 'scripts/framework-inputs.sh', 'core-xprojects/**/*.sh') }}-${{ github.run_id }}-${{ github.run_attempt }}
+            submodules/telegram-ios/submodules/MTProtoRustEngine/MTProtoEngineFFI.xcframework
+          key: ${{ steps.keys.outputs.frameworks }}restore
           restore-keys: |
-            ${{ steps.frameworks-key.outputs.prefix }}
-            frameworks-${{ steps.frameworks-key.outputs.xcode }}-
+            ${{ steps.keys.outputs.frameworks }}
+            frameworks-${{ steps.keys.outputs.xcode }}-
 
       - name: Build native frameworks
         id: frameworks
@@ -101,30 +103,34 @@ jobs:
           CMAKE_POLICY_VERSION_MINIMUM: '3.5'
         run: sh scripts/configure_frameworks.sh
 
-      - name: Save native frameworks
+      - name: Native framework stamps
+        id: stamps
         if: always() && steps.frameworks.conclusion != 'skipped'
+        run: |
+          STAMPS="$(cat core-xprojects/*/build/.framework-stamp 2>/dev/null | shasum -a 256 | cut -d' ' -f1)"
+          echo "key=${{ steps.keys.outputs.frameworks }}$STAMPS" >> "$GITHUB_OUTPUT"
+
+      - name: Save native frameworks
+        if: always() && steps.stamps.outputs.key != '' && steps.stamps.outputs.key != steps.restore-frameworks.outputs.cache-matched-key
         uses: actions/cache/save@v4
         with:
           path: |
             core-xprojects/*/build
             packages/WalletEngine/wallet_engineFFI.xcframework
-          key: ${{ steps.frameworks-key.outputs.prefix }}${{ hashFiles('scripts/configure_frameworks.sh', 'scripts/framework-inputs.sh', 'core-xprojects/**/*.sh') }}-${{ github.run_id }}-${{ github.run_attempt }}
+            submodules/telegram-ios/submodules/MTProtoRustEngine/MTProtoEngineFFI.xcframework
+          key: ${{ steps.stamps.outputs.key }}
 
-      - name: Diagnose wallet engine
-        if: failure() && steps.frameworks.conclusion == 'failure'
-        shell: bash {0}
-        run: |
-          ENGINE=submodules/telegram-ios/third-party/wallet-engine/wallet-engine
-          cd "$ENGINE"
-          cat rust-toolchain.toml 2>/dev/null || true
-          rustc --version; cargo --version; xcrun --find ld; ld -v 2>&1 | head -3
-          for f in target/bindings-host/release/deps/libzeroize_derive-*; do
-            echo "== $f"; ls -la "$f"
-            otool -l "$f" | grep -B1 -A4 "sectname .rustc" || echo "no .rustc section"
-          done
-          env -u SDKROOT CARGO_TARGET_DIR="$PWD/target/bindings-host-diag" cargo build --release --locked -v 2>&1 | grep -E "zeroize|error|warning: |Finished" | tail -40 || true
+      - name: Restore compilation cache
+        id: restore-cas
+        uses: actions/cache/restore@v4
+        with:
+          path: build/DerivedData/CompilationCache.noindex
+          key: ${{ steps.keys.outputs.cas }}${{ github.sha }}
+          restore-keys: |
+            ${{ steps.keys.outputs.cas }}
 
       - name: Build app
+        id: build-app
         run: |
           set -o pipefail
           xcodebuild \
@@ -135,9 +141,18 @@ jobs:
             -derivedDataPath build/DerivedData \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             build 2>&1 | tee xcodebuild.log | grep -E '(error|warning: unable|BUILD (SUCCEEDED|FAILED))' || true
+          du -sh build/DerivedData/* 2>/dev/null || true
           grep -q 'BUILD SUCCEEDED' xcodebuild.log
+
+      - name: Save compilation cache
+        if: always() && steps.build-app.conclusion != 'skipped' && steps.restore-cas.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/DerivedData/CompilationCache.noindex
+          key: ${{ steps.keys.outputs.cas }}${{ github.sha }}
 
       - name: Package app
         run: |
