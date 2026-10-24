@@ -1567,8 +1567,9 @@ public class PeerListContainerView : Control {
         }
         if #available(macOS 26.0, *) {
             let button = NSButton(title: "", target: nil, action: nil)
-            button.bezelStyle = .glass
+            button.bezelStyle = .push
             button.borderShape = .capsule
+            button.controlSize = .large
             button.refusesFirstResponder = true
             button.setAccessibilityElement(false)
             return button
