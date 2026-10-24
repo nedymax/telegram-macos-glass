@@ -19,12 +19,24 @@ public final class ApiEnvironment {
     
     public static var containerURL: URL? {
         let appGroupName = ApiEnvironment.group
-        let containerUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)?.appendingPathComponent(prefix)
-        if let containerUrl = containerUrl {
-            try? FileManager.default.createDirectory(at: containerUrl, withIntermediateDirectories: true, attributes: nil)
+        if let containerUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)?.appendingPathComponent(prefix), makeWritableDirectory(containerUrl) {
             return containerUrl
         }
-        return nil
+        return fallbackContainerURL
+    }
+
+    private static var fallbackContainerURL: URL? {
+        guard let applicationSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let containerUrl = applicationSupport.appendingPathComponent(Bundle.main.bundleIdentifier ?? bundleId).appendingPathComponent(prefix)
+        return makeWritableDirectory(containerUrl) ? containerUrl : nil
+    }
+
+    private static func makeWritableDirectory(_ url: URL) -> Bool {
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true, attributes: nil)
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue && FileManager.default.isWritableFile(atPath: url.path)
     }
     
     public static func migrate() {
