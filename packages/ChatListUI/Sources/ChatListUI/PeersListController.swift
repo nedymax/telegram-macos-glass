@@ -1059,6 +1059,7 @@ public class PeerListContainerView : Control {
     private var removalUndo: ChatRemovalUndoView?
     private var proxy: ProxyView?
     private var compose:ImageButton?
+    private var composeGlass: LiquidGlassView?
     private var backButton: ImageButton?
     private var glassContainer: NSView?
 
@@ -1121,11 +1122,13 @@ public class PeerListContainerView : Control {
         }
     }
 
+    private static let bottomFoldersTopPadding: CGFloat = 6
+
     private var bottomFoldersHeight: CGFloat {
         guard System.edgeToEdgeSidebar, let foldersItem else {
             return 0
         }
-        return foldersItem.height
+        return foldersItem.height + PeerListContainerView.bottomFoldersTopPadding
     }
 
     private var bottomControlsInset: CGFloat {
@@ -1301,18 +1304,32 @@ public class PeerListContainerView : Control {
                 current.scaleOnClick = true
                 statusContainer.addSubview(current)
             }
+            let composeImage: CGImage
             if state.isContacts {
-                current.set(image: theme.icons.contactsNewContact, for: .Normal)
-                current.set(image: theme.icons.contactsNewContact, for: .Hover)
+                composeImage = theme.icons.contactsNewContact
                 current.setAccessibilityLabel(strings().voiceOverContactsAddContact)
             } else if state.mode.groupId == .archive || state.mode.isSavedMessages || state.mode.isCommunity {
-                current.set(image: theme.icons.chatActions.highlight(color: theme.colors.accent), for: .Normal)
-                current.set(image: theme.icons.chatActions.highlight(color: theme.colors.accent), for: .Hover)
+                composeImage = theme.icons.chatActions.highlight(color: theme.colors.accent)
                 current.setAccessibilityLabel(strings().voiceOverCommonMore)
             } else {
-                current.set(image: theme.icons.composeNewChat, for: .Normal)
-                current.set(image: theme.icons.composeNewChat, for: .Hover)
+                composeImage = theme.icons.composeNewChat
                 current.setAccessibilityLabel(strings().voiceOverNavigationCompose)
+            }
+            if System.edgeToEdgeSidebar {
+                let glass: LiquidGlassView
+                if let view = self.composeGlass {
+                    glass = view
+                } else {
+                    glass = LiquidGlassView(frame: current.frame, cornerRadius: System.windowControlSize / 2, customTint: theme.colors.accent)
+                    statusContainer.addSubview(glass, positioned: .below, relativeTo: current)
+                    self.composeGlass = glass
+                }
+                glass.setCustomTint(theme.colors.accent, animated: false)
+                current.set(image: composeImage.highlight(color: theme.colors.underSelectedColor), for: .Normal)
+                current.set(image: composeImage.highlight(color: theme.colors.underSelectedColor), for: .Hover)
+            } else {
+                current.set(image: composeImage, for: .Normal)
+                current.set(image: composeImage, for: .Hover)
             }
             current.contextMenu = { [weak arguments] in
                 return arguments?.contextMenu()
@@ -1320,6 +1337,10 @@ public class PeerListContainerView : Control {
         } else if let view = self.compose {
             performSubviewRemoval(view, animated: animated)
             self.compose = nil
+            if let glass = self.composeGlass {
+                performSubviewRemoval(glass, animated: animated)
+                self.composeGlass = nil
+            }
         }
         
         let hasForumTitle = state.splitState != .minimisize && (delta != nil || state.appear == .short || displaysFullForumHeader)
@@ -1413,7 +1434,7 @@ public class PeerListContainerView : Control {
                 current = view
             } else {
                 if let foldersPocketArea {
-                    current = ChatListRevealView(frame: NSMakeRect(0, frame.height - bottomControlsInset, frame.width, item.height))
+                    current = ChatListRevealView(frame: NSMakeRect(0, frame.height - bottomControlsInset + PeerListContainerView.bottomFoldersTopPadding, frame.width, item.height))
                     addSubview(current, positioned: .above, relativeTo: foldersPocketArea)
                 } else {
                     current = ChatListRevealView(frame: NSMakeRect(0, navigationHeight - item.height, frame.width, item.height))
@@ -1753,6 +1774,9 @@ public class PeerListContainerView : Control {
                         
         
         var searchY: CGFloat = statusHeight
+        if System.edgeToEdgeSidebar, state.mode.isPlain || state.mode.isCommunity {
+            searchY = System.windowEdgeInset + System.windowControlSize + System.windowItemSpacing
+        }
         
         if let storiesItem = storiesItem {
             searchY += (StoryListChatListRowItem.InterfaceState.revealed.height * storiesItem.progress) + 9 * storiesItem.progress
@@ -1790,11 +1814,21 @@ public class PeerListContainerView : Control {
         controlPoint.x -= componentSize.width
         
         if let compose = compose {
-            transition.updateFrame(view: compose, frame: CGRect(origin: controlPoint, size: componentSize))
-            if state.splitState == .minimisize {
-                transition.updateAlpha(view: compose, alpha: 1)
+            let composeFrame: CGRect
+            if System.edgeToEdgeSidebar {
+                let side = System.windowControlSize
+                composeFrame = CGRect(x: containerSize.width - System.windowEdgeInset - side, y: floorToScreenPixels(backingScaleFactor, (statusHeight - side) / 2.0 + controlsShift), width: side, height: side)
+                controlPoint.x = composeFrame.minX - System.windowItemSpacing
             } else {
-                transition.updateAlpha(view: compose, alpha: progress)
+                composeFrame = CGRect(origin: controlPoint, size: componentSize)
+            }
+            transition.updateFrame(view: compose, frame: composeFrame)
+            let composeAlpha: CGFloat = state.splitState == .minimisize ? 1 : progress
+            transition.updateAlpha(view: compose, alpha: composeAlpha)
+            if let composeGlass {
+                transition.updateFrame(view: composeGlass, frame: composeFrame)
+                composeGlass.updateLayout(size: composeFrame.size, transition: transition)
+                transition.updateAlpha(view: composeGlass, alpha: composeAlpha)
             }
         }
         
@@ -1889,8 +1923,9 @@ public class PeerListContainerView : Control {
             
             let rect: CGRect
             if let foldersPocketArea {
-                rect = CGRect(origin: NSMakePoint(0, size.height - bottomControlsInset), size: controlSize)
-                transition.updateFrame(view: foldersPocketArea, frame: rect)
+                let pocketRect = CGRect(x: 0, y: size.height - bottomControlsInset, width: size.width, height: bottomFoldersHeight)
+                rect = CGRect(origin: NSMakePoint(0, pocketRect.minY + PeerListContainerView.bottomFoldersTopPadding), size: controlSize)
+                transition.updateFrame(view: foldersPocketArea, frame: pocketRect)
             } else {
                 rect = CGRect(origin: NSMakePoint(0, navigationHeight - controlSize.height), size: controlSize)
             }
