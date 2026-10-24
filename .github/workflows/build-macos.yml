@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 360
     concurrency:
       group: build-macos-${{ github.ref }}-xcode${{ matrix.xcode }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -72,24 +72,50 @@ jobs:
       - name: Native framework cache key
         id: frameworks-key
         run: |
-          echo "submodules=$(git submodule status --recursive | shasum -a 256 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "xcode=$(xcodebuild -version | shasum -a 256 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          SUBMODULES="$(git submodule status --recursive | shasum -a 256 | cut -d' ' -f1)"
+          XCODE_HASH="$(xcodebuild -version | shasum -a 256 | cut -d' ' -f1)"
+          echo "prefix=frameworks-$XCODE_HASH-$SUBMODULES-" >> "$GITHUB_OUTPUT"
+          echo "xcode=$XCODE_HASH" >> "$GITHUB_OUTPUT"
 
       - name: Restore native frameworks
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             core-xprojects/*/build
             packages/WalletEngine/wallet_engineFFI.xcframework
-          key: frameworks-${{ steps.frameworks-key.outputs.xcode }}-${{ steps.frameworks-key.outputs.submodules }}-${{ hashFiles('scripts/configure_frameworks.sh', 'scripts/framework-inputs.sh', 'core-xprojects/**/*.sh') }}
+          key: ${{ steps.frameworks-key.outputs.prefix }}${{ hashFiles('scripts/configure_frameworks.sh', 'scripts/framework-inputs.sh', 'core-xprojects/**/*.sh') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            frameworks-${{ steps.frameworks-key.outputs.xcode }}-${{ steps.frameworks-key.outputs.submodules }}-
+            ${{ steps.frameworks-key.outputs.prefix }}
             frameworks-${{ steps.frameworks-key.outputs.xcode }}-
 
       - name: Build native frameworks
+        id: frameworks
         env:
           CMAKE_POLICY_VERSION_MINIMUM: '3.5'
         run: sh scripts/configure_frameworks.sh
+
+      - name: Save native frameworks
+        if: always() && steps.frameworks.conclusion != 'skipped'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            core-xprojects/*/build
+            packages/WalletEngine/wallet_engineFFI.xcframework
+          key: ${{ steps.frameworks-key.outputs.prefix }}${{ hashFiles('scripts/configure_frameworks.sh', 'scripts/framework-inputs.sh', 'core-xprojects/**/*.sh') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Diagnose wallet engine
+        if: failure() && steps.frameworks.conclusion == 'failure'
+        shell: bash {0}
+        run: |
+          ENGINE=submodules/telegram-ios/third-party/wallet-engine/wallet-engine
+          cd "$ENGINE"
+          cat rust-toolchain.toml 2>/dev/null || true
+          rustc --version; cargo --version; xcrun --find ld; ld -v 2>&1 | head -3
+          for f in target/bindings-host/release/deps/libzeroize_derive-*; do
+            echo "== $f"; ls -la "$f"
+            otool -l "$f" | grep -B1 -A4 "sectname .rustc" || echo "no .rustc section"
+          done
+          env -u SDKROOT CARGO_TARGET_DIR="$PWD/target/bindings-host-diag" cargo build --release --locked -v 2>&1 | grep -E "zeroize|error|warning: |Finished" | tail -40 || true
 
       - name: Build app
         run: |
