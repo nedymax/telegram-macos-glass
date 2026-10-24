@@ -44,21 +44,48 @@ public extension NSScrollView {
 }
 
 public final class ScrollPocketArea: View {
-    private final class Element: NSImageView {
+    public enum Style {
+        case hard
+        case soft
+    }
+
+    private final class HardElement: NSImageView {
         override func hitTest(_ point: NSPoint) -> NSView? {
             return nil
         }
     }
 
-    private let element = Element()
+    private final class SoftElement: NSButton {
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            return nil
+        }
+    }
 
-    public required init(frame frameRect: NSRect) {
+    public let style: Style
+    private let element: NSView
+
+    public init(frame frameRect: NSRect, style: Style) {
+        self.style = style
+        switch style {
+        case .hard:
+            element = HardElement()
+        case .soft:
+            let button = SoftElement(title: "", target: nil, action: nil)
+            button.isTransparent = true
+            button.isEnabled = false
+            button.refusesFirstResponder = true
+            element = button
+        }
         super.init(frame: frameRect)
         isEventLess = true
-        backgroundColor = presentation.colors.background.withAlphaComponent(ScrollPocketArea.tintAlpha)
         element.setAccessibilityElement(false)
         element.frame = bounds
         addSubview(element)
+        updateTint(presentation)
+    }
+
+    public required convenience init(frame frameRect: NSRect) {
+        self.init(frame: frameRect, style: .hard)
     }
 
     public required init?(coder: NSCoder) {
@@ -67,9 +94,18 @@ public final class ScrollPocketArea: View {
 
     public static let tintAlpha: CGFloat = 0.35
 
+    private func updateTint(_ theme: PresentationTheme) {
+        switch style {
+        case .hard:
+            backgroundColor = theme.colors.background.withAlphaComponent(ScrollPocketArea.tintAlpha)
+        case .soft:
+            backgroundColor = .clear
+        }
+    }
+
     public override func updateLocalizationAndTheme(theme: PresentationTheme) {
         super.updateLocalizationAndTheme(theme: theme)
-        backgroundColor = theme.colors.background.withAlphaComponent(ScrollPocketArea.tintAlpha)
+        updateTint(theme)
     }
 
     public override func layout() {

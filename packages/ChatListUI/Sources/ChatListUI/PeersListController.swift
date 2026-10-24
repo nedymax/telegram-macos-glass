@@ -1108,22 +1108,41 @@ public class PeerListContainerView : Control {
     private let forumSeparatorView = View()
     private let tableMaskLayer = CALayer()
     private weak var bottomPocketContainer: NSView?
-    private let headerPocketArea: ScrollPocketArea? = System.edgeToEdgeSidebar ? ScrollPocketArea(frame: .zero) : nil
+    private let headerPocketArea: ScrollPocketArea? = System.edgeToEdgeSidebar ? ScrollPocketArea(frame: .zero, style: .soft) : nil
+    private let foldersPocketArea: ScrollPocketArea? = System.edgeToEdgeSidebar ? ScrollPocketArea(frame: .zero, style: .hard) : nil
     private let searchBackground: NSView? = PeerListContainerView.makeSearchBackground()
     private var layoutSize: NSSize?
 
     public var bottomContentInset: CGFloat = 0 {
         didSet {
             if bottomContentInset != oldValue {
-                var insets = tableView.contentInsets
-                insets.bottom = bottomContentInset
-                tableView.contentInsets = insets
-                var scrollerInsets = tableView.scrollerInsets
-                scrollerInsets.bottom = bottomContentInset
-                tableView.scrollerInsets = scrollerInsets
-                updateBottomControls(size: frame.size, transition: .immediate)
+                updateBottomInsets()
             }
         }
+    }
+
+    private var bottomFoldersHeight: CGFloat {
+        guard System.edgeToEdgeSidebar, let foldersItem else {
+            return 0
+        }
+        return foldersItem.height
+    }
+
+    private var bottomControlsInset: CGFloat {
+        return bottomContentInset + bottomFoldersHeight
+    }
+
+    private func updateBottomInsets() {
+        let bottom = bottomControlsInset
+        if tableView.contentInsets.bottom != bottom || tableView.scrollerInsets.bottom != bottom {
+            var insets = tableView.contentInsets
+            insets.bottom = bottom
+            tableView.contentInsets = insets
+            var scrollerInsets = tableView.scrollerInsets
+            scrollerInsets.bottom = bottom
+            tableView.scrollerInsets = scrollerInsets
+        }
+        updateBottomControls(size: frame.size, transition: .immediate)
     }
 
     public override func setFrameSize(_ newSize: NSSize) {
@@ -1145,6 +1164,9 @@ public class PeerListContainerView : Control {
         tableMaskLayer.disableActions()
         if System.edgeToEdgeSidebar {
             tableView.registerScrollPocketContainer(containerView, edge: .top)
+            if let foldersPocketArea {
+                tableView.registerScrollPocketContainer(foldersPocketArea, edge: .bottom)
+            }
         } else {
             tableView.layer?.mask = tableMaskLayer
         }
@@ -1152,6 +1174,10 @@ public class PeerListContainerView : Control {
         addSubview(backgroundView)
         addSubview(tableView)
         addSubview(containerView)
+        if let foldersPocketArea {
+            foldersPocketArea.isHidden = true
+            addSubview(foldersPocketArea)
+        }
         addSubview(borderView)
         borderView.isHidden = System.edgeToEdgeSidebar
         addSubview(forumSeparatorView)
@@ -1386,8 +1412,13 @@ public class PeerListContainerView : Control {
             if let view = self.foldersView {
                 current = view
             } else {
-                current = ChatListRevealView(frame: NSMakeRect(0, navigationHeight - item.height, frame.width, item.height))
-                containerView.addSubview(current, positioned: .below, relativeTo: statusContainer)
+                if let foldersPocketArea {
+                    current = ChatListRevealView(frame: NSMakeRect(0, frame.height - bottomControlsInset, frame.width, item.height))
+                    addSubview(current, positioned: .above, relativeTo: foldersPocketArea)
+                } else {
+                    current = ChatListRevealView(frame: NSMakeRect(0, navigationHeight - item.height, frame.width, item.height))
+                    containerView.addSubview(current, positioned: .below, relativeTo: statusContainer)
+                }
                 self.foldersView = current
                 if animated {
                     current.layer?.animateAlpha(from: 0, to: 1, duration: 0.2)
@@ -1398,6 +1429,8 @@ public class PeerListContainerView : Control {
             performSubviewRemoval(view, animated: animated)
             self.foldersView = nil
         }
+        foldersPocketArea?.isHidden = foldersView == nil
+        updateBottomInsets()
         
        
         var _: [SearchView.TagInfo] = []
@@ -1571,7 +1604,7 @@ public class PeerListContainerView : Control {
         }
         if #available(macOS 26.0, *) {
             let button = NSButton(title: "", target: nil, action: nil)
-            button.bezelStyle = .push
+            button.bezelStyle = .glass
             button.borderShape = .capsule
             button.controlSize = .large
             button.refusesFirstResponder = true
@@ -1854,8 +1887,14 @@ public class PeerListContainerView : Control {
         if let foldersItem = foldersItem, let view = foldersView {
             let controlSize = NSMakeSize(size.width, foldersItem.height)
             
-            let rect = CGRect(origin: NSMakePoint(0, navigationHeight - controlSize.height), size: controlSize)
-                        
+            let rect: CGRect
+            if let foldersPocketArea {
+                rect = CGRect(origin: NSMakePoint(0, size.height - bottomControlsInset), size: controlSize)
+                transition.updateFrame(view: foldersPocketArea, frame: rect)
+            } else {
+                rect = CGRect(origin: NSMakePoint(0, navigationHeight - controlSize.height), size: controlSize)
+            }
+
             transition.updateFrame(view: view, frame: rect)
             view.set(item: foldersItem, animated: transition.isAnimated)
             
@@ -1903,7 +1942,7 @@ public class PeerListContainerView : Control {
             if let storiesItem = self.storiesItem {
                 offset += storiesItem.navigationHeight
             }
-            if let foldersItem = self.foldersItem {
+            if let foldersItem = self.foldersItem, !System.edgeToEdgeSidebar {
                 offset += foldersItem.height
             }
         } else if state.splitState == .minimisize {
@@ -1941,7 +1980,7 @@ public class PeerListContainerView : Control {
             }
             return true
         })
-        tableView.scrollerInsets = .init(left: 0, right: 0, top: top, bottom: bottomContentInset)
+        tableView.scrollerInsets = .init(left: 0, right: 0, top: top, bottom: bottomControlsInset)
         updateTableMask(spaceHeight: top)
     }
 
@@ -1971,7 +2010,7 @@ public class PeerListContainerView : Control {
     }
 
     public func updateBottomControls(size: NSSize, transition: ContainedViewLayoutTransition) {
-        var bottomControlsY = size.height - bottomContentInset
+        var bottomControlsY = size.height - bottomControlsInset
         for view in [downloads as NSView?, removalUndo as NSView?].compactMap({ $0 }) {
             let edge: CGFloat = 12
             let rect = NSMakeRect(edge, bottomControlsY - view.frame.height - edge, size.width - edge * 2, view.frame.height)
