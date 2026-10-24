@@ -65,6 +65,7 @@ jobs:
         if: matrix.xcode == '27'
         run: |
           bash scripts/xcode27.sh apply
+          find core-xprojects -name project.pbxproj -exec sed -i '' -E 's/MACOSX_DEPLOYMENT_TARGET = 1[01]\.[0-9]+;/MACOSX_DEPLOYMENT_TARGET = 12.0;/' {} +
           for script in core-xprojects/wallet-engine/wallet-engine/build.sh core-xprojects/mtproto-engine/mtproto-engine/build.sh; do
             sed -i '' '3a\
           if [ -z "${CLEAN_ENGINE_ENV:-}" ]; then exec env -i CLEAN_ENGINE_ENV=1 HOME="$HOME" USER="${USER:-}" PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" DEVELOPER_DIR="${DEVELOPER_DIR:-}" sh "$0" "$@"; fi
@@ -140,8 +141,22 @@ jobs:
 
       - name: Package app
         run: |
-          APP="$(find build/DerivedData/Build/Products/Debug -maxdepth 1 -name '*.app' | head -1)"
+          BUILT="$(find build/DerivedData/Build/Products/Debug -maxdepth 1 -name '*.app' | head -1)"
+          APP="build/Telegram Glass.app"
+          rm -rf "$APP"
+          ditto "$BUILT" "$APP"
           echo "Packaging $APP"
+          PLIST="$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.nedymax.TelegramGlass" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName Telegram Glass" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Telegram Glass" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Telegram Glass" "$PLIST"
+          for EXT in "$APP"/Contents/PlugIns/*.appex; do
+            [ -d "$EXT" ] || continue
+            EXT_PLIST="$EXT/Contents/Info.plist"
+            EXT_ID="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$EXT_PLIST")"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.nedymax.TelegramGlass.${EXT_ID##*.}" "$EXT_PLIST"
+          done
           codesign --force --deep --sign - "$APP"
           ditto -c -k --keepParent "$APP" Telegram-Debug-Xcode${{ matrix.xcode }}.zip
 
