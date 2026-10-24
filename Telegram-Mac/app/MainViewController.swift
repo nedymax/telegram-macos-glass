@@ -475,6 +475,7 @@ class MainViewController: TelegramGenericViewController<MainController_View> {
                 return
             }
             listView.bottomContentInset = bottomContentInset
+            listView.setBottomPocketContainer(bottomContentInset > 0 ? self?.tabController.tabBarView : nil)
             listView.layoutBottomOverlay = { [weak self, weak listView, weak updateView] bottomY, transition in
                 guard let self, self.tabController.current === self.navigation, self.navigation.controller.view === listView,
                       let listView, let updateView, !updateView.isHidden, let container = updateView.superview, listView.isDescendant(of: container) else {

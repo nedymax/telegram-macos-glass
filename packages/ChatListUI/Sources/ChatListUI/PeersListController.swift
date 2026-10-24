@@ -1107,7 +1107,7 @@ public class PeerListContainerView : Control {
     private let borderView = View()
     private let forumSeparatorView = View()
     private let tableMaskLayer = CALayer()
-    private let headerMaterial: SidebarMaterialView? = System.edgeToEdgeSidebar ? SidebarMaterialView(frame: .zero, style: .bar) : nil
+    private weak var bottomPocketContainer: NSView?
     private var layoutSize: NSSize?
 
     public var bottomContentInset: CGFloat = 0 {
@@ -1141,18 +1141,17 @@ public class PeerListContainerView : Control {
         tableView.layer?.masksToBounds = true
         tableMaskLayer.backgroundColor = NSColor.black.cgColor
         tableMaskLayer.disableActions()
-        if headerMaterial == nil {
+        if System.edgeToEdgeSidebar {
+            tableView.registerScrollPocketContainer(containerView, edge: .top)
+        } else {
             tableView.layer?.mask = tableMaskLayer
         }
 
         addSubview(backgroundView)
         addSubview(tableView)
-        if let headerMaterial {
-            headerMaterial.isEventLess = true
-            addSubview(headerMaterial)
-        }
         addSubview(containerView)
         addSubview(borderView)
+        borderView.isHidden = System.edgeToEdgeSidebar
         addSubview(forumSeparatorView)
         forumSeparatorView.isHidden = true
 
@@ -1523,7 +1522,6 @@ public class PeerListContainerView : Control {
 
         borderView.backgroundColor = theme.colors.border
         forumSeparatorView.backgroundColor = theme.colors.border
-        headerMaterial?.tintColor = theme.colors.background
 
         self.backgroundColor = .clear
         self.backgroundView.backgroundColor = .clear
@@ -1897,9 +1895,7 @@ public class PeerListContainerView : Control {
     }
 
     public func updateTableMask(spaceHeight: CGFloat) {
-        if let headerMaterial {
-            headerMaterial.isHidden = spaceHeight <= 0
-            headerMaterial.frame = NSMakeRect(0, 0, frame.width, spaceHeight)
+        if System.edgeToEdgeSidebar {
             return
         }
         let tableHeight = tableView.frame.height
@@ -1910,6 +1906,19 @@ public class PeerListContainerView : Control {
         CATransaction.commit()
     }
     
+    public func setBottomPocketContainer(_ view: NSView?) {
+        guard System.edgeToEdgeSidebar, view !== bottomPocketContainer else {
+            return
+        }
+        if let current = bottomPocketContainer {
+            tableView.unregisterScrollPocketContainer(current, edge: .bottom)
+        }
+        bottomPocketContainer = view
+        if let view {
+            tableView.registerScrollPocketContainer(view, edge: .bottom)
+        }
+    }
+
     public func updateBottomControls(size: NSSize, transition: ContainedViewLayoutTransition) {
         var bottomControlsY = size.height - bottomContentInset
         for view in [downloads as NSView?, removalUndo as NSView?].compactMap({ $0 }) {

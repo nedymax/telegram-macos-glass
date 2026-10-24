@@ -3,18 +3,11 @@ import ColorPalette
 
 open class SidebarMaterialView: View {
 
-    public enum Style {
-        case sidebar
-        case bar
-    }
-
     public static let defaultTintAlpha: CGFloat = 0.45
-    public static let barTintAlpha: CGFloat = 0
 
     private static let sidebarGlassVariant = 17
     private static let sidebarAdaptiveAppearance = 1
 
-    public let style: Style
     private let effectView: NSView
     private let tintView = View()
 
@@ -24,21 +17,14 @@ open class SidebarMaterialView: View {
         }
     }
 
-    public var tintAlpha: CGFloat {
+    public var tintAlpha: CGFloat = SidebarMaterialView.defaultTintAlpha {
         didSet {
             applyAppearance(presentation)
         }
     }
 
-    public init(frame frameRect: NSRect, style: Style) {
-        self.style = style
-        switch style {
-        case .sidebar:
-            self.tintAlpha = SidebarMaterialView.defaultTintAlpha
-        case .bar:
-            self.tintAlpha = SidebarMaterialView.barTintAlpha
-        }
-        self.effectView = SidebarMaterialView.makeEffectView(style: style, frame: frameRect.size.bounds)
+    public required init(frame frameRect: NSRect) {
+        self.effectView = SidebarMaterialView.makeEffectView(frame: frameRect.size.bounds)
         super.init(frame: frameRect)
         backgroundColor = .clear
 
@@ -52,12 +38,8 @@ open class SidebarMaterialView: View {
         applyAppearance(presentation)
     }
 
-    public required convenience init(frame frameRect: NSRect) {
-        self.init(frame: frameRect, style: .sidebar)
-    }
-
-    public convenience init(frame frameRect: NSRect, style: Style = .sidebar, tintColor: NSColor) {
-        self.init(frame: frameRect, style: style)
+    public convenience init(frame frameRect: NSRect, tintColor: NSColor) {
+        self.init(frame: frameRect)
         self.tintColor = tintColor
     }
 
@@ -65,32 +47,19 @@ open class SidebarMaterialView: View {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private static func makeEffectView(style: Style, frame: NSRect) -> NSView {
+    private static func makeEffectView(frame: NSRect) -> NSView {
         if #available(macOS 26.0, *) {
             let glass = NSGlassEffectView(frame: frame)
             glass.style = .regular
             glass.cornerRadius = 0
-            if style == .sidebar {
-                setPrivateInteger(glass, "set_variant:", sidebarGlassVariant)
-                setPrivateInteger(glass, "set_adaptiveAppearance:", sidebarAdaptiveAppearance)
-            }
+            setPrivateInteger(glass, "set_variant:", sidebarGlassVariant)
+            setPrivateInteger(glass, "set_adaptiveAppearance:", sidebarAdaptiveAppearance)
             return glass
         }
         let visual = NSVisualEffectView(frame: frame)
-        switch style {
-        case .sidebar:
-            visual.material = .sidebar
-            visual.blendingMode = .behindWindow
-            visual.state = .followsWindowActiveState
-        case .bar:
-            if #available(macOS 10.14, *) {
-                visual.material = .headerView
-            } else {
-                visual.material = .titlebar
-            }
-            visual.blendingMode = .withinWindow
-            visual.state = .active
-        }
+        visual.material = .sidebar
+        visual.blendingMode = .behindWindow
+        visual.state = .followsWindowActiveState
         return visual
     }
 

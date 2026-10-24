@@ -3,29 +3,18 @@ import AppKit
 
 private class TabBarViewController : View {
     let tabView:TabBarView
-    let barMaterial: SidebarMaterialView?
     var contentExtendsUnderTabBar: Bool = false
 
     
     required init(frame frameRect: NSRect) {
         tabView = TabBarView(frame: NSMakeRect(0, frameRect.height - 50, frameRect.width, 50))
-        barMaterial = System.edgeToEdgeSidebar ? SidebarMaterialView(frame: tabView.frame, style: .bar) : nil
         super.init(frame: frameRect)
-        if let barMaterial {
-            barMaterial.isEventLess = true
-            addSubview(barMaterial)
-        }
         addSubview(tabView)
     }
     
     override func updateLocalizationAndTheme(theme: PresentationTheme) {
         super.updateLocalizationAndTheme(theme: theme)
         self.background = .clear
-        barMaterial?.tintColor = theme.colors.background
-    }
-
-    var contentAnchor: NSView {
-        return barMaterial ?? tabView
     }
 
     var tabBarHeight: CGFloat {
@@ -38,11 +27,6 @@ private class TabBarViewController : View {
         }
         return NSMakeRect(0, 0, size.width, size.height - tabView.frame.height)
     }
-
-    func setTabViewHidden(_ hidden: Bool) {
-        tabView.isHidden = hidden
-        barMaterial?.isHidden = hidden
-    }
     
     required public init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -54,7 +38,7 @@ private class TabBarViewController : View {
     
     func updateFrame(_ frame: NSRect, transition: ContainedViewLayoutTransition) {
         for subview in subviews {
-            if subview is TabBarView || subview === barMaterial {
+            if let subview = subview as? TabBarView {
                 transition.updateFrame(view: subview, frame: NSMakeRect(0, frame.height - 50, frame.width, 50))
             } else {
                 transition.updateFrame(view: subview, frame: contentFrame(frame.size))
@@ -93,6 +77,10 @@ public class TabBarController: ViewController, TabViewDelegate {
 
     public var tabBarHeight: CGFloat {
         return genericView.tabBarHeight
+    }
+
+    public var tabBarView: NSView {
+        return genericView.tabView
     }
     
     private var genericView:TabBarViewController {
@@ -140,7 +128,7 @@ public class TabBarController: ViewController, TabViewDelegate {
             item.controller._frameRect = genericView.contentFrame(bounds.size)
             item.controller.view.frame = item.controller._frameRect
             item.controller.viewWillAppear(false)
-            view.addSubview(item.controller.view, positioned: .below, relativeTo: genericView.contentAnchor)
+            view.addSubview(item.controller.view, positioned: .below, relativeTo: genericView.tabView)
             if animated {
                 item.controller.view.layer?.animateAlpha(from: 0, to: 1, duration: 0.15)
             }
@@ -159,7 +147,7 @@ public class TabBarController: ViewController, TabViewDelegate {
     }
     
     public func hideTabView(_ hide:Bool) {
-        genericView.setTabViewHidden(hide)
+        genericView.tabView.isHidden = hide
         current?.view.frame = genericView.contentFrame(bounds.size)
         
     }
