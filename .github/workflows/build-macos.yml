@@ -17,13 +17,15 @@ jobs:
 
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Fetch submodules over HTTPS
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           git config --global url."https://gitlab.com/".insteadOf "git@gitlab.com:"
           git submodule sync --recursive
+          git config submodule.third-party/twidget.update none
+          git config submodule.third-party/widget-sandbox.update none
           git submodule update --init --recursive --depth 1 --jobs 8 \
             || git submodule update --init --recursive --jobs 8
 
@@ -94,7 +96,7 @@ jobs:
           ditto -c -k --keepParent "$APP" Telegram-Debug.zip
 
       - name: Upload app
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Telegram-Debug-${{ github.sha }}
           path: Telegram-Debug.zip
@@ -102,7 +104,7 @@ jobs:
 
       - name: Upload build log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: xcodebuild-log-${{ github.sha }}
           path: xcodebuild.log
