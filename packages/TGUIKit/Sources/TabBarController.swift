@@ -3,12 +3,17 @@ import AppKit
 
 private class TabBarViewController : View {
     let tabView:TabBarView
+    let pocketArea: ScrollPocketArea?
     var contentExtendsUnderTabBar: Bool = false
 
     
     required init(frame frameRect: NSRect) {
         tabView = TabBarView(frame: NSMakeRect(0, frameRect.height - 50, frameRect.width, 50))
+        pocketArea = System.edgeToEdgeSidebar ? ScrollPocketArea(frame: tabView.frame) : nil
         super.init(frame: frameRect)
+        if let pocketArea {
+            addSubview(pocketArea)
+        }
         addSubview(tabView)
     }
     
@@ -38,7 +43,7 @@ private class TabBarViewController : View {
     
     func updateFrame(_ frame: NSRect, transition: ContainedViewLayoutTransition) {
         for subview in subviews {
-            if let subview = subview as? TabBarView {
+            if subview is TabBarView || subview === pocketArea {
                 transition.updateFrame(view: subview, frame: NSMakeRect(0, frame.height - 50, frame.width, 50))
             } else {
                 transition.updateFrame(view: subview, frame: contentFrame(frame.size))
@@ -80,7 +85,7 @@ public class TabBarController: ViewController, TabViewDelegate {
     }
 
     public var tabBarView: NSView {
-        return genericView.tabView
+        return genericView.pocketArea ?? genericView.tabView
     }
     
     private var genericView:TabBarViewController {

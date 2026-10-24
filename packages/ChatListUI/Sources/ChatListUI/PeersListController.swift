@@ -1108,6 +1108,7 @@ public class PeerListContainerView : Control {
     private let forumSeparatorView = View()
     private let tableMaskLayer = CALayer()
     private weak var bottomPocketContainer: NSView?
+    private let headerPocketArea: ScrollPocketArea? = System.edgeToEdgeSidebar ? ScrollPocketArea(frame: .zero) : nil
     private let searchBackground: NSView? = PeerListContainerView.makeSearchBackground()
     private var layoutSize: NSSize?
 
@@ -1172,6 +1173,9 @@ public class PeerListContainerView : Control {
         containerView.addSubview(statusContainer)
         
         containerView.addSubview(searchView)
+        if let headerPocketArea {
+            containerView.addSubview(headerPocketArea, positioned: .below, relativeTo: nil)
+        }
         if let searchBackground {
             containerView.addSubview(searchBackground, positioned: .below, relativeTo: searchView)
         }
@@ -1689,6 +1693,9 @@ public class PeerListContainerView : Control {
         let containerSize = NSMakeSize(state.splitState == .minimisize ? 90 : size.width, offset)
                 
         transition.updateFrame(view: self.containerView, frame: NSMakeRect(0, inset, containerSize.width, offset))
+        if let headerPocketArea {
+            transition.updateFrame(view: headerPocketArea, frame: NSMakeRect(0, 0, containerSize.width, offset))
+        }
         
         
         transition.updateFrame(view: self.statusContainer, frame: NSMakeRect(0, 0, containerSize.width, statusHeight))

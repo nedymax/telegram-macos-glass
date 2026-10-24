@@ -42,3 +42,30 @@ public extension NSScrollView {
         unsafeBitCast(method(for: selector), to: Function.self)(self, selector, view, edge.rawValue)
     }
 }
+
+public final class ScrollPocketArea: View {
+    private final class Element: NSImageView {
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            return nil
+        }
+    }
+
+    private let element = Element()
+
+    public required init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        isEventLess = true
+        element.setAccessibilityElement(false)
+        element.frame = bounds
+        addSubview(element)
+    }
+
+    public required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    public override func layout() {
+        super.layout()
+        element.frame = bounds
+    }
+}
