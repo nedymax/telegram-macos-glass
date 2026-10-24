@@ -501,7 +501,7 @@ public class ScrollableSegmentView: View {
     }
 
     private var leadingInset: CGFloat {
-        return bubbles ? SegmentItemView.bubbleSpacing / 2 + 3 : 0
+        return bubbles ? SegmentItemView.bubbleSpacing / 2 + 7 : 0
     }
     
     public var didChangeSelectedItem:((ScrollableSegmentItem)->Void)?

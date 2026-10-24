@@ -1126,6 +1126,15 @@ public class PeerListContainerView : Control {
 
     public var bottomFoldersHeightChanged: ((CGFloat) -> Void)?
 
+    private static let bottomFoldersBubbleCenterOffset: CGFloat = 13
+
+    public var bottomPocketExtension: CGFloat {
+        guard System.edgeToEdgeSidebar, let foldersItem else {
+            return 0
+        }
+        return foldersItem.height / 2 + PeerListContainerView.bottomFoldersBubbleCenterOffset
+    }
+
     public var bottomFoldersHeight: CGFloat {
         guard System.edgeToEdgeSidebar, let foldersItem else {
             return 0

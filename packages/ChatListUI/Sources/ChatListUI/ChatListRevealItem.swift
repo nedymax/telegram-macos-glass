@@ -260,7 +260,7 @@ public final class ChatListRevealView : TableStickView {
         animated = animated && splitViewState == context.layout
         self.splitViewState = context.layout
         
-        let segmentTheme = ScrollableSegmentTheme(background: .clear, border: System.edgeToEdgeSidebar ? .clear : item.presentation.colors.border, selector: item.presentation.colors.accent, inactiveText: item.presentation.colors.grayText, activeText: System.edgeToEdgeSidebar ? item.presentation.colors.underSelectedColor : item.presentation.colors.text, textFont: .normal(.text))
+        let segmentTheme = ScrollableSegmentTheme(background: .clear, border: System.edgeToEdgeSidebar ? .clear : item.presentation.colors.border, selector: item.presentation.colors.accent, inactiveText: System.edgeToEdgeSidebar ? item.presentation.colors.text : item.presentation.colors.grayText, activeText: System.edgeToEdgeSidebar ? item.presentation.colors.underSelectedColor : item.presentation.colors.text, textFont: .normal(.text))
 
         segmentView.bubbles = System.edgeToEdgeSidebar
         segmentView.theme = segmentTheme
