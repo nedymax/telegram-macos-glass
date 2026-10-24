@@ -1108,7 +1108,7 @@ public class PeerListContainerView : Control {
     private let forumSeparatorView = View()
     private let tableMaskLayer = CALayer()
     private weak var bottomPocketContainer: NSView?
-    private let searchGlass: LiquidGlassView? = System.edgeToEdgeSidebar ? LiquidGlassView(frame: .zero, cornerRadius: 15, hasShadow: false, hasBorder: false, tintAlpha: 0) : nil
+    private let searchBackground: NSView? = PeerListContainerView.makeSearchBackground()
     private var layoutSize: NSSize?
 
     public var bottomContentInset: CGFloat = 0 {
@@ -1172,9 +1172,8 @@ public class PeerListContainerView : Control {
         containerView.addSubview(statusContainer)
         
         containerView.addSubview(searchView)
-        if let searchGlass {
-            searchGlass.isEventLess = true
-            containerView.addSubview(searchGlass, positioned: .below, relativeTo: searchView)
+        if let searchBackground {
+            containerView.addSubview(searchBackground, positioned: .below, relativeTo: searchView)
         }
         
         
@@ -1531,10 +1530,10 @@ public class PeerListContainerView : Control {
         self.backgroundColor = .clear
         self.backgroundView.backgroundColor = .clear
 
-        searchView.searchTheme = .init(searchGlass != nil ? .clear : theme.colors.background, theme.search.searchImage, theme.search.clearImage, {
+        searchView.searchTheme = .init(searchBackground != nil ? .clear : theme.colors.background, theme.search.searchImage, theme.search.clearImage, {
             return strings().chatListSearchPlaceholder
         }, theme.search.textColor, theme.search.placeholderColor)
-        searchView.layer?.borderWidth = searchGlass != nil ? 0 : 1
+        searchView.layer?.borderWidth = searchBackground != nil ? 0 : 1
         searchView.layer?.borderColor = theme.colors.border.withAlphaComponent(0.75).cgColor
 
         self.containerView.backgroundColor = .clear
@@ -1560,6 +1559,21 @@ public class PeerListContainerView : Control {
         if System.edgeToEdgeSidebar {
             needsLayout = true
         }
+    }
+
+    private static func makeSearchBackground() -> NSView? {
+        guard System.edgeToEdgeSidebar else {
+            return nil
+        }
+        if #available(macOS 26.0, *) {
+            let button = NSButton(title: "", target: nil, action: nil)
+            button.bezelStyle = .glass
+            button.borderShape = .capsule
+            button.refusesFirstResponder = true
+            button.setAccessibilityElement(false)
+            return button
+        }
+        return nil
     }
 
     private var windowControlsCenterShift: CGFloat {
@@ -1717,10 +1731,9 @@ public class PeerListContainerView : Control {
         transition.updateFrame(view: searchView, frame: searchRect)
         searchView.updateLayout(size: searchRect.size, transition: transition)
         searchView.isHidden = state.splitState == .minimisize || (mode.isForumLike && !displaysFullForumHeader)
-        if let searchGlass {
-            transition.updateFrame(view: searchGlass, frame: searchRect)
-            searchGlass.updateLayout(size: searchRect.size, transition: transition)
-            searchGlass.isHidden = searchView.isHidden
+        if let searchBackground {
+            transition.updateFrame(view: searchBackground, frame: searchRect)
+            searchBackground.isHidden = searchView.isHidden
         }
         
 
