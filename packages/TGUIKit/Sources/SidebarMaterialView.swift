@@ -111,7 +111,8 @@ open class SidebarMaterialView: View {
     private func applyAppearance(_ theme: PresentationTheme) {
         effectView.appearance = theme.appearance
         effectView.isHidden = !System.blurEnabled
-        let tint = tintAlpha > 0 ? tintColor.withAlphaComponent(tintColor.alphaComponent * tintAlpha) : nil
+        let usesThemeTint = tintAlpha > 0 && theme.colors.parent != .system
+        let tint = usesThemeTint ? tintColor.withAlphaComponent(tintColor.alphaComponent * tintAlpha) : nil
         if #available(macOS 26.0, *), let glass = effectView as? NSGlassEffectView {
             glass.tintColor = tint
             tintView.backgroundColor = System.blurEnabled ? .clear : tintColor
