@@ -113,3 +113,18 @@ public final class ScrollPocketArea: View {
         element.frame = bounds
     }
 }
+
+public final class ScrollPocketExcludedView: View {
+    public required init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        isEventLess = true
+    }
+
+    public required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    @objc func _shouldDescendantsContributeToScrollPocket() -> Bool {
+        return false
+    }
+}

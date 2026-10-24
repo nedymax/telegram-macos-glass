@@ -1060,6 +1060,7 @@ public class PeerListContainerView : Control {
     private var proxy: ProxyView?
     private var compose:ImageButton?
     private var composeGlass: LiquidGlassView?
+    private var composeGlassHost: ScrollPocketExcludedView?
     private var backButton: ImageButton?
     private var glassContainer: NSView?
 
@@ -1110,7 +1111,6 @@ public class PeerListContainerView : Control {
     private let tableMaskLayer = CALayer()
     private weak var bottomPocketContainer: NSView?
     private let headerPocketArea: ScrollPocketArea? = System.edgeToEdgeSidebar ? ScrollPocketArea(frame: .zero, style: .soft) : nil
-    private let foldersPocketArea: ScrollPocketArea? = System.edgeToEdgeSidebar ? ScrollPocketArea(frame: .zero, style: .hard) : nil
     private let searchBackground: NSView? = PeerListContainerView.makeSearchBackground()
     private var layoutSize: NSSize?
 
@@ -1124,7 +1124,9 @@ public class PeerListContainerView : Control {
 
     private static let bottomFoldersTopPadding: CGFloat = 6
 
-    private var bottomFoldersHeight: CGFloat {
+    public var bottomFoldersHeightChanged: ((CGFloat) -> Void)?
+
+    public var bottomFoldersHeight: CGFloat {
         guard System.edgeToEdgeSidebar, let foldersItem else {
             return 0
         }
@@ -1135,7 +1137,13 @@ public class PeerListContainerView : Control {
         return bottomContentInset + bottomFoldersHeight
     }
 
+    private var reportedBottomFoldersHeight: CGFloat?
+
     private func updateBottomInsets() {
+        if reportedBottomFoldersHeight != bottomFoldersHeight {
+            reportedBottomFoldersHeight = bottomFoldersHeight
+            bottomFoldersHeightChanged?(bottomFoldersHeight)
+        }
         let bottom = bottomControlsInset
         if tableView.contentInsets.bottom != bottom || tableView.scrollerInsets.bottom != bottom {
             var insets = tableView.contentInsets
@@ -1167,9 +1175,6 @@ public class PeerListContainerView : Control {
         tableMaskLayer.disableActions()
         if System.edgeToEdgeSidebar {
             tableView.registerScrollPocketContainer(containerView, edge: .top)
-            if let foldersPocketArea {
-                tableView.registerScrollPocketContainer(foldersPocketArea, edge: .bottom)
-            }
         } else {
             tableView.layer?.mask = tableMaskLayer
         }
@@ -1177,10 +1182,6 @@ public class PeerListContainerView : Control {
         addSubview(backgroundView)
         addSubview(tableView)
         addSubview(containerView)
-        if let foldersPocketArea {
-            foldersPocketArea.isHidden = true
-            addSubview(foldersPocketArea)
-        }
         addSubview(borderView)
         borderView.isHidden = System.edgeToEdgeSidebar
         addSubview(forumSeparatorView)
@@ -1320,8 +1321,11 @@ public class PeerListContainerView : Control {
                 if let view = self.composeGlass {
                     glass = view
                 } else {
-                    glass = LiquidGlassView(frame: current.frame, cornerRadius: System.windowControlSize / 2, customTint: theme.colors.accent)
-                    statusContainer.addSubview(glass, positioned: .below, relativeTo: current)
+                    let host = ScrollPocketExcludedView(frame: current.frame)
+                    glass = LiquidGlassView(frame: host.bounds, cornerRadius: System.windowControlSize / 2, customTint: theme.colors.accent)
+                    host.addSubview(glass)
+                    statusContainer.addSubview(host, positioned: .below, relativeTo: current)
+                    self.composeGlassHost = host
                     self.composeGlass = glass
                 }
                 glass.setCustomTint(theme.colors.accent, animated: false)
@@ -1337,8 +1341,9 @@ public class PeerListContainerView : Control {
         } else if let view = self.compose {
             performSubviewRemoval(view, animated: animated)
             self.compose = nil
-            if let glass = self.composeGlass {
-                performSubviewRemoval(glass, animated: animated)
+            if let host = self.composeGlassHost {
+                performSubviewRemoval(host, animated: animated)
+                self.composeGlassHost = nil
                 self.composeGlass = nil
             }
         }
@@ -1433,9 +1438,9 @@ public class PeerListContainerView : Control {
             if let view = self.foldersView {
                 current = view
             } else {
-                if let foldersPocketArea {
+                if System.edgeToEdgeSidebar {
                     current = ChatListRevealView(frame: NSMakeRect(0, frame.height - bottomControlsInset + PeerListContainerView.bottomFoldersTopPadding, frame.width, item.height))
-                    addSubview(current, positioned: .above, relativeTo: foldersPocketArea)
+                    addSubview(current, positioned: .above, relativeTo: containerView)
                 } else {
                     current = ChatListRevealView(frame: NSMakeRect(0, navigationHeight - item.height, frame.width, item.height))
                     containerView.addSubview(current, positioned: .below, relativeTo: statusContainer)
@@ -1450,7 +1455,6 @@ public class PeerListContainerView : Control {
             performSubviewRemoval(view, animated: animated)
             self.foldersView = nil
         }
-        foldersPocketArea?.isHidden = foldersView == nil
         updateBottomInsets()
         
        
@@ -1817,7 +1821,7 @@ public class PeerListContainerView : Control {
             let composeFrame: CGRect
             if System.edgeToEdgeSidebar {
                 let side = System.windowControlSize
-                composeFrame = CGRect(x: containerSize.width - System.windowEdgeInset - side, y: floorToScreenPixels(backingScaleFactor, (statusHeight - side) / 2.0 + controlsShift), width: side, height: side)
+                composeFrame = CGRect(x: searchRect.maxX - side, y: floorToScreenPixels(backingScaleFactor, (statusHeight - side) / 2.0 + controlsShift), width: side, height: side)
                 controlPoint.x = composeFrame.minX - System.windowItemSpacing
             } else {
                 composeFrame = CGRect(origin: controlPoint, size: componentSize)
@@ -1825,10 +1829,11 @@ public class PeerListContainerView : Control {
             transition.updateFrame(view: compose, frame: composeFrame)
             let composeAlpha: CGFloat = state.splitState == .minimisize ? 1 : progress
             transition.updateAlpha(view: compose, alpha: composeAlpha)
-            if let composeGlass {
-                transition.updateFrame(view: composeGlass, frame: composeFrame)
+            if let composeGlassHost, let composeGlass {
+                transition.updateFrame(view: composeGlassHost, frame: composeFrame)
+                transition.updateFrame(view: composeGlass, frame: composeFrame.size.bounds)
                 composeGlass.updateLayout(size: composeFrame.size, transition: transition)
-                transition.updateAlpha(view: composeGlass, alpha: composeAlpha)
+                transition.updateAlpha(view: composeGlassHost, alpha: composeAlpha)
             }
         }
         
@@ -1922,10 +1927,8 @@ public class PeerListContainerView : Control {
             let controlSize = NSMakeSize(size.width, foldersItem.height)
             
             let rect: CGRect
-            if let foldersPocketArea {
-                let pocketRect = CGRect(x: 0, y: size.height - bottomControlsInset, width: size.width, height: bottomFoldersHeight)
-                rect = CGRect(origin: NSMakePoint(0, pocketRect.minY + PeerListContainerView.bottomFoldersTopPadding), size: controlSize)
-                transition.updateFrame(view: foldersPocketArea, frame: pocketRect)
+            if System.edgeToEdgeSidebar {
+                rect = CGRect(origin: NSMakePoint(0, size.height - bottomControlsInset + PeerListContainerView.bottomFoldersTopPadding), size: controlSize)
             } else {
                 rect = CGRect(origin: NSMakePoint(0, navigationHeight - controlSize.height), size: controlSize)
             }

@@ -5,11 +5,18 @@ private class TabBarViewController : View {
     let tabView:TabBarView
     let pocketArea: ScrollPocketArea?
     var contentExtendsUnderTabBar: Bool = false
+    var pocketTopExtension: CGFloat = 0 {
+        didSet {
+            if pocketTopExtension != oldValue {
+                needsLayout = true
+            }
+        }
+    }
 
     
     required init(frame frameRect: NSRect) {
         tabView = TabBarView(frame: NSMakeRect(0, frameRect.height - 50, frameRect.width, 50))
-        pocketArea = System.edgeToEdgeSidebar ? ScrollPocketArea(frame: tabView.frame) : nil
+        pocketArea = System.edgeToEdgeSidebar ? ScrollPocketArea(frame: tabView.frame, style: .soft) : nil
         super.init(frame: frameRect)
         if let pocketArea {
             addSubview(pocketArea)
@@ -43,8 +50,11 @@ private class TabBarViewController : View {
     
     func updateFrame(_ frame: NSRect, transition: ContainedViewLayoutTransition) {
         for subview in subviews {
-            if subview is TabBarView || subview === pocketArea {
+            if subview is TabBarView {
                 transition.updateFrame(view: subview, frame: NSMakeRect(0, frame.height - 50, frame.width, 50))
+            } else if subview === pocketArea {
+                let extensionHeight = tabView.isHidden ? 0 : pocketTopExtension
+                transition.updateFrame(view: subview, frame: NSMakeRect(0, frame.height - 50 - extensionHeight, frame.width, 50 + extensionHeight))
             } else {
                 transition.updateFrame(view: subview, frame: contentFrame(frame.size))
             }
@@ -86,6 +96,15 @@ public class TabBarController: ViewController, TabViewDelegate {
 
     public var tabBarView: NSView {
         return genericView.pocketArea ?? genericView.tabView
+    }
+
+    public var pocketTopExtension: CGFloat {
+        get {
+            return genericView.pocketTopExtension
+        }
+        set {
+            genericView.pocketTopExtension = newValue
+        }
     }
     
     private var genericView:TabBarViewController {

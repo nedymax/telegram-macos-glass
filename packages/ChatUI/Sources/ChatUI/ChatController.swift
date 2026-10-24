@@ -1037,7 +1037,7 @@ public class ChatControllerView : View, ChatInputDelegate {
 
         let inputY: CGFloat = themeSelectorView != nil ? frame.height : tableView.frame.maxY - inputHeight
 
-        let inputRect = NSMakeRect(0, inputY, frame.width, max(50, inputHeight))
+        let inputRect = NSMakeRect(0, inputY, frame.width, System.edgeToEdgeSidebar ? inputHeight : max(50, inputHeight))
         transition.updateFrame(view: inputView, frame: inputRect)
         inputView.updateLayout(size: NSMakeSize(frame.width, inputRect.height), transition: transition)
 
