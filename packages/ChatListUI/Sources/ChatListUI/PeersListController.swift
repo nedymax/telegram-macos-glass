@@ -1108,6 +1108,7 @@ public class PeerListContainerView : Control {
     private let forumSeparatorView = View()
     private let tableMaskLayer = CALayer()
     private weak var bottomPocketContainer: NSView?
+    private let searchGlass: LiquidGlassView? = System.edgeToEdgeSidebar ? LiquidGlassView(frame: .zero, cornerRadius: 15, hasShadow: false, hasBorder: false, tintAlpha: 0) : nil
     private var layoutSize: NSSize?
 
     public var bottomContentInset: CGFloat = 0 {
@@ -1171,6 +1172,10 @@ public class PeerListContainerView : Control {
         containerView.addSubview(statusContainer)
         
         containerView.addSubview(searchView)
+        if let searchGlass {
+            searchGlass.isEventLess = true
+            containerView.addSubview(searchGlass, positioned: .below, relativeTo: searchView)
+        }
         
         
         tableView.getBackgroundColor = {
@@ -1526,10 +1531,10 @@ public class PeerListContainerView : Control {
         self.backgroundColor = .clear
         self.backgroundView.backgroundColor = .clear
 
-        searchView.searchTheme = .init(theme.colors.background, theme.search.searchImage, theme.search.clearImage, {
+        searchView.searchTheme = .init(searchGlass != nil ? .clear : theme.colors.background, theme.search.searchImage, theme.search.clearImage, {
             return strings().chatListSearchPlaceholder
         }, theme.search.textColor, theme.search.placeholderColor)
-        searchView.layer?.borderWidth = 1
+        searchView.layer?.borderWidth = searchGlass != nil ? 0 : 1
         searchView.layer?.borderColor = theme.colors.border.withAlphaComponent(0.75).cgColor
 
         self.containerView.backgroundColor = .clear
@@ -1548,6 +1553,23 @@ public class PeerListContainerView : Control {
     public override func layout() {
         super.layout()
         self.updateLayout(frame.size, transition: .immediate)
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if System.edgeToEdgeSidebar {
+            needsLayout = true
+        }
+    }
+
+    private var windowControlsCenterShift: CGFloat {
+        guard System.edgeToEdgeSidebar, let window = window, !window.styleMask.contains(.fullScreen), let button = window.standardWindowButton(.closeButton), !button.isHidden, let buttonSuperview = button.superview else {
+            return 0
+        }
+        let rect = convert(buttonSuperview.convert(button.frame, to: nil), from: nil)
+        let centerY = isFlipped ? rect.midY : bounds.height - rect.midY
+        let shift = centerY - statusHeight / 2
+        return abs(shift) < statusHeight / 2 ? shift : 0
     }
     
     public private(set) var delta: CGFloat? = nil
@@ -1695,6 +1717,11 @@ public class PeerListContainerView : Control {
         transition.updateFrame(view: searchView, frame: searchRect)
         searchView.updateLayout(size: searchRect.size, transition: transition)
         searchView.isHidden = state.splitState == .minimisize || (mode.isForumLike && !displaysFullForumHeader)
+        if let searchGlass {
+            transition.updateFrame(view: searchGlass, frame: searchRect)
+            searchGlass.updateLayout(size: searchRect.size, transition: transition)
+            searchGlass.isHidden = searchView.isHidden
+        }
         
 
 
@@ -1703,7 +1730,8 @@ public class PeerListContainerView : Control {
 
         updateBottomControls(size: size, transition: transition)
         
-        var controlPoint = NSMakePoint(containerSize.width - 14, floorToScreenPixels(backingScaleFactor, (statusHeight - componentSize.height)/2.0))
+        let controlsShift = windowControlsCenterShift
+        var controlPoint = NSMakePoint(containerSize.width - 14, floorToScreenPixels(backingScaleFactor, (statusHeight - componentSize.height)/2.0 + controlsShift))
 
         controlPoint.x -= componentSize.width
         
@@ -1784,14 +1812,16 @@ public class PeerListContainerView : Control {
         }
 
 
-        transition.updateFrame(view: titleView, frame: CGRect(origin: CGPoint(x: titleX, y: floorToScreenPixels(bsc, (statusHeight - titleView.size.height) / 2) - 2), size: titleView.size))
+        let titleOffset: CGFloat = System.edgeToEdgeSidebar ? controlsShift : -2
+        transition.updateFrame(view: titleView, frame: CGRect(origin: CGPoint(x: titleX, y: floorToScreenPixels(bsc, (statusHeight - titleView.size.height) / 2 + titleOffset)), size: titleView.size))
         titleView.updateLayout(size: titleView.size, transition: transition)
         transition.updateAlpha(view: titleView, alpha: progress)
 
         if let storiesItem = storiesItem, let view = storiesView {
             let size = NSMakeSize(size.width, storiesItem.height)
                         
-            var rect = CGRect(origin: NSMakePoint(storyX, 10 + storiesItem.getInterfaceState().progress * 40), size: size)
+            let storiesProgress = storiesItem.getInterfaceState().progress
+            var rect = CGRect(origin: NSMakePoint(storyX, 10 + storiesProgress * 40 + controlsShift * (1 - storiesProgress)), size: size)
                         
             rect.origin.x += (1 - storiesItem.getInterfaceState().progress) * storiesShift
             transition.updateFrame(view: view, frame: rect)
