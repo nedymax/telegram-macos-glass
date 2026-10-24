@@ -1,0 +1,110 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feature/**'
+
+concurrency:
+  group: build-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Fetch submodules over HTTPS
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://gitlab.com/".insteadOf "git@gitlab.com:"
+          git submodule sync --recursive
+          git submodule update --init --recursive --depth 1 --jobs 8 \
+            || git submodule update --init --recursive --jobs 8
+
+      - name: Select Xcode 26
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          sudo ln -sfn "$XCODE" /Applications/Xcode.app
+          echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
+          xcodebuild -version
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Prepare build environment
+        run: |
+          if ! brew install openssl@1.1; then
+            sed -i '' '/openssl@1.1/d' scripts/setup_build_env.sh
+            brew install openssl@3
+          fi
+          bash scripts/setup_build_env.sh
+
+      - name: Native framework cache key
+        id: frameworks-key
+        run: |
+          echo "submodules=$(git submodule status --recursive | shasum -a 256 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "xcode=$(xcodebuild -version | shasum -a 256 | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore native frameworks
+        uses: actions/cache@v4
+        with:
+          path: |
+            core-xprojects/*/build
+            packages/WalletEngine/wallet_engineFFI.xcframework
+          key: frameworks-${{ steps.frameworks-key.outputs.xcode }}-${{ steps.frameworks-key.outputs.submodules }}-${{ hashFiles('scripts/configure_frameworks.sh', 'scripts/framework-inputs.sh', 'core-xprojects/**/*.sh') }}
+          restore-keys: |
+            frameworks-${{ steps.frameworks-key.outputs.xcode }}-${{ steps.frameworks-key.outputs.submodules }}-
+            frameworks-${{ steps.frameworks-key.outputs.xcode }}-
+
+      - name: Build native frameworks
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+        run: sh scripts/configure_frameworks.sh
+
+      - name: Build app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace Telegram-Mac.xcworkspace \
+            -scheme Telegram \
+            -configuration Debug \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee xcodebuild.log | grep -E '(error|warning: unable|BUILD (SUCCEEDED|FAILED))' || true
+          grep -q 'BUILD SUCCEEDED' xcodebuild.log
+
+      - name: Package app
+        run: |
+          APP="$(find build/DerivedData/Build/Products/Debug -maxdepth 1 -name '*.app' | head -1)"
+          echo "Packaging $APP"
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --keepParent "$APP" Telegram-Debug.zip
+
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Telegram-Debug-${{ github.sha }}
+          path: Telegram-Debug.zip
+          retention-days: 14
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log-${{ github.sha }}
+          path: xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7

@@ -1156,9 +1156,10 @@ final class AuthorizedApplicationContext: NSObject, SplitViewDelegate {
         switch state {
         case .single:
             let hasLeftSidebar = !(folders?.isEmpty ?? true) && (folders?.sidebar ?? false)
-            leftController.insets = hasLeftSidebar
+            leftController.insets = hasLeftSidebar && !System.edgeToEdgeSidebar
                 ? NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 8)
                 : NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+            leftController.genericView.showsTrailingSeparator = false
 
             if rightController.stackCount == 1, previousState != .none {
                 leftController.viewWillAppear(false)
@@ -1171,7 +1172,8 @@ final class AuthorizedApplicationContext: NSObject, SplitViewDelegate {
             }
         case .dual:
             rightController.empty = emptyController
-            leftController.insets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 0)
+            leftController.insets = MainController_View.splitInsets
+            leftController.genericView.showsTrailingSeparator = true
             let fixedCount = self.view.splitView.fixedControllerCount
             self.view.splitView.insertController(controller: leftController, proportion: SplitProportion(min: w, max: w), at: fixedCount)
             self.view.splitView.insertController(controller: rightController, proportion: rightProp, at: fixedCount + 1)
@@ -1181,7 +1183,8 @@ final class AuthorizedApplicationContext: NSObject, SplitViewDelegate {
                 self.view.splitView.mustMinimisize = true
             }
             rightController.empty = emptyController
-            leftController.insets = NSEdgeInsets(top: 8, left: 8, bottom: 8, right: 0)
+            leftController.insets = MainController_View.splitInsets
+            leftController.genericView.showsTrailingSeparator = true
             let fixedCount = self.view.splitView.fixedControllerCount
             self.view.splitView.insertController(controller: leftController, proportion: SplitProportion(min: 90, max: 90), at: fixedCount)
             self.view.splitView.insertController(controller: rightController, proportion: rightProp, at: fixedCount + 1)

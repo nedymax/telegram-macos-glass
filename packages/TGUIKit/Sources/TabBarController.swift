@@ -3,17 +3,45 @@ import AppKit
 
 private class TabBarViewController : View {
     let tabView:TabBarView
+    let barMaterial: SidebarMaterialView?
+    var contentExtendsUnderTabBar: Bool = false
 
     
     required init(frame frameRect: NSRect) {
         tabView = TabBarView(frame: NSMakeRect(0, frameRect.height - 50, frameRect.width, 50))
+        barMaterial = System.edgeToEdgeSidebar ? SidebarMaterialView(frame: tabView.frame, style: .bar) : nil
         super.init(frame: frameRect)
+        if let barMaterial {
+            barMaterial.isEventLess = true
+            addSubview(barMaterial)
+        }
         addSubview(tabView)
     }
     
     override func updateLocalizationAndTheme(theme: PresentationTheme) {
         super.updateLocalizationAndTheme(theme: theme)
         self.background = .clear
+        barMaterial?.tintColor = theme.colors.background
+    }
+
+    var contentAnchor: NSView {
+        return barMaterial ?? tabView
+    }
+
+    var tabBarHeight: CGFloat {
+        return tabView.isHidden ? 0 : tabView.frame.height
+    }
+
+    func contentFrame(_ size: NSSize) -> NSRect {
+        if tabView.isHidden || contentExtendsUnderTabBar {
+            return NSMakeRect(0, 0, size.width, size.height)
+        }
+        return NSMakeRect(0, 0, size.width, size.height - tabView.frame.height)
+    }
+
+    func setTabViewHidden(_ hidden: Bool) {
+        tabView.isHidden = hidden
+        barMaterial?.isHidden = hidden
     }
     
     required public init?(coder: NSCoder) {
@@ -26,14 +54,10 @@ private class TabBarViewController : View {
     
     func updateFrame(_ frame: NSRect, transition: ContainedViewLayoutTransition) {
         for subview in subviews {
-            if let subview = subview as? TabBarView {
+            if subview is TabBarView || subview === barMaterial {
                 transition.updateFrame(view: subview, frame: NSMakeRect(0, frame.height - 50, frame.width, 50))
             } else {
-                if tabView.isHidden {
-                    transition.updateFrame(view: subview, frame: bounds)
-                } else {
-                    transition.updateFrame(view: subview, frame: NSMakeRect(0, 0, frame.width, frame.height - tabView.frame.height))
-                }
+                transition.updateFrame(view: subview, frame: contentFrame(frame.size))
             }
         }
     }
@@ -63,6 +87,12 @@ public class TabBarController: ViewController, TabViewDelegate {
     
     public override var redirectUserInterfaceCalls: Bool {
         return true
+    }
+
+    public var extendsContentUnderTabBar: (ViewController) -> Bool = { _ in false }
+
+    public var tabBarHeight: CGFloat {
+        return genericView.tabBarHeight
     }
     
     private var genericView:TabBarViewController {
@@ -106,10 +136,11 @@ public class TabBarController: ViewController, TabViewDelegate {
                 }
                 current.viewDidDisappear(false)
             }
-            item.controller._frameRect = NSMakeRect(0, 0, bounds.width, bounds.height - genericView.tabView.frame.height)
+            genericView.contentExtendsUnderTabBar = extendsContentUnderTabBar(item.controller)
+            item.controller._frameRect = genericView.contentFrame(bounds.size)
             item.controller.view.frame = item.controller._frameRect
             item.controller.viewWillAppear(false)
-            view.addSubview(item.controller.view, positioned: .below, relativeTo: genericView.tabView)
+            view.addSubview(item.controller.view, positioned: .below, relativeTo: genericView.contentAnchor)
             if animated {
                 item.controller.view.layer?.animateAlpha(from: 0, to: 1, duration: 0.15)
             }
@@ -128,8 +159,8 @@ public class TabBarController: ViewController, TabViewDelegate {
     }
     
     public func hideTabView(_ hide:Bool) {
-        genericView.tabView.isHidden = hide
-        current?.view.frame = hide ? bounds : NSMakeRect(0, 0, bounds.width, bounds.height - genericView.tabView.frame.height)
+        genericView.setTabViewHidden(hide)
+        current?.view.frame = genericView.contentFrame(bounds.size)
         
     }
     

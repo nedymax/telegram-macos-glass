@@ -1107,7 +1107,22 @@ public class PeerListContainerView : Control {
     private let borderView = View()
     private let forumSeparatorView = View()
     private let tableMaskLayer = CALayer()
+    private let headerMaterial: SidebarMaterialView? = System.edgeToEdgeSidebar ? SidebarMaterialView(frame: .zero, style: .bar) : nil
     private var layoutSize: NSSize?
+
+    public var bottomContentInset: CGFloat = 0 {
+        didSet {
+            if bottomContentInset != oldValue {
+                var insets = tableView.contentInsets
+                insets.bottom = bottomContentInset
+                tableView.contentInsets = insets
+                var scrollerInsets = tableView.scrollerInsets
+                scrollerInsets.bottom = bottomContentInset
+                tableView.scrollerInsets = scrollerInsets
+                updateBottomControls(size: frame.size, transition: .immediate)
+            }
+        }
+    }
 
     public override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
@@ -1126,10 +1141,16 @@ public class PeerListContainerView : Control {
         tableView.layer?.masksToBounds = true
         tableMaskLayer.backgroundColor = NSColor.black.cgColor
         tableMaskLayer.disableActions()
-        tableView.layer?.mask = tableMaskLayer
+        if headerMaterial == nil {
+            tableView.layer?.mask = tableMaskLayer
+        }
 
         addSubview(backgroundView)
         addSubview(tableView)
+        if let headerMaterial {
+            headerMaterial.isEventLess = true
+            addSubview(headerMaterial)
+        }
         addSubview(containerView)
         addSubview(borderView)
         addSubview(forumSeparatorView)
@@ -1502,6 +1523,7 @@ public class PeerListContainerView : Control {
 
         borderView.backgroundColor = theme.colors.border
         forumSeparatorView.backgroundColor = theme.colors.border
+        headerMaterial?.tintColor = theme.colors.background
 
         self.backgroundColor = .clear
         self.backgroundView.backgroundColor = .clear
@@ -1870,11 +1892,16 @@ public class PeerListContainerView : Control {
             }
             return true
         })
-        tableView.scrollerInsets = .init(left: 0, right: 0, top: top, bottom: 0)
+        tableView.scrollerInsets = .init(left: 0, right: 0, top: top, bottom: bottomContentInset)
         updateTableMask(spaceHeight: top)
     }
 
     public func updateTableMask(spaceHeight: CGFloat) {
+        if let headerMaterial {
+            headerMaterial.isHidden = spaceHeight <= 0
+            headerMaterial.frame = NSMakeRect(0, 0, frame.width, spaceHeight)
+            return
+        }
         let tableHeight = tableView.frame.height
         guard tableHeight > 0 else { return }
         CATransaction.begin()
@@ -1884,7 +1911,7 @@ public class PeerListContainerView : Control {
     }
     
     public func updateBottomControls(size: NSSize, transition: ContainedViewLayoutTransition) {
-        var bottomControlsY = size.height
+        var bottomControlsY = size.height - bottomContentInset
         for view in [downloads as NSView?, removalUndo as NSView?].compactMap({ $0 }) {
             let edge: CGFloat = 12
             let rect = NSMakeRect(edge, bottomControlsY - view.frame.height - edge, size.width - edge * 2, view.frame.height)

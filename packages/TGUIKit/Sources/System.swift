@@ -112,6 +112,13 @@ public struct System {
     /// background instead.
     public static var blurEnabled: Bool = true
 
+    public static let edgeToEdgeSidebar: Bool = {
+        if #available(macOS 27.0, *) {
+            return true
+        }
+        return false
+    }()
+
 }
 
 public var uiLocalizationFunc:((String)->String)?
