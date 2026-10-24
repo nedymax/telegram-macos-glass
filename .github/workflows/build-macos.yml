@@ -6,14 +6,24 @@ on:
     branches:
       - 'feature/**'
 
-concurrency:
-  group: build-macos-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
-    runs-on: macos-26
+    name: Build (Xcode ${{ matrix.xcode }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
+    concurrency:
+      group: build-macos-${{ github.ref }}-xcode${{ matrix.xcode }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - xcode: '27'
+            runner: xcode-27
+            xcode_app: /Applications/Xcode_27.app
+          - xcode: '26'
+            runner: macos-26
+            xcode_app: /Applications/Xcode_26.6.app
 
     steps:
       - name: Check out
@@ -29,9 +39,9 @@ jobs:
           git submodule update --init --recursive --depth 1 --jobs 8 \
             || git submodule update --init --recursive --jobs 8
 
-      - name: Select Xcode 26
+      - name: Select Xcode ${{ matrix.xcode }}
         run: |
-          XCODE="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          XCODE="${{ matrix.xcode_app }}"
           echo "Using $XCODE"
           sudo xcode-select -s "$XCODE/Contents/Developer"
           sudo ln -sfn "$XCODE" /Applications/Xcode.app
@@ -50,6 +60,14 @@ jobs:
             brew install openssl@3
           fi
           bash scripts/setup_build_env.sh
+
+      - name: Apply Xcode 27 project changes
+        if: matrix.xcode == '27'
+        run: |
+          bash scripts/xcode27.sh apply
+          if ! xcodebuild -showComponent MetalToolchain | grep -qi "installed"; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
 
       - name: Native framework cache key
         id: frameworks-key
@@ -93,20 +111,20 @@ jobs:
           APP="$(find build/DerivedData/Build/Products/Debug -maxdepth 1 -name '*.app' | head -1)"
           echo "Packaging $APP"
           codesign --force --deep --sign - "$APP"
-          ditto -c -k --keepParent "$APP" Telegram-Debug.zip
+          ditto -c -k --keepParent "$APP" Telegram-Debug-Xcode${{ matrix.xcode }}.zip
 
       - name: Upload app
         uses: actions/upload-artifact@v5
         with:
-          name: Telegram-Debug-${{ github.sha }}
-          path: Telegram-Debug.zip
+          name: Telegram-Debug-Xcode${{ matrix.xcode }}-${{ github.sha }}
+          path: Telegram-Debug-Xcode${{ matrix.xcode }}.zip
           retention-days: 14
 
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: xcodebuild-log-${{ github.sha }}
+          name: xcodebuild-log-Xcode${{ matrix.xcode }}-${{ github.sha }}
           path: xcodebuild.log
           if-no-files-found: ignore
           retention-days: 7
