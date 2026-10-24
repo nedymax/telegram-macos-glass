@@ -44,7 +44,11 @@ open class SidebarMaterialView: View {
             effectView.blendingMode = .behindWindow
             effectView.state = .followsWindowActiveState
         case .bar:
-            effectView.material = .headerView
+            if #available(macOS 10.14, *) {
+                effectView.material = .headerView
+            } else {
+                effectView.material = .titlebar
+            }
             effectView.blendingMode = .withinWindow
             effectView.state = .active
         }
