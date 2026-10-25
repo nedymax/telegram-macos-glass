@@ -1,0 +1,196 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+    inputs:
+      xcode:
+        description: Xcode version to build with
+        type: choice
+        options:
+          - '27'
+          - '26'
+          - both
+        default: '27'
+  push:
+    branches:
+      - 'feature/**'
+
+jobs:
+  build:
+    name: Build (Xcode ${{ matrix.xcode }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    concurrency:
+      group: build-macos-${{ github.ref }}-xcode${{ matrix.xcode }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.xcode == '26' && '[{"xcode":"26","runner":"macos-26","xcode_app":"/Applications/Xcode_26.6.app"}]' || inputs.xcode == 'both' && '[{"xcode":"27","runner":"xcode-27","xcode_app":"/Applications/Xcode_27.app"},{"xcode":"26","runner":"macos-26","xcode_app":"/Applications/Xcode_26.6.app"}]' || '[{"xcode":"27","runner":"xcode-27","xcode_app":"/Applications/Xcode_27.app"}]') }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+
+      - name: Fetch submodules over HTTPS
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://gitlab.com/".insteadOf "git@gitlab.com:"
+          git submodule sync --recursive
+          git config submodule.third-party/twidget.update none
+          git config submodule.third-party/widget-sandbox.update none
+          git submodule update --init --recursive --depth 1 --jobs 8 \
+            || git submodule update --init --recursive --jobs 8
+
+      - name: Select Xcode ${{ matrix.xcode }}
+        run: |
+          XCODE="${{ matrix.xcode_app }}"
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          sudo ln -sfn "$XCODE" /Applications/Xcode.app
+          echo "DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer" >> "$GITHUB_ENV"
+          xcodebuild -version
+
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Prepare build environment
+        run: |
+          if ! brew install openssl@1.1; then
+            sed -i '' '/openssl@1.1/d' scripts/setup_build_env.sh
+            brew install openssl@3
+          fi
+          bash scripts/setup_build_env.sh
+
+      - name: Apply Xcode 27 project changes
+        if: matrix.xcode == '27'
+        run: |
+          bash scripts/xcode27.sh apply
+          find core-xprojects -name project.pbxproj -exec sed -i '' -E 's/MACOSX_DEPLOYMENT_TARGET = 1[01]\.[0-9]+;/MACOSX_DEPLOYMENT_TARGET = 12.0;/' {} +
+          for script in core-xprojects/wallet-engine/wallet-engine/build.sh core-xprojects/mtproto-engine/mtproto-engine/build.sh; do
+            sed -i '' '3a\
+          if [ -z "${CLEAN_ENGINE_ENV:-}" ]; then exec env -i CLEAN_ENGINE_ENV=1 HOME="$HOME" USER="${USER:-}" PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" DEVELOPER_DIR="${DEVELOPER_DIR:-}" sh "$0" "$@"; fi
+          ' "$script"
+            sed -n 1,6p "$script"
+          done
+          if ! xcodebuild -showComponent MetalToolchain | grep -qi "installed"; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+
+      - name: Cache keys
+        id: keys
+        run: |
+          SUBMODULES="$(git submodule status --recursive | shasum -a 256 | cut -d' ' -f1)"
+          XCODE_HASH="$(xcodebuild -version | shasum -a 256 | cut -d' ' -f1)"
+          echo "frameworks=frameworks-$XCODE_HASH-$SUBMODULES-" >> "$GITHUB_OUTPUT"
+          echo "xcode=$XCODE_HASH" >> "$GITHUB_OUTPUT"
+          echo "cas=compilation-cache-$XCODE_HASH-" >> "$GITHUB_OUTPUT"
+
+      - name: Restore native frameworks
+        id: restore-frameworks
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            core-xprojects/*/build
+            packages/WalletEngine/wallet_engineFFI.xcframework
+            submodules/telegram-ios/submodules/MTProtoRustEngine/MTProtoEngineFFI.xcframework
+          key: ${{ steps.keys.outputs.frameworks }}restore
+          restore-keys: |
+            ${{ steps.keys.outputs.frameworks }}
+            frameworks-${{ steps.keys.outputs.xcode }}-
+
+      - name: Build native frameworks
+        id: frameworks
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+        run: sh scripts/configure_frameworks.sh
+
+      - name: Native framework stamps
+        id: stamps
+        if: always() && steps.frameworks.conclusion != 'skipped'
+        run: |
+          STAMPS="$(cat core-xprojects/*/build/.framework-stamp 2>/dev/null | shasum -a 256 | cut -d' ' -f1)"
+          echo "key=${{ steps.keys.outputs.frameworks }}$STAMPS" >> "$GITHUB_OUTPUT"
+
+      - name: Save native frameworks
+        if: always() && steps.stamps.outputs.key != '' && steps.stamps.outputs.key != steps.restore-frameworks.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            core-xprojects/*/build
+            packages/WalletEngine/wallet_engineFFI.xcframework
+            submodules/telegram-ios/submodules/MTProtoRustEngine/MTProtoEngineFFI.xcframework
+          key: ${{ steps.stamps.outputs.key }}
+
+      - name: Restore compilation cache
+        id: restore-cas
+        uses: actions/cache/restore@v4
+        with:
+          path: build/DerivedData/CompilationCache.noindex
+          key: ${{ steps.keys.outputs.cas }}${{ github.sha }}
+          restore-keys: |
+            ${{ steps.keys.outputs.cas }}
+
+      - name: Build app
+        id: build-app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace Telegram-Mac.xcworkspace \
+            -scheme Telegram \
+            -configuration Debug \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build/DerivedData \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            COMPILATION_CACHE_ENABLE_CACHING=YES \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee xcodebuild.log | grep -E '(error|warning: unable|BUILD (SUCCEEDED|FAILED))' || true
+          du -sh build/DerivedData/* 2>/dev/null || true
+          grep -q 'BUILD SUCCEEDED' xcodebuild.log
+
+      - name: Save compilation cache
+        if: always() && steps.build-app.conclusion != 'skipped' && steps.restore-cas.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build/DerivedData/CompilationCache.noindex
+          key: ${{ steps.keys.outputs.cas }}${{ github.sha }}
+
+      - name: Package app
+        run: |
+          BUILT="$(find build/DerivedData/Build/Products/Debug -maxdepth 1 -name '*.app' | head -1)"
+          APP="build/Telegram Glass.app"
+          rm -rf "$APP"
+          ditto "$BUILT" "$APP"
+          echo "Packaging $APP"
+          PLIST="$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.nedymax.TelegramGlass" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName Telegram Glass" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Telegram Glass" "$PLIST" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Telegram Glass" "$PLIST"
+          for EXT in "$APP"/Contents/PlugIns/*.appex; do
+            [ -d "$EXT" ] || continue
+            EXT_PLIST="$EXT/Contents/Info.plist"
+            EXT_ID="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$EXT_PLIST")"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.nedymax.TelegramGlass.${EXT_ID##*.}" "$EXT_PLIST"
+          done
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --keepParent "$APP" Telegram-Debug-Xcode${{ matrix.xcode }}.zip
+
+      - name: Upload app
+        uses: actions/upload-artifact@v5
+        with:
+          name: Telegram-Debug-Xcode${{ matrix.xcode }}-${{ github.sha }}
+          path: Telegram-Debug-Xcode${{ matrix.xcode }}.zip
+          retention-days: 14
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: xcodebuild-log-Xcode${{ matrix.xcode }}-${{ github.sha }}
+          path: xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 7
