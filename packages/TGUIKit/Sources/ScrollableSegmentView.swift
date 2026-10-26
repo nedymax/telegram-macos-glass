@@ -465,6 +465,24 @@ public class ScrollableSegmentView: View {
 
     
     public var fitToWidth: Bool = false
+
+    public static let capsuleInset: CGFloat = 3
+    private var capsuleGlass: LiquidGlassView?
+    private var capsuleLens: LiquidGlassLensView?
+    private var capsuleSelection: View?
+    private let capsuleClip = CALayer()
+
+    public var capsule: Bool = false {
+        didSet {
+            if capsule != oldValue {
+                updateCapsuleMode()
+            }
+        }
+    }
+
+    private var leadingInset: CGFloat {
+        return capsule ? ScrollableSegmentView.capsuleInset : 0
+    }
     
     public var didChangeSelectedItem:((ScrollableSegmentItem)->Void)?
     
@@ -562,6 +580,76 @@ public class ScrollableSegmentView: View {
     private func moveSelector(_ animated: Bool = false) {
         self.selectorView.change(pos: selectorFrame.origin, animated: animated)
         self.selectorView.change(size: selectorFrame.size, animated: animated)
+        updateCapsuleSelection(animated: animated)
+    }
+
+    private func updateCapsuleMode() {
+        capsuleGlass?.removeFromSuperview()
+        capsuleGlass = nil
+        capsuleSelection?.removeFromSuperview()
+        capsuleSelection = nil
+        if let lens = capsuleLens {
+            lens.reset()
+            addSubview(scrollView, positioned: .below, relativeTo: borderView)
+            lens.removeFromSuperview()
+            capsuleLens = nil
+        }
+        selectorView.isHidden = capsule
+        borderView.isHidden = capsule
+        if capsule {
+            let glass = LiquidGlassView(frame: bounds, cornerRadius: bounds.height / 2)
+            addSubview(glass, positioned: .below, relativeTo: scrollView)
+            capsuleGlass = glass
+            if let lens = LiquidGlassLensView.make(frame: bounds) {
+                addSubview(lens, positioned: .above, relativeTo: glass)
+                lens.contentView.addSubview(scrollView)
+                lens.wantsLayer = true
+                lens.layer?.mask = capsuleClip
+                capsuleLens = lens
+            } else {
+                let selection = View()
+                addSubview(selection, positioned: .below, relativeTo: scrollView)
+                capsuleSelection = selection
+            }
+        }
+        needsLayout = true
+    }
+
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        guard capsuleLens != nil, let host = scrollView.superview, !isHiddenOrHasHiddenAncestor else {
+            return super.hitTest(point)
+        }
+        let local = convert(point, from: superview)
+        guard bounds.contains(local) else {
+            return nil
+        }
+        return scrollView.hitTest(host.convert(local, from: self)) ?? self
+    }
+
+    private var capsuleSelectionFrame: NSRect {
+        guard let view = items.first(where: { $0.selected })?.view else {
+            return .zero
+        }
+        return documentView.convert(view.frame, to: self).insetBy(dx: 0, dy: ScrollableSegmentView.capsuleInset)
+    }
+
+    private func updateCapsuleSelection(animated: Bool) {
+        guard capsule else {
+            return
+        }
+        let frame = capsuleSelectionFrame
+        let tint = presentation.colors.text.withAlphaComponent(presentation.colors.isDark ? 0.1 : 0.075)
+        if let lens = capsuleLens {
+            let sources = items.compactMap { $0.view }.flatMap { view in
+                view.subviews.map { LiquidGlassLensContentSource(view: $0) }
+            }
+            lens.update(lensFrame: frame, interactionProgress: 0, appearance: presentation.appearance, backingScale: window?.backingScaleFactor ?? System.backingScale, animation: animated ? .spring(duration: 0.4) : .immediate, restingBlurRadius: 16, restingTintColor: tint, contentSources: sources)
+        } else if let selection = capsuleSelection {
+            selection.backgroundColor = tint
+            selection.layer?.cornerRadius = frame.height / 2
+            selection.change(pos: frame.origin, animated: animated)
+            selection.change(size: frame.size, animated: animated)
+        }
     }
     
     private var insetBetween: CGFloat {
@@ -580,6 +668,18 @@ public class ScrollableSegmentView: View {
     
     public override func layout() {
         super.layout()
+        if let capsuleGlass {
+            capsuleGlass.frame = bounds
+            capsuleGlass.cornerRadius = bounds.height / 2
+            capsuleGlass.updateLayout(size: bounds.size, transition: .immediate)
+        }
+        if let capsuleLens {
+            capsuleLens.frame = bounds
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            capsuleClip.frame = NSMakeRect(ScrollableSegmentView.capsuleInset, -bounds.height, max(0, bounds.width - ScrollableSegmentView.capsuleInset * 2), bounds.height * 3)
+            CATransaction.commit()
+        }
         scrollView.frame = bounds
         borderView.frame = NSMakeRect(0, frame.height - .borderSize, frame.width, .borderSize)
         for item in self.items {
@@ -591,7 +691,7 @@ public class ScrollableSegmentView: View {
         let insetBetween: CGFloat = self.insetBetween
 
         
-        var x: CGFloat = insetBetween
+        var x: CGFloat = insetBetween + leadingInset
         
         for item in self.items {
             if let view = item.view {
@@ -599,8 +699,10 @@ public class ScrollableSegmentView: View {
                 x += view.size.width + insetBetween
             }
         }
+        x += leadingInset
         documentView.frame = CGRect(origin: .zero, size: NSMakeSize(max(x, frame.width), frame.height))
         selectorView.frame = selectorFrame
+        updateCapsuleSelection(animated: false)
     }
     
     public func updateItems(_ items:[ScrollableSegmentItem], animated: Bool, autoscroll: Bool = true) -> Void {
@@ -780,7 +882,7 @@ public class ScrollableSegmentView: View {
         let insetBetween: CGFloat = self.insetBetween
         
        
-        x += insetBetween
+        x += insetBetween + leadingInset
         for (i, item) in items.enumerated() {
             if let view = item.view {
                 view._change(pos: NSMakePoint(x, 0), animated: animated, completion: { [weak self] completed in
@@ -792,8 +894,9 @@ public class ScrollableSegmentView: View {
             }
         }
         
-        documentView.change(size: NSMakeSize(max(x, frame.width), frame.height), animated: animated)
+        documentView.change(size: NSMakeSize(max(x + leadingInset, frame.width), frame.height), animated: animated)
         selectorView.change(pos: selectorFrame.origin, animated: animated)
+        updateCapsuleSelection(animated: animated)
     }
     
     private func redraw() {

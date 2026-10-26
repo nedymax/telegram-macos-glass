@@ -1072,6 +1072,8 @@ public class PeerListContainerView : Control {
     private var compose:ImageButton?
     private var backButton: ImageButton?
     private var glassContainer: NSView?
+    private var composeGlass: LiquidGlassView?
+    private var searchBackground: NSButton?
 
     private var contactsSort: TextButton?
 
@@ -1258,25 +1260,40 @@ public class PeerListContainerView : Control {
                 current.scaleOnClick = true
                 statusContainer.addSubview(current)
             }
+            var composeImage: CGImage
             if state.isContacts {
-                current.set(image: theme.icons.contactsNewContact, for: .Normal)
-                current.set(image: theme.icons.contactsNewContact, for: .Hover)
+                composeImage = theme.icons.contactsNewContact
                 current.setAccessibilityLabel(strings().voiceOverContactsAddContact)
             } else if state.mode.groupId == .archive || state.mode.isSavedMessages || state.mode.isCommunity {
-                current.set(image: theme.icons.chatActions.highlight(color: theme.colors.accent), for: .Normal)
-                current.set(image: theme.icons.chatActions.highlight(color: theme.colors.accent), for: .Hover)
+                composeImage = theme.icons.chatActions.highlight(color: theme.colors.accent)
                 current.setAccessibilityLabel(strings().voiceOverCommonMore)
             } else {
-                current.set(image: theme.icons.composeNewChat, for: .Normal)
-                current.set(image: theme.icons.composeNewChat, for: .Hover)
+                composeImage = theme.icons.composeNewChat
                 current.setAccessibilityLabel(strings().voiceOverNavigationCompose)
             }
+            if System.liquidGlass {
+                if self.composeGlass == nil {
+                    let glass = LiquidGlassView(frame: current.frame, cornerRadius: current.frame.height / 2)
+                    statusContainer.addSubview(glass, positioned: .below, relativeTo: current)
+                    self.composeGlass = glass
+                }
+                composeImage = composeImage.highlight(color: theme.colors.text)
+            } else if let glass = self.composeGlass {
+                glass.removeFromSuperview()
+                self.composeGlass = nil
+            }
+            current.set(image: composeImage, for: .Normal)
+            current.set(image: composeImage, for: .Hover)
             current.contextMenu = { [weak arguments] in
                 return arguments?.contextMenu()
             }
         } else if let view = self.compose {
             performSubviewRemoval(view, animated: animated)
             self.compose = nil
+            if let glass = self.composeGlass {
+                performSubviewRemoval(glass, animated: animated)
+                self.composeGlass = nil
+            }
         }
         
         let hasForumTitle = state.splitState != .minimisize && (delta != nil || state.appear == .short || displaysFullForumHeader)
@@ -1517,10 +1534,11 @@ public class PeerListContainerView : Control {
         self.backgroundColor = .clear
         self.backgroundView.backgroundColor = .clear
 
-        searchView.searchTheme = .init(theme.colors.background, theme.search.searchImage, theme.search.clearImage, {
+        updateSearchBackground()
+        searchView.searchTheme = .init(searchBackground != nil ? .clear : theme.colors.background, theme.search.searchImage, theme.search.clearImage, {
             return strings().chatListSearchPlaceholder
         }, theme.search.textColor, theme.search.placeholderColor)
-        searchView.layer?.borderWidth = 1
+        searchView.layer?.borderWidth = searchBackground != nil ? 0 : 1
         searchView.layer?.borderColor = theme.colors.border.withAlphaComponent(0.75).cgColor
 
         self.containerView.backgroundColor = .clear
@@ -1614,6 +1632,24 @@ public class PeerListContainerView : Control {
         }
     }
 
+    private func updateSearchBackground() {
+        if #available(macOS 26.0, *), System.liquidGlass {
+            if searchBackground == nil {
+                let button = NSButton(title: "", target: nil, action: nil)
+                button.bezelStyle = .glass
+                button.borderShape = .capsule
+                button.controlSize = .large
+                button.refusesFirstResponder = true
+                button.setAccessibilityElement(false)
+                containerView.addSubview(button, positioned: .below, relativeTo: searchView)
+                searchBackground = button
+            }
+        } else if let searchBackground {
+            searchBackground.removeFromSuperview()
+            self.searchBackground = nil
+        }
+    }
+
     public func updateLayout(_ size: NSSize, transition: ContainedViewLayoutTransition) {
 
 
@@ -1686,6 +1722,10 @@ public class PeerListContainerView : Control {
         transition.updateFrame(view: searchView, frame: searchRect)
         searchView.updateLayout(size: searchRect.size, transition: transition)
         searchView.isHidden = state.splitState == .minimisize || (mode.isForumLike && !displaysFullForumHeader)
+        if let searchBackground {
+            transition.updateFrame(view: searchBackground, frame: searchRect)
+            searchBackground.isHidden = searchView.isHidden
+        }
         
 
 
@@ -1699,11 +1739,14 @@ public class PeerListContainerView : Control {
         controlPoint.x -= componentSize.width
         
         if let compose = compose {
-            transition.updateFrame(view: compose, frame: CGRect(origin: controlPoint, size: componentSize))
-            if state.splitState == .minimisize {
-                transition.updateAlpha(view: compose, alpha: 1)
-            } else {
-                transition.updateAlpha(view: compose, alpha: progress)
+            let composeFrame = CGRect(origin: controlPoint, size: componentSize)
+            let composeAlpha: CGFloat = state.splitState == .minimisize ? 1 : progress
+            transition.updateFrame(view: compose, frame: composeFrame)
+            transition.updateAlpha(view: compose, alpha: composeAlpha)
+            if let composeGlass {
+                transition.updateFrame(view: composeGlass, frame: composeFrame)
+                composeGlass.updateLayout(size: composeFrame.size, transition: transition)
+                transition.updateAlpha(view: composeGlass, alpha: composeAlpha)
             }
         }
         

@@ -259,6 +259,7 @@ public final class ChatListRevealView : TableStickView {
         
         let segmentTheme = ScrollableSegmentTheme(background: .clear, border: item.presentation.colors.border, selector: item.presentation.colors.accent, inactiveText: item.presentation.colors.grayText, activeText: item.presentation.colors.text, textFont: .normal(.text))
 
+        segmentView.capsule = System.liquidGlass
         segmentView.theme = segmentTheme
 
         var index: Int = 0
@@ -366,8 +367,12 @@ public final class ChatListRevealView : TableStickView {
         super.layout()
 
         containerView.frame = bounds
-        segmentView.frame = NSMakeRect(0, -10, containerView.bounds.width, containerView.bounds.height
-         + 10)
+        if segmentView.capsule {
+            segmentView.frame = NSMakeRect(10, -6, max(0, containerView.bounds.width - 20), containerView.bounds.height + 4)
+        } else {
+            segmentView.frame = NSMakeRect(0, -10, containerView.bounds.width, containerView.bounds.height
+             + 10)
+        }
     }
     
     public required init?(coder: NSCoder) {
