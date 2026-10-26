@@ -503,6 +503,8 @@ public class ScrollableSegmentView: View {
         var isDragging: Bool
     }
     private var capsuleGesture: CapsuleGesture?
+    private var capsuleScrollTarget: CGFloat?
+    private var capsuleSpringUntil: CFTimeInterval = 0
     private var capsuleEscapeMonitor: Any?
     private var capsuleResignObserver: NSObjectProtocol?
     private let capsuleClip = CALayer()
@@ -664,7 +666,13 @@ public class ScrollableSegmentView: View {
     }
 
     private var capsuleItemFrames: [NSRect] {
-        return items.compactMap { $0.view }.map { documentView.convert($0.frame, to: self).insetBy(dx: 0, dy: ScrollableSegmentView.capsuleInset) }
+        let views = items.compactMap { $0.view }
+        if let target = capsuleScrollTarget, CACurrentMediaTime() < capsuleSpringUntil {
+            let origin = convert(scrollView.frame.origin, from: scrollView.superview)
+            return views.map { NSMakeRect(origin.x + $0.frame.minX - target, origin.y + $0.frame.minY, $0.frame.width, $0.frame.height).insetBy(dx: 0, dy: ScrollableSegmentView.capsuleInset) }
+        }
+        capsuleScrollTarget = nil
+        return views.map { documentView.convert($0.frame, to: self).insetBy(dx: 0, dy: ScrollableSegmentView.capsuleInset) }
     }
 
     private func capsulePosition(at x: CGFloat) -> CGFloat {
@@ -779,14 +787,19 @@ public class ScrollableSegmentView: View {
             return
         }
         let tint = presentation.colors.text.withAlphaComponent(presentation.colors.isDark ? 0.1 : 0.075)
+        let now = CACurrentMediaTime()
+        if animated {
+            capsuleSpringUntil = max(capsuleSpringUntil, now + 0.5)
+        }
+        let springing = animated || now < capsuleSpringUntil
         if let lens = capsuleLens {
             let lifted = capsuleGesture != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             let position = capsuleGesture?.position ?? CGFloat(items.firstIndex(where: { $0.selected }) ?? 0)
             let frame = capsuleFrame(at: position, lifted: lifted)
             let sources = items.compactMap { $0.view }.flatMap { view in
-                view.subviews.map { LiquidGlassLensContentSource(view: $0) }
+                view.subviews.map { LiquidGlassLensContentSource(view: $0, magnificationRoot: view) }
             }
-            lens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: presentation.appearance, backingScale: window?.backingScaleFactor ?? System.backingScale, animation: animated ? .spring(duration: 0.4) : .immediate, restingBlurRadius: 16, restingTintColor: tint, contentSources: sources)
+            lens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: presentation.appearance, backingScale: window?.backingScaleFactor ?? System.backingScale, animation: springing && capsuleGesture?.isDragging != true ? .spring(duration: 0.4) : .immediate, restingBlurRadius: 16, restingTintColor: tint, contentSources: sources)
         } else if let selection = capsuleSelection {
             let frame = capsuleSelectionFrame
             selection.backgroundColor = tint
@@ -881,6 +894,10 @@ public class ScrollableSegmentView: View {
         if let selectedItem = items.first(where: { $0.selected }), let selectedView = selectedItem.view, autoscroll {
             let point = NSMakePoint(min(max(selectedView.frame.midX - frame.width / 2, 0), max(documentView.frame.width - frame.width, 0)), 0)
             if point != scrollView.documentOffset, frame != .zero {
+                if capsule && animated {
+                    capsuleScrollTarget = point.x
+                    capsuleSpringUntil = CACurrentMediaTime() + 0.5
+                }
                 scrollView.clipView.scroll(to: point, animated: animated)
             }
         }

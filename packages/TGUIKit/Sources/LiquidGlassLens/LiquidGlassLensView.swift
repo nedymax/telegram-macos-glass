@@ -109,8 +109,12 @@ public final class LiquidGlassLensView: NSView {
         let sourceStates = sources.map { source -> SourceState in
             let view = source.view
             var root = view
-            while let parent = root.superview, parent !== contentView {
-                root = parent
+            if let magnificationRoot = source.magnificationRoot, view.isDescendant(of: magnificationRoot) {
+                root = magnificationRoot
+            } else {
+                while let parent = root.superview, parent !== contentView {
+                    root = parent
+                }
             }
             let rootFrame = root.convert(root.bounds, to: contentView)
             return SourceState(identifier: ObjectIdentifier(view), layerIdentifier: view.layer.map(ObjectIdentifier.init), frame: view.convert(view.bounds, to: contentView), bounds: view.bounds, magnificationCenter: CGPoint(x: rootFrame.midX, y: rootFrame.midY), isHidden: view.isHiddenOrHasHiddenAncestor, lensedTintColor: source.lensedTintColor?.usingColorSpace(.sRGB), unlensedTintColor: source.unlensedTintColor?.usingColorSpace(.sRGB), lensedScale: source.lensedScale)
