@@ -296,6 +296,10 @@ private final class SegmentItemView : Control {
     override func scrollWheel(with event: NSEvent) {
         super.scrollWheel(with: event)
     }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        return super.hitTest(point) == nil ? nil : self
+    }
     
     var size: NSSize {
         var width: CGFloat = item.insets.left + item.insets.right
@@ -790,7 +794,8 @@ public class ScrollableSegmentView: View {
             let lifted = (capsulePressed != nil || capsuleTravelling) && !reduceMotion
             let frame = capsuleFrame(at: position, lifted: lifted)
             let sources = items.compactMap { $0.view }.flatMap { view in
-                view.subviews.map { LiquidGlassLensContentSource(view: $0) }
+                view.layoutSubtreeIfNeeded()
+                return view.subviews.map { LiquidGlassLensContentSource(view: $0) }
             }
             let animation: LiquidGlassLensAnimation = animated && !reduceMotion ? .spring(duration: 0.4) : .immediate
             lens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: presentation.appearance, backingScale: window?.backingScaleFactor ?? System.backingScale, animation: animation, restingBlurRadius: 16, restingTintColor: tint, contentSources: sources)
