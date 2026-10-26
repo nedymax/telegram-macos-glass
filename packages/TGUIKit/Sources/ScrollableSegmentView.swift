@@ -170,10 +170,6 @@ private final class SegmentItemView : Control {
     private let callback: (ScrollableSegmentItem)->Void
     private let menuItems:(ScrollableSegmentItem)->Signal<[ContextMenuItem], NoError>
     private let startDraggingIfNeeded: (ScrollableSegmentItem, Control)->Void
-    var pressBegan: ((SegmentItemView, NSPoint) -> Void)?
-    var pressMoved: ((SegmentItemView, NSPoint) -> Void)?
-    var pressEnded: ((SegmentItemView, NSPoint) -> Void)?
-    var shouldStartReorder: (() -> Bool)?
     init(item: ScrollableSegmentItem, theme: ScrollableSegmentTheme, callback: @escaping(ScrollableSegmentItem)->Void, startDraggingIfNeeded: @escaping(ScrollableSegmentItem, Control)->Void, menuItems:@escaping(ScrollableSegmentItem)->Signal<[ContextMenuItem], NoError>) {
         self.item = item
         self.callback = callback
@@ -218,27 +214,10 @@ private final class SegmentItemView : Control {
             }
             self.callback(self.item)
         }, for: .Click)
-
-        set(handler: { [weak self] _ in
-            guard let `self` = self, let event = NSApp.currentEvent else {
-                return
-            }
-            self.pressBegan?(self, event.locationInWindow)
-        }, for: .Down)
-
-        set(handler: { [weak self] _ in
-            guard let `self` = self, let event = NSApp.currentEvent else {
-                return
-            }
-            self.pressEnded?(self, event.locationInWindow)
-        }, for: .Up)
         
         
         set(handler: { [weak self] control in
             guard let `self` = self else {
-                return
-            }
-            guard self.shouldStartReorder?() ?? true else {
                 return
             }
             self.startDraggingIfNeeded(self.item, control)
@@ -259,11 +238,6 @@ private final class SegmentItemView : Control {
         }, for: .RightDown)
     }
     
-    override func mouseDragged(with event: NSEvent) {
-        super.mouseDragged(with: event)
-        pressMoved?(self, event.locationInWindow)
-    }
-
     override var accessibilityDefaultLabel: String? {
         return item.accessibilityLabel?() ?? item.title
     }
@@ -494,20 +468,7 @@ public class ScrollableSegmentView: View {
 
     public static let capsuleInset: CGFloat = 3
     private var capsuleGlass: LiquidGlassView?
-    private var capsuleLens: LiquidGlassLensView?
-    private var capsuleSelection: View?
-    private struct CapsuleGesture {
-        let start: CGFloat
-        let center: CGFloat
-        var position: CGFloat
-        var isDragging: Bool
-    }
-    private var capsuleGesture: CapsuleGesture?
-    private var capsuleScrollTarget: CGFloat?
-    private var capsuleSpringUntil: CFTimeInterval = 0
-    private var capsuleEscapeMonitor: Any?
-    private var capsuleResignObserver: NSObjectProtocol?
-    private let capsuleClip = CALayer()
+    private var capsulePill: View?
 
     public var capsule: Bool = false {
         didSet {
@@ -562,7 +523,6 @@ public class ScrollableSegmentView: View {
     }
     
     deinit {
-        finishCapsuleGesture()
         if let boundsObserver {
             NotificationCenter.default.removeObserver(boundsObserver)
         }
@@ -618,39 +578,27 @@ public class ScrollableSegmentView: View {
     private func moveSelector(_ animated: Bool = false) {
         self.selectorView.change(pos: selectorFrame.origin, animated: animated)
         self.selectorView.change(size: selectorFrame.size, animated: animated)
-        updateCapsuleSelection(animated: animated)
+        updateCapsulePill(animated: animated)
     }
 
     private func updateCapsuleMode() {
         capsuleGlass?.removeFromSuperview()
         capsuleGlass = nil
-        capsuleSelection?.removeFromSuperview()
-        capsuleSelection = nil
-        if let lens = capsuleLens {
-            lens.reset()
-            addSubview(scrollView, positioned: .below, relativeTo: borderView)
-            lens.removeFromSuperview()
-            capsuleLens = nil
-        }
+        capsulePill?.removeFromSuperview()
+        capsulePill = nil
         selectorView.isHidden = capsule
         borderView.isHidden = capsule
+        scrollView.layer?.masksToBounds = capsule
         if capsule {
             let glass = LiquidGlassView(frame: bounds, cornerRadius: bounds.height / 2)
             addSubview(glass, positioned: .below, relativeTo: scrollView)
             capsuleGlass = glass
-            if let lens = LiquidGlassLensView.make(frame: bounds) {
-                addSubview(lens, positioned: .above, relativeTo: glass)
-                lens.contentView.addSubview(scrollView)
-                lens.wantsLayer = true
-                capsuleClip.backgroundColor = NSColor.black.cgColor
-                lens.layer?.mask = capsuleClip
-                capsuleLens = lens
-            } else {
-                let selection = View()
-                addSubview(selection, positioned: .below, relativeTo: scrollView)
-                capsuleSelection = selection
-            }
+            let pill = View()
+            pill.isEventLess = true
+            documentView.addSubview(pill, positioned: .below, relativeTo: nil)
+            capsulePill = pill
         }
+        redraw()
         needsLayout = true
     }
 
@@ -658,159 +606,18 @@ public class ScrollableSegmentView: View {
         return !capsule
     }
 
-    public override func hitTest(_ point: NSPoint) -> NSView? {
-        guard capsuleLens != nil, let host = scrollView.superview, !isHiddenOrHasHiddenAncestor else {
-            return super.hitTest(point)
-        }
-        let local = convert(point, from: superview)
-        guard bounds.contains(local) else {
-            return nil
-        }
-        return scrollView.hitTest(host.convert(local, from: self)) ?? self
-    }
-
-    private var capsuleItemFrames: [NSRect] {
-        let views = items.compactMap { $0.view }
-        if let target = capsuleScrollTarget, CACurrentMediaTime() < capsuleSpringUntil {
-            let origin = convert(scrollView.frame.origin, from: scrollView.superview)
-            return views.map { NSMakeRect(origin.x + $0.frame.minX - target, origin.y + $0.frame.minY, $0.frame.width, $0.frame.height).insetBy(dx: 0, dy: ScrollableSegmentView.capsuleInset) }
-        }
-        capsuleScrollTarget = nil
-        return views.map { documentView.convert($0.frame, to: self).insetBy(dx: 0, dy: ScrollableSegmentView.capsuleInset) }
-    }
-
-    private func capsulePosition(at x: CGFloat) -> CGFloat {
-        let frames = capsuleItemFrames
-        for index in 0 ..< max(0, frames.count - 1) where x < frames[index + 1].midX {
-            let distance = frames[index + 1].midX - frames[index].midX
-            return CGFloat(index) + min(1, max(0, (x - frames[index].midX) / max(1, distance)))
-        }
-        return CGFloat(max(0, frames.count - 1))
-    }
-
-    private func capsuleFrame(at position: CGFloat, lifted: Bool) -> NSRect {
-        let frames = capsuleItemFrames
-        guard !frames.isEmpty else {
-            return .zero
-        }
-        let position = min(CGFloat(frames.count - 1), max(0, position))
-        let lower = Int(position.rounded(.down))
-        let upper = min(lower + 1, frames.count - 1)
-        let progress = position - CGFloat(lower)
-        let first = frames[lower]
-        let second = frames[upper]
-        let frame = NSMakeRect(first.minX + (second.minX - first.minX) * progress, first.minY, first.width + (second.width - first.width) * progress, first.height)
-        return lifted ? frame.insetBy(dx: -10, dy: -8) : frame
-    }
-
-    private func beginCapsuleGesture(_ view: SegmentItemView, at point: NSPoint) {
-        guard capsuleLens != nil, let index = items.firstIndex(where: { $0.view === view }) else {
+    private func updateCapsulePill(animated: Bool) {
+        guard let pill = capsulePill, let view = items.first(where: { $0.selected })?.view else {
+            capsulePill?.isHidden = true
             return
         }
-        finishCapsuleGesture()
-        let frames = capsuleItemFrames
-        guard index < frames.count else {
-            return
-        }
-        capsuleGesture = CapsuleGesture(start: convert(point, from: nil).x, center: frames[index].midX, position: CGFloat(index), isDragging: false)
-        capsuleEscapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, self.capsuleGesture != nil, event.window === self.window, event.keyCode == 53 else {
-                return event
-            }
-            self.cancelCapsuleGesture()
-            return nil
-        }
-        if let window {
-            capsuleResignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: window, queue: .main) { [weak self] _ in
-                self?.cancelCapsuleGesture()
-            }
-        }
-        updateCapsuleSelection(animated: true)
-    }
-
-    private func updateCapsuleGesture(at point: NSPoint) {
-        let x = convert(point, from: nil).x
-        guard var gesture = capsuleGesture, gesture.isDragging || abs(x - gesture.start) >= 3 else {
-            return
-        }
-        gesture.isDragging = true
-        let position = capsulePosition(at: gesture.center + x - gesture.start)
-        let changed = gesture.position != position
-        gesture.position = position
-        capsuleGesture = gesture
-        if changed {
-            updateCapsuleSelection(animated: false)
-        }
-    }
-
-    private func endCapsuleGesture(at point: NSPoint) {
-        guard capsuleGesture != nil else {
-            return
-        }
-        if capsuleGesture?.isDragging == true {
-            updateCapsuleGesture(at: point)
-        }
-        let isDragging = capsuleGesture?.isDragging == true
-        let index = Int(capsuleGesture!.position.rounded())
-        finishCapsuleGesture()
-        updateCapsuleSelection(animated: true)
-        if isDragging, index < items.count, !items[index].selected {
-            didChangeSelectedItem?(items[index])
-        }
-    }
-
-    private func cancelCapsuleGesture() {
-        guard capsuleGesture != nil else {
-            return
-        }
-        finishCapsuleGesture()
-        updateCapsuleSelection(animated: true)
-    }
-
-    private func finishCapsuleGesture() {
-        capsuleGesture = nil
-        if let capsuleEscapeMonitor {
-            NSEvent.removeMonitor(capsuleEscapeMonitor)
-            self.capsuleEscapeMonitor = nil
-        }
-        if let capsuleResignObserver {
-            NotificationCenter.default.removeObserver(capsuleResignObserver)
-            self.capsuleResignObserver = nil
-        }
-    }
-
-    private var capsuleSelectionFrame: NSRect {
-        guard let view = items.first(where: { $0.selected })?.view else {
-            return .zero
-        }
-        return documentView.convert(view.frame, to: self).insetBy(dx: 0, dy: ScrollableSegmentView.capsuleInset)
-    }
-
-    private func updateCapsuleSelection(animated: Bool) {
-        guard capsule else {
-            return
-        }
-        let tint = presentation.colors.text.withAlphaComponent(presentation.colors.isDark ? 0.1 : 0.075)
-        let now = CACurrentMediaTime()
-        if animated {
-            capsuleSpringUntil = max(capsuleSpringUntil, now + 0.5)
-        }
-        let springing = animated || now < capsuleSpringUntil
-        if let lens = capsuleLens {
-            let lifted = capsuleGesture != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            let position = capsuleGesture?.position ?? CGFloat(items.firstIndex(where: { $0.selected }) ?? 0)
-            let frame = capsuleFrame(at: position, lifted: lifted)
-            let sources = items.compactMap { $0.view }.flatMap { view in
-                view.subviews.map { LiquidGlassLensContentSource(view: $0, magnificationRoot: view) }
-            }
-            lens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: presentation.appearance, backingScale: window?.backingScaleFactor ?? System.backingScale, animation: springing && capsuleGesture?.isDragging != true ? .spring(duration: 0.4) : .immediate, restingBlurRadius: 16, restingTintColor: tint, contentSources: sources)
-        } else if let selection = capsuleSelection {
-            let frame = capsuleSelectionFrame
-            selection.backgroundColor = tint
-            selection.layer?.cornerRadius = frame.height / 2
-            selection.change(pos: frame.origin, animated: animated)
-            selection.change(size: frame.size, animated: animated)
-        }
+        let target = NSMakeRect(view.frame.minX, ScrollableSegmentView.capsuleInset, view.frame.width, max(0, frame.height - ScrollableSegmentView.capsuleInset * 2))
+        let animated = animated && !pill.isHidden && pill.frame.height > 0
+        pill.isHidden = false
+        pill.backgroundColor = presentation.colors.text.withAlphaComponent(presentation.colors.isDark ? 0.1 : 0.075)
+        pill.layer?.cornerRadius = target.height / 2
+        pill.change(pos: target.origin, animated: animated, duration: 0.35, timingFunction: .spring)
+        pill.change(size: target.size, animated: animated, duration: 0.35, timingFunction: .spring)
     }
     
     private var insetBetween: CGFloat {
@@ -833,13 +640,7 @@ public class ScrollableSegmentView: View {
             capsuleGlass.frame = bounds
             capsuleGlass.cornerRadius = bounds.height / 2
             capsuleGlass.updateLayout(size: bounds.size, transition: .immediate)
-        }
-        if let capsuleLens {
-            capsuleLens.frame = bounds
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            capsuleClip.frame = NSMakeRect(ScrollableSegmentView.capsuleInset, -bounds.height, max(0, bounds.width - ScrollableSegmentView.capsuleInset * 2), bounds.height * 3)
-            CATransaction.commit()
+            scrollView.layer?.cornerRadius = bounds.height / 2
         }
         scrollView.frame = bounds
         borderView.frame = NSMakeRect(0, frame.height - .borderSize, frame.width, .borderSize)
@@ -863,7 +664,7 @@ public class ScrollableSegmentView: View {
         x += leadingInset
         documentView.frame = CGRect(origin: .zero, size: NSMakeSize(max(x, frame.width), frame.height))
         selectorView.frame = selectorFrame
-        updateCapsuleSelection(animated: false)
+        updateCapsulePill(animated: false)
     }
     
     public func updateItems(_ items:[ScrollableSegmentItem], animated: Bool, autoscroll: Bool = true) -> Void {
@@ -898,10 +699,6 @@ public class ScrollableSegmentView: View {
         if let selectedItem = items.first(where: { $0.selected }), let selectedView = selectedItem.view, autoscroll {
             let point = NSMakePoint(min(max(selectedView.frame.midX - frame.width / 2, 0), max(documentView.frame.width - frame.width, 0)), 0)
             if point != scrollView.documentOffset, frame != .zero {
-                if capsule && animated {
-                    capsuleScrollTarget = point.x
-                    capsuleSpringUntil = CACurrentMediaTime() + 0.5
-                }
                 scrollView.clipView.scroll(to: point, animated: animated)
             }
         }
@@ -931,25 +728,6 @@ public class ScrollableSegmentView: View {
         let view = SegmentItemView(item: item, theme: theme, callback: callback, startDraggingIfNeeded: { [weak self] item, view in
             self?.startDraggingIfNeeded(item, view)
         }, menuItems: menuItems)
-        view.pressBegan = { [weak self] view, point in
-            self?.beginCapsuleGesture(view, at: point)
-        }
-        view.pressMoved = { [weak self] _, point in
-            self?.updateCapsuleGesture(at: point)
-        }
-        view.pressEnded = { [weak self] _, point in
-            self?.endCapsuleGesture(at: point)
-        }
-        view.shouldStartReorder = { [weak self] in
-            guard let self, let gesture = self.capsuleGesture else {
-                return true
-            }
-            if gesture.isDragging {
-                return false
-            }
-            self.cancelCapsuleGesture()
-            return true
-        }
         view.setFrameSize(NSMakeSize(view.frame.width, frame.height))
         item.view = view
         
@@ -1080,14 +858,15 @@ public class ScrollableSegmentView: View {
         
         documentView.change(size: NSMakeSize(max(x + leadingInset, frame.width), frame.height), animated: animated)
         selectorView.change(pos: selectorFrame.origin, animated: animated)
-        updateCapsuleSelection(animated: animated)
+        updateCapsulePill(animated: animated)
     }
     
     private func redraw() {
         selectorView.theme = self.theme
         borderView.backgroundColor = self.theme.border
-        backgroundColor = self.theme.background
-        scrollView.background = self.theme.background
+        backgroundColor = capsule ? .clear : self.theme.background
+        scrollView.background = capsule ? .clear : self.theme.background
+        updateCapsulePill(animated: false)
         for item in self.items {
             item.view?.updateItem(item, theme: self.theme, animated: false)
         }

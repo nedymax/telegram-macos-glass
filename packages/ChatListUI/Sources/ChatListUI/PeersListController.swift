@@ -1074,9 +1074,7 @@ public class PeerListContainerView : Control {
     private var glassContainer: NSView?
     private var searchBackground: View?
     private let headerPocketArea = ScrollPocketArea(frame: .zero, style: .soft)
-    private var searchRevealProgress: CGFloat = 0
-    private var searchLatched: Bool = false
-    private var applyingSearchLatch: Bool = false
+    var searchRevealFraction: CGFloat = 0
     private static let searchFieldHeight: CGFloat = 28
     private static let searchBlockHeight: CGFloat = 38
 
@@ -1147,8 +1145,6 @@ public class PeerListContainerView : Control {
         tableView.layer?.mask = tableMaskLayer
         if System.liquidGlassAvailable {
             tableView.registerScrollPocketContainer(containerView, edge: .top)
-            tableView.clipView.postsBoundsChangedNotifications = true
-            NotificationCenter.default.addObserver(self, selector: #selector(tableDidScroll), name: NSView.boundsDidChangeNotification, object: tableView.clipView)
         }
 
         addSubview(backgroundView)
@@ -1643,7 +1639,7 @@ public class PeerListContainerView : Control {
         }
     }
 
-    private var pullDownSearch: Bool {
+    var pullDownSearch: Bool {
         guard System.liquidGlass, let state = self.state else {
             return false
         }
@@ -1654,53 +1650,17 @@ public class PeerListContainerView : Control {
         guard pullDownSearch, let state = self.state else {
             return 1
         }
-        if state.searchState != .None || searchLatched {
+        if state.searchState != .None {
             return 1
         }
-        return searchRevealProgress
+        return searchRevealFraction
     }
 
     private var searchSpace: CGFloat {
-        guard pullDownSearch, let state = self.state else {
+        guard pullDownSearch else {
             return 40
         }
-        return state.searchState != .None || searchLatched ? PeerListContainerView.searchBlockHeight : 0
-    }
-
-    @objc private func tableDidScroll() {
-        guard pullDownSearch, !applyingSearchLatch, let state = self.state, state.searchState == .None else {
-            return
-        }
-        let y = tableView.clipView.bounds.minY
-        if searchLatched {
-            if y > 1 {
-                setSearchLatched(false)
-            }
-            return
-        }
-        let progress = y < 0 ? min(1, -y * 2.4 / PeerListContainerView.searchBlockHeight) : 0
-        if progress >= 0.6 {
-            setSearchLatched(true)
-            return
-        }
-        if progress != searchRevealProgress {
-            searchRevealProgress = progress
-            updateLayout(frame.size, transition: .immediate)
-        }
-    }
-
-    private func setSearchLatched(_ latched: Bool) {
-        guard searchLatched != latched else {
-            return
-        }
-        searchLatched = latched
-        searchRevealProgress = latched ? 1 : 0
-        applyingSearchLatch = true
-        updateLayout(frame.size, transition: .animated(duration: 0.25, curve: .easeOut))
-        updateScrollerInset(animated: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.applyingSearchLatch = false
-        }
+        return PeerListContainerView.searchBlockHeight * searchReveal
     }
 
     public func updateLayout(_ size: NSSize, transition: ContainedViewLayoutTransition) {
@@ -1723,7 +1683,7 @@ public class PeerListContainerView : Control {
         
         self.titleView.updateState(state, arguments: arguments, communityTitle: self.communityTitle, maxWidth: maxTitleWidth, animated: transition.isAnimated)
         
-        let offset: CGFloat = navigationHeight + (pullDownSearch ? PeerListContainerView.searchBlockHeight * searchReveal - searchSpace : 0)
+        let offset: CGFloat = navigationHeight
         
         let progress: CGFloat = displaysFullForumHeader ? 0.0 : (getDeltaProgress() ?? (state.appear == .short ? 0.0 : 1.0))
         
@@ -1796,6 +1756,12 @@ public class PeerListContainerView : Control {
 
         ContainedViewLayoutTransition.immediate.updateFrame(view: tableView, frame: NSMakeRect(0, 0, size.width, size.height - bottomInset))
         updateTableMask(spaceHeight: navigationHeight)
+        if System.liquidGlass {
+            let compact = state.splitState == .single && !hasLeftSidebar
+            tableView.layer?.cornerRadius = compact ? 0 : 20
+        } else {
+            tableView.layer?.cornerRadius = 0
+        }
 
         updateBottomControls(size: size, transition: transition)
         
@@ -1897,7 +1863,7 @@ public class PeerListContainerView : Control {
         if let foldersItem = foldersItem, let view = foldersView {
             let controlSize = NSMakeSize(size.width, foldersItem.height)
             
-            let rect = CGRect(origin: NSMakePoint(0, (pullDownSearch ? offset : navigationHeight) - controlSize.height), size: controlSize)
+            let rect = CGRect(origin: NSMakePoint(0, navigationHeight - controlSize.height), size: controlSize)
                         
             transition.updateFrame(view: view, frame: rect)
             view.set(item: foldersItem, animated: transition.isAnimated)
@@ -2615,6 +2581,7 @@ open class PeersListController<Context: AccountContextProtocol>: TelegramGeneric
                 
         genericView.tableView._scrollDidEndLiveScrolling = { [weak self] in
             self?.storyRevealDriver.finishIfPartial()
+            self?.searchRevealDriver.finishIfPartial()
         }
         
         revealListener = .init(dispatchWhenVisibleRangeUpdated: false, { [weak self] _ in
@@ -3938,6 +3905,27 @@ open class PeersListController<Context: AccountContextProtocol>: TelegramGeneric
         return self.state?.hasStories == true && self.canStoryOverscroll && self.searchSection == nil
     }
 
+    private let searchReveal = StoryRevealModel(span: 30)
+    private lazy var searchRevealDriver: StoryRevealDriver = {
+        let driver = StoryRevealDriver(table: self.genericView.tableView, model: self.searchReveal)
+        driver.didChange = { [weak self] previous, tracking in
+            self?.searchRevealDidChange(from: previous, tracking: tracking)
+        }
+        return driver
+    }()
+
+    private var searchRevealAllowed: Bool {
+        return self.genericView.pullDownSearch && self.canStoryOverscroll && self.searchSection == nil
+    }
+
+    private func searchRevealDidChange(from previous: CGFloat, tracking: Bool) {
+        if tracking, self.searchReveal.fraction >= 1, previous < 1 {
+            NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .drawCompleted)
+        }
+        self.genericView.searchRevealFraction = self.searchReveal.fraction
+        self.relayoutStoryReveal()
+    }
+
     private func storyRevealDidChange(from previous: CGFloat, tracking: Bool) {
         if tracking, self.storyReveal.fraction >= 1, previous < 1 {
             NSHapticFeedbackManager.defaultPerformer.perform(.levelChange, performanceTime: .drawCompleted)
@@ -3965,6 +3953,9 @@ open class PeersListController<Context: AccountContextProtocol>: TelegramGeneric
     }
 
     private func setStoriesRevealed(_ revealed: Bool, animated: Bool) {
+        if revealed, self.searchRevealAllowed {
+            self.searchRevealDriver.setRevealed(true, animated: animated)
+        }
         self.storyRevealDriver.setRevealed(revealed, animated: animated)
     }
     
@@ -3990,6 +3981,9 @@ open class PeersListController<Context: AccountContextProtocol>: TelegramGeneric
     }
 
     private func processScroll() {
+        if self.searchRevealAllowed {
+            self.searchRevealDriver.tableDidScroll()
+        }
         guard self.storyRevealAllowed else {
             return
         }
@@ -4007,11 +4001,19 @@ open class PeersListController<Context: AccountContextProtocol>: TelegramGeneric
         #endif
         let allowed = self.storyRevealAllowed
         self.storyRevealDriver.setEnabled(allowed)
-        guard allowed else {
+        let searchAllowed = self.searchRevealAllowed
+        self.searchRevealDriver.setEnabled(searchAllowed)
+        guard allowed || searchAllowed else {
             return false
         }
         let input = StoryRevealModel.input(event, time: StoryRevealDriver.eventTime(event, now: CACurrentMediaTime()))
-        let consumed = self.storyRevealDriver.handle(input)
+        let consumed: Bool
+        if searchAllowed {
+            let storiesFirst = allowed && (self.searchReveal.isSettledRevealed || self.storyReveal.fraction > 0 || self.storyReveal.isAnimating)
+            consumed = (storiesFirst && self.storyRevealDriver.handle(input)) || self.searchRevealDriver.handle(input)
+        } else {
+            consumed = self.storyRevealDriver.handle(input)
+        }
         #if DEBUG
         StoryRevealLabRegistry.record(input, consumed: consumed)
         #endif
