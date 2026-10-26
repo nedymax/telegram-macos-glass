@@ -1741,15 +1741,17 @@ public class PeerListContainerView : Control {
         searchView.updateLayout(size: searchRect.size, transition: transition)
         searchView.isHidden = state.splitState == .minimisize || (mode.isForumLike && !displaysFullForumHeader)
         if pullDownSearch {
-            transition.updateAlpha(view: searchView, alpha: max(0, min(1, (reveal - 0.6) / 0.4)))
+            transition.updateAlpha(view: searchView, alpha: max(0, min(1, (reveal - 0.75) / 0.25)))
         } else {
             searchView.alphaValue = 1
         }
         if let searchBackground {
-            let backgroundRect = NSMakeRect(searchRect.minX, searchRect.minY, searchRect.width, max(1, searchRect.height * reveal))
+            let backgroundHeight = min(searchRect.height, PeerListContainerView.searchBlockHeight * reveal - (PeerListContainerView.searchBlockHeight - searchRect.height))
+            let backgroundRect = NSMakeRect(searchRect.minX, searchRect.minY, searchRect.width, max(1, backgroundHeight))
             transition.updateFrame(view: searchBackground, frame: backgroundRect)
             searchBackground.layer?.cornerRadius = min(searchRect.height, backgroundRect.height) / 2
-            searchBackground.isHidden = searchView.isHidden || reveal < 0.02
+            searchBackground.isHidden = searchView.isHidden || backgroundHeight < 1
+            transition.updateAlpha(view: searchBackground, alpha: max(0, min(1, backgroundHeight / searchRect.height)))
         }
         
 
