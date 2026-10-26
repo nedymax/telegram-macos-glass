@@ -654,6 +654,10 @@ public class ScrollableSegmentView: View {
         needsLayout = true
     }
 
+    @objc func _shouldDescendantsContributeToScrollPocket() -> Bool {
+        return !capsule
+    }
+
     public override func hitTest(_ point: NSPoint) -> NSView? {
         guard capsuleLens != nil, let host = scrollView.superview, !isHiddenOrHasHiddenAncestor else {
             return super.hitTest(point)

@@ -115,10 +115,10 @@ public class ChatListRevealItem: TableStickItem {
         return "ChatListRevealView"
     }
     
-    public static let capsuleHeight: CGFloat = 34
+    public static let capsuleHeight: CGFloat = 40
 
     public override var height: CGFloat {
-        return System.liquidGlass ? ChatListRevealItem.capsuleHeight + 6 : 30
+        return System.liquidGlass ? ChatListRevealItem.capsuleHeight + 10 : 30
     }
     
     static func accessibilityTabTitle(_ title: String, unreadCount: Int?) -> String {

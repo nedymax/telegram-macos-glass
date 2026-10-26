@@ -1072,8 +1072,13 @@ public class PeerListContainerView : Control {
     private var compose:ImageButton?
     private var backButton: ImageButton?
     private var glassContainer: NSView?
-    private var composeGlass: LiquidGlassView?
-    private var searchBackground: LiquidGlassView?
+    private var searchBackground: View?
+    private let headerPocketArea = ScrollPocketArea(frame: .zero, style: .soft)
+    private var searchRevealProgress: CGFloat = 0
+    private var searchLatched: Bool = false
+    private var applyingSearchLatch: Bool = false
+    private static let searchFieldHeight: CGFloat = 28
+    private static let searchBlockHeight: CGFloat = 38
 
     private var contactsSort: TextButton?
 
@@ -1140,6 +1145,11 @@ public class PeerListContainerView : Control {
         tableMaskLayer.backgroundColor = NSColor.black.cgColor
         tableMaskLayer.disableActions()
         tableView.layer?.mask = tableMaskLayer
+        if System.liquidGlassAvailable {
+            tableView.registerScrollPocketContainer(containerView, edge: .top)
+            tableView.clipView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(self, selector: #selector(tableDidScroll), name: NSView.boundsDidChangeNotification, object: tableView.clipView)
+        }
 
         addSubview(backgroundView)
         addSubview(tableView)
@@ -1164,6 +1174,7 @@ public class PeerListContainerView : Control {
         containerView.addSubview(statusContainer)
         
         containerView.addSubview(searchView)
+        containerView.addSubview(headerPocketArea, positioned: .below, relativeTo: nil)
         
         
         tableView.getBackgroundColor = {
@@ -1260,7 +1271,7 @@ public class PeerListContainerView : Control {
                 current.scaleOnClick = true
                 statusContainer.addSubview(current)
             }
-            var composeImage: CGImage
+            let composeImage: CGImage
             if state.isContacts {
                 composeImage = theme.icons.contactsNewContact
                 current.setAccessibilityLabel(strings().voiceOverContactsAddContact)
@@ -1271,17 +1282,6 @@ public class PeerListContainerView : Control {
                 composeImage = theme.icons.composeNewChat
                 current.setAccessibilityLabel(strings().voiceOverNavigationCompose)
             }
-            if System.liquidGlass {
-                if self.composeGlass == nil {
-                    let glass = LiquidGlassView(frame: current.frame, cornerRadius: current.frame.height / 2)
-                    statusContainer.addSubview(glass, positioned: .below, relativeTo: current)
-                    self.composeGlass = glass
-                }
-                composeImage = composeImage.highlight(color: theme.colors.text)
-            } else if let glass = self.composeGlass {
-                glass.removeFromSuperview()
-                self.composeGlass = nil
-            }
             current.set(image: composeImage, for: .Normal)
             current.set(image: composeImage, for: .Hover)
             current.contextMenu = { [weak arguments] in
@@ -1290,10 +1290,6 @@ public class PeerListContainerView : Control {
         } else if let view = self.compose {
             performSubviewRemoval(view, animated: animated)
             self.compose = nil
-            if let glass = self.composeGlass {
-                performSubviewRemoval(glass, animated: animated)
-                self.composeGlass = nil
-            }
         }
         
         let hasForumTitle = state.splitState != .minimisize && (delta != nil || state.appear == .short || displaysFullForumHeader)
@@ -1635,14 +1631,75 @@ public class PeerListContainerView : Control {
     private func updateSearchBackground() {
         if System.liquidGlass {
             if searchBackground == nil {
-                let glass = LiquidGlassView(frame: searchView.frame, cornerRadius: searchView.frame.height / 2)
-                glass.isEventLess = true
-                containerView.addSubview(glass, positioned: .below, relativeTo: searchView)
-                searchBackground = glass
+                let fill = View(frame: searchView.frame)
+                fill.isEventLess = true
+                containerView.addSubview(fill, positioned: .below, relativeTo: searchView)
+                searchBackground = fill
             }
+            searchBackground?.backgroundColor = theme.colors.text.withAlphaComponent(theme.colors.isDark ? 0.1 : 0.075)
         } else if let searchBackground {
             searchBackground.removeFromSuperview()
             self.searchBackground = nil
+        }
+    }
+
+    private var pullDownSearch: Bool {
+        guard System.liquidGlass, let state = self.state else {
+            return false
+        }
+        return state.splitState != .minimisize && (state.mode.isPlain || state.mode.isCommunity) && !state.mode.isForumLike
+    }
+
+    private var searchReveal: CGFloat {
+        guard pullDownSearch, let state = self.state else {
+            return 1
+        }
+        if state.searchState != .None || searchLatched {
+            return 1
+        }
+        return searchRevealProgress
+    }
+
+    private var searchSpace: CGFloat {
+        guard pullDownSearch, let state = self.state else {
+            return 40
+        }
+        return state.searchState != .None || searchLatched ? PeerListContainerView.searchBlockHeight : 0
+    }
+
+    @objc private func tableDidScroll() {
+        guard pullDownSearch, !applyingSearchLatch, let state = self.state, state.searchState == .None else {
+            return
+        }
+        let y = tableView.clipView.bounds.minY
+        if searchLatched {
+            if y > 1 {
+                setSearchLatched(false)
+            }
+            return
+        }
+        let progress = y < 0 ? min(1, -y * 2.4 / PeerListContainerView.searchBlockHeight) : 0
+        if progress >= 0.6 {
+            setSearchLatched(true)
+            return
+        }
+        if progress != searchRevealProgress {
+            searchRevealProgress = progress
+            updateLayout(frame.size, transition: .immediate)
+        }
+    }
+
+    private func setSearchLatched(_ latched: Bool) {
+        guard searchLatched != latched else {
+            return
+        }
+        searchLatched = latched
+        searchRevealProgress = latched ? 1 : 0
+        applyingSearchLatch = true
+        updateLayout(frame.size, transition: .animated(duration: 0.25, curve: .easeOut))
+        updateScrollerInset(animated: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.applyingSearchLatch = false
         }
     }
 
@@ -1666,7 +1723,7 @@ public class PeerListContainerView : Control {
         
         self.titleView.updateState(state, arguments: arguments, communityTitle: self.communityTitle, maxWidth: maxTitleWidth, animated: transition.isAnimated)
         
-        let offset: CGFloat = navigationHeight
+        let offset: CGFloat = navigationHeight + (pullDownSearch ? PeerListContainerView.searchBlockHeight * searchReveal - searchSpace : 0)
         
         let progress: CGFloat = displaysFullForumHeader ? 0.0 : (getDeltaProgress() ?? (state.appear == .short ? 0.0 : 1.0))
         
@@ -1675,6 +1732,8 @@ public class PeerListContainerView : Control {
         let containerSize = NSMakeSize(state.splitState == .minimisize ? 90 : size.width, offset)
                 
         transition.updateFrame(view: self.containerView, frame: NSMakeRect(0, inset, containerSize.width, offset))
+        transition.updateFrame(view: headerPocketArea, frame: NSMakeRect(0, 0, containerSize.width, offset))
+        headerPocketArea.isHidden = !System.liquidGlass
         
         
         transition.updateFrame(view: self.statusContainer, frame: NSMakeRect(0, 0, containerSize.width, statusHeight))
@@ -1711,7 +1770,9 @@ public class PeerListContainerView : Control {
         let inlineBackButton = self.backButton != nil && !hasLeftSidebar && state.splitState != .minimisize && state.splitState != .single && !state.mode.isCommunity && !displaysFullForumHeader
         let inlineBackButtonGap: CGFloat = 10
         let searchLeading: CGFloat = inlineBackButton ? backRect(size: size).maxX + inlineBackButtonGap : edge
-        let searchRect = NSMakeRect(searchLeading, searchY, size.width - searchLeading - edge, componentSize.height)
+        let searchHeight: CGFloat = pullDownSearch ? PeerListContainerView.searchFieldHeight : componentSize.height
+        let searchRect = NSMakeRect(searchLeading, searchY, size.width - searchLeading - edge, searchHeight)
+        let reveal = searchReveal
 
 
         let bottomInset: CGFloat = 0
@@ -1719,11 +1780,16 @@ public class PeerListContainerView : Control {
         transition.updateFrame(view: searchView, frame: searchRect)
         searchView.updateLayout(size: searchRect.size, transition: transition)
         searchView.isHidden = state.splitState == .minimisize || (mode.isForumLike && !displaysFullForumHeader)
+        if pullDownSearch {
+            transition.updateAlpha(view: searchView, alpha: max(0, min(1, (reveal - 0.6) / 0.4)))
+        } else {
+            searchView.alphaValue = 1
+        }
         if let searchBackground {
-            transition.updateFrame(view: searchBackground, frame: searchRect)
-            searchBackground.cornerRadius = searchRect.height / 2
-            searchBackground.updateLayout(size: searchRect.size, transition: transition)
-            searchBackground.isHidden = searchView.isHidden
+            let backgroundRect = NSMakeRect(searchRect.minX, searchRect.minY, searchRect.width, max(1, searchRect.height * reveal))
+            transition.updateFrame(view: searchBackground, frame: backgroundRect)
+            searchBackground.layer?.cornerRadius = min(searchRect.height, backgroundRect.height) / 2
+            searchBackground.isHidden = searchView.isHidden || reveal < 0.02
         }
         
 
@@ -1733,7 +1799,7 @@ public class PeerListContainerView : Control {
 
         updateBottomControls(size: size, transition: transition)
         
-        var controlPoint = NSMakePoint(containerSize.width - (composeGlass != nil ? 10 : 14), floorToScreenPixels(backingScaleFactor, (statusHeight - componentSize.height)/2.0))
+        var controlPoint = NSMakePoint(containerSize.width - 14, floorToScreenPixels(backingScaleFactor, (statusHeight - componentSize.height)/2.0))
 
         controlPoint.x -= componentSize.width
         
@@ -1742,11 +1808,6 @@ public class PeerListContainerView : Control {
             let composeAlpha: CGFloat = state.splitState == .minimisize ? 1 : progress
             transition.updateFrame(view: compose, frame: composeFrame)
             transition.updateAlpha(view: compose, alpha: composeAlpha)
-            if let composeGlass {
-                transition.updateFrame(view: composeGlass, frame: composeFrame)
-                composeGlass.updateLayout(size: composeFrame.size, transition: transition)
-                transition.updateAlpha(view: composeGlass, alpha: composeAlpha)
-            }
         }
         
         if let view = forumTitle {
@@ -1836,7 +1897,7 @@ public class PeerListContainerView : Control {
         if let foldersItem = foldersItem, let view = foldersView {
             let controlSize = NSMakeSize(size.width, foldersItem.height)
             
-            let rect = CGRect(origin: NSMakePoint(0, navigationHeight - controlSize.height), size: controlSize)
+            let rect = CGRect(origin: NSMakePoint(0, (pullDownSearch ? offset : navigationHeight) - controlSize.height), size: controlSize)
                         
             transition.updateFrame(view: view, frame: rect)
             view.set(item: foldersItem, animated: transition.isAnimated)
@@ -1880,7 +1941,7 @@ public class PeerListContainerView : Control {
 
         if state.splitState != .minimisize, state.mode.isPlain || state.mode.isCommunity {
 
-            offset += 40
+            offset += searchSpace
 
             if let storiesItem = self.storiesItem {
                 offset += storiesItem.navigationHeight
@@ -1928,6 +1989,12 @@ public class PeerListContainerView : Control {
     }
 
     public func updateTableMask(spaceHeight: CGFloat) {
+        if System.liquidGlass {
+            tableView.layer?.mask = nil
+            return
+        } else if tableView.layer?.mask == nil {
+            tableView.layer?.mask = tableMaskLayer
+        }
         let tableHeight = tableView.frame.height
         guard tableHeight > 0 else { return }
         CATransaction.begin()
