@@ -570,6 +570,13 @@ public class ScrollableSegmentView: View {
         }
         NotificationCenter.default.removeObserver(self)
     }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            needsLayout = true
+        }
+    }
     
     public override func mouseUp(with event: NSEvent) {
         if fitToWidth, documentView.frame.width <= frame.width, mouseInside() {
@@ -591,6 +598,7 @@ public class ScrollableSegmentView: View {
     }
     
     public override func updateLocalizationAndTheme(theme presentation: PresentationTheme) {
+        super.updateLocalizationAndTheme(theme: presentation)
         self.theme = ScrollableSegmentTheme(background: presentation.colors.background, border: presentation.colors.border, selector: presentation.colors.accent, inactiveText: presentation.colors.grayText, activeText: presentation.colors.accent, textFont: .normal(.title))
     }
     
@@ -662,10 +670,6 @@ public class ScrollableSegmentView: View {
         }
         redraw()
         needsLayout = true
-    }
-
-    @objc func _shouldDescendantsContributeToScrollPocket() -> Bool {
-        return !capsule
     }
 
     public override func hitTest(_ point: NSPoint) -> NSView? {
@@ -793,9 +797,9 @@ public class ScrollableSegmentView: View {
             }
             let lifted = (capsulePressed != nil || capsuleTravelling) && !reduceMotion
             let frame = capsuleFrame(at: position, lifted: lifted)
-            let sources = items.compactMap { $0.view }.flatMap { view in
+            let sources = items.compactMap { $0.view }.map { view in
                 view.layoutSubtreeIfNeeded()
-                return view.subviews.map { LiquidGlassLensContentSource(view: $0) }
+                return LiquidGlassLensContentSource(view: view)
             }
             let animation: LiquidGlassLensAnimation = animated && !reduceMotion ? .spring(duration: 0.4) : .immediate
             lens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: presentation.appearance, backingScale: window?.backingScaleFactor ?? System.backingScale, animation: animation, restingBlurRadius: 16, restingTintColor: tint, contentSources: sources)
