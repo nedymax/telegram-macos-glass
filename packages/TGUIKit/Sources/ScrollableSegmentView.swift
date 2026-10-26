@@ -640,6 +640,7 @@ public class ScrollableSegmentView: View {
                 addSubview(lens, positioned: .above, relativeTo: glass)
                 lens.contentView.addSubview(scrollView)
                 lens.wantsLayer = true
+                capsuleClip.backgroundColor = NSColor.black.cgColor
                 lens.layer?.mask = capsuleClip
                 capsuleLens = lens
             } else {
