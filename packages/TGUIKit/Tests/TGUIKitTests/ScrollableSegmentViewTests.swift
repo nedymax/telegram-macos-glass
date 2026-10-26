@@ -75,4 +75,27 @@ final class ScrollableSegmentViewTests: XCTestCase {
             XCTAssertEqual(title.frame.origin, NSMakePoint(10, 12))
         }
     }
+
+    func testReturningToWindowRestoresTheSelectedFolderPill() throws {
+        guard #available(macOS 26.0, *), LiquidGlassLensView.make() != nil else {
+            throw XCTSkip("Native glass requires macOS 26")
+        }
+        let segment = makeSegment(capsule: true)
+        var titles: [Control] = []
+        segment.updateItems(items(selected: 1, titles: &titles), animated: false)
+        segment.layoutSubtreeIfNeeded()
+        let host = try XCTUnwrap(segment.superview)
+        let lens = try XCTUnwrap(titles[1].superview?.superview?.superview?.superview as? LiquidGlassLensView)
+        let selectedFrame = try XCTUnwrap(lens.subviews.first?.layer?.sublayers?.first { $0.name == "lensRestingBackground" }).frame
+        for _ in 0..<3 {
+            segment.removeFromSuperview()
+            XCTAssertNil(lens.subviews.first?.layer?.sublayers?.first { $0.name == "lensRestingBackground" })
+            segment.needsLayout = false
+            host.addSubview(segment)
+            host.layoutSubtreeIfNeeded()
+            let pill = try XCTUnwrap(lens.subviews.first?.layer?.sublayers?.first { $0.name == "lensRestingBackground" })
+            XCTAssertEqual(pill.frame, selectedFrame)
+            XCTAssertEqual(pill.opacity, 1)
+        }
+    }
 }

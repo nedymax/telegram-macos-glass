@@ -303,6 +303,8 @@ final class MainController_View: View {
     private let bgView: View = View()
     private let glassView: LiquidGlassView
 
+    var scrollEdgeClippingView: NSView { bgView }
+
     /// 20pt on macOS 26+ to match the liquid-glass aesthetic (on macOS 27
     /// the window radius is raised to 28pt through private API, keeping
     /// this inset pane concentric). Older systems keep the subtle 8pt.
@@ -422,6 +424,7 @@ class MainViewController: TelegramGenericViewController<MainController_View> {
             guard controller.isLoaded(), let listView = controller.view as? PeerListContainerView else {
                 return
             }
+            listView.scrollEdgeClippingView = self?.genericView.scrollEdgeClippingView
             listView.layoutBottomOverlay = { [weak self, weak listView, weak updateView] bottomY, transition in
                 guard let self, self.tabController.current === self.navigation, self.navigation.controller.view === listView,
                       let listView, let updateView, !updateView.isHidden, let container = updateView.superview, listView.isDescendant(of: container) else {
@@ -438,10 +441,12 @@ class MainViewController: TelegramGenericViewController<MainController_View> {
             }
             listView.updateBottomControls(size: listView.frame.size, transition: .immediate)
         }
-        updateContainer(navigation.controller)
-        navigation.enumerateControllers { controller, _ in
-            updateContainer(controller)
-            return false
+        for stack in [navigation, contacts] {
+            updateContainer(stack.controller)
+            stack.enumerateControllers { controller, _ in
+                updateContainer(controller)
+                return false
+            }
         }
     }
 
