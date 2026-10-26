@@ -1734,7 +1734,7 @@ public class PeerListContainerView : Control {
 
         updateBottomControls(size: size, transition: transition)
         
-        var controlPoint = NSMakePoint(containerSize.width - 14, floorToScreenPixels(backingScaleFactor, (statusHeight - componentSize.height)/2.0))
+        var controlPoint = NSMakePoint(containerSize.width - (composeGlass != nil ? 10 : 14), floorToScreenPixels(backingScaleFactor, (statusHeight - componentSize.height)/2.0))
 
         controlPoint.x -= componentSize.width
         

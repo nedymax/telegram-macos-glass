@@ -115,8 +115,10 @@ public class ChatListRevealItem: TableStickItem {
         return "ChatListRevealView"
     }
     
+    public static let capsuleHeight: CGFloat = 34
+
     public override var height: CGFloat {
-        return 30
+        return System.liquidGlass ? ChatListRevealItem.capsuleHeight + 6 : 30
     }
     
     static func accessibilityTabTitle(_ title: String, unreadCount: Int?) -> String {
@@ -368,7 +370,7 @@ public final class ChatListRevealView : TableStickView {
 
         containerView.frame = bounds
         if segmentView.capsule {
-            segmentView.frame = NSMakeRect(10, -6, max(0, containerView.bounds.width - 20), containerView.bounds.height + 4)
+            segmentView.frame = NSMakeRect(10, 0, max(0, containerView.bounds.width - 20), ChatListRevealItem.capsuleHeight)
         } else {
             segmentView.frame = NSMakeRect(0, -10, containerView.bounds.width, containerView.bounds.height
              + 10)
