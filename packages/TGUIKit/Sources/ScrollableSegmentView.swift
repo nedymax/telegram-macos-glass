@@ -170,6 +170,7 @@ private final class SegmentItemView : Control {
     private let callback: (ScrollableSegmentItem)->Void
     private let menuItems:(ScrollableSegmentItem)->Signal<[ContextMenuItem], NoError>
     private let startDraggingIfNeeded: (ScrollableSegmentItem, Control)->Void
+    var pressChanged: ((SegmentItemView, Bool) -> Void)?
     init(item: ScrollableSegmentItem, theme: ScrollableSegmentTheme, callback: @escaping(ScrollableSegmentItem)->Void, startDraggingIfNeeded: @escaping(ScrollableSegmentItem, Control)->Void, menuItems:@escaping(ScrollableSegmentItem)->Signal<[ContextMenuItem], NoError>) {
         self.item = item
         self.callback = callback
@@ -214,12 +215,27 @@ private final class SegmentItemView : Control {
             }
             self.callback(self.item)
         }, for: .Click)
+
+        set(handler: { [weak self] _ in
+            guard let `self` = self else {
+                return
+            }
+            self.pressChanged?(self, true)
+        }, for: .Down)
+
+        set(handler: { [weak self] _ in
+            guard let `self` = self else {
+                return
+            }
+            self.pressChanged?(self, false)
+        }, for: .Up)
         
         
         set(handler: { [weak self] control in
             guard let `self` = self else {
                 return
             }
+            self.pressChanged?(self, false)
             self.startDraggingIfNeeded(self.item, control)
         }, for: .LongMouseDown)
         
@@ -470,6 +486,7 @@ public class ScrollableSegmentView: View {
     private var capsuleGlass: LiquidGlassView?
     private var capsuleLens: LiquidGlassLensView?
     private var capsuleSelection: View?
+    private weak var capsulePressedView: SegmentItemView?
     private let capsuleClip = CALayer()
 
     public var capsule: Bool = false {
@@ -637,14 +654,21 @@ public class ScrollableSegmentView: View {
         guard capsule else {
             return
         }
-        let frame = capsuleSelectionFrame
         let tint = presentation.colors.text.withAlphaComponent(presentation.colors.isDark ? 0.1 : 0.075)
         if let lens = capsuleLens {
+            let lifted = capsulePressedView != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            let frame: NSRect
+            if lifted, let pressed = capsulePressedView {
+                frame = documentView.convert(pressed.frame, to: self).insetBy(dx: -10, dy: ScrollableSegmentView.capsuleInset - 8)
+            } else {
+                frame = capsuleSelectionFrame
+            }
             let sources = items.compactMap { $0.view }.flatMap { view in
                 view.subviews.map { LiquidGlassLensContentSource(view: $0) }
             }
-            lens.update(lensFrame: frame, interactionProgress: 0, appearance: presentation.appearance, backingScale: window?.backingScaleFactor ?? System.backingScale, animation: animated ? .spring(duration: 0.4) : .immediate, restingBlurRadius: 16, restingTintColor: tint, contentSources: sources)
+            lens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: presentation.appearance, backingScale: window?.backingScaleFactor ?? System.backingScale, animation: animated ? .spring(duration: 0.4) : .immediate, restingBlurRadius: 16, restingTintColor: tint, contentSources: sources)
         } else if let selection = capsuleSelection {
+            let frame = capsuleSelectionFrame
             selection.backgroundColor = tint
             selection.layer?.cornerRadius = frame.height / 2
             selection.change(pos: frame.origin, animated: animated)
@@ -766,6 +790,19 @@ public class ScrollableSegmentView: View {
         let view = SegmentItemView(item: item, theme: theme, callback: callback, startDraggingIfNeeded: { [weak self] item, view in
             self?.startDraggingIfNeeded(item, view)
         }, menuItems: menuItems)
+        view.pressChanged = { [weak self] view, pressed in
+            guard let self, self.capsule else {
+                return
+            }
+            if pressed {
+                self.capsulePressedView = view
+            } else if self.capsulePressedView === view {
+                self.capsulePressedView = nil
+            } else {
+                return
+            }
+            self.updateCapsuleSelection(animated: true)
+        }
         view.setFrameSize(NSMakeSize(view.frame.width, frame.height))
         item.view = view
         

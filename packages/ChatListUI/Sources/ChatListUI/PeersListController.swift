@@ -1073,7 +1073,7 @@ public class PeerListContainerView : Control {
     private var backButton: ImageButton?
     private var glassContainer: NSView?
     private var composeGlass: LiquidGlassView?
-    private var searchBackground: NSButton?
+    private var searchBackground: LiquidGlassView?
 
     private var contactsSort: TextButton?
 
@@ -1633,16 +1633,12 @@ public class PeerListContainerView : Control {
     }
 
     private func updateSearchBackground() {
-        if #available(macOS 26.0, *), System.liquidGlass {
+        if System.liquidGlass {
             if searchBackground == nil {
-                let button = NSButton(title: "", target: nil, action: nil)
-                button.bezelStyle = .glass
-                button.borderShape = .capsule
-                button.controlSize = .large
-                button.refusesFirstResponder = true
-                button.setAccessibilityElement(false)
-                containerView.addSubview(button, positioned: .below, relativeTo: searchView)
-                searchBackground = button
+                let glass = LiquidGlassView(frame: searchView.frame, cornerRadius: searchView.frame.height / 2)
+                glass.isEventLess = true
+                containerView.addSubview(glass, positioned: .below, relativeTo: searchView)
+                searchBackground = glass
             }
         } else if let searchBackground {
             searchBackground.removeFromSuperview()
@@ -1724,6 +1720,8 @@ public class PeerListContainerView : Control {
         searchView.isHidden = state.splitState == .minimisize || (mode.isForumLike && !displaysFullForumHeader)
         if let searchBackground {
             transition.updateFrame(view: searchBackground, frame: searchRect)
+            searchBackground.cornerRadius = searchRect.height / 2
+            searchBackground.updateLayout(size: searchRect.size, transition: transition)
             searchBackground.isHidden = searchView.isHidden
         }
         
