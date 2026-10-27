@@ -118,7 +118,7 @@ public class ChatListRevealItem: TableStickItem {
     public static let capsuleHeight: CGFloat = 40
 
     public override var height: CGFloat {
-        return System.liquidGlass ? ChatListRevealItem.capsuleHeight + 10 : 30
+        return System.liquidGlassAvailable ? ChatListRevealItem.capsuleHeight + 10 : 30
     }
     
     static func accessibilityTabTitle(_ title: String, unreadCount: Int?) -> String {
@@ -208,7 +208,7 @@ public final class ChatListRevealView : TableStickView, AppearanceViewProtocol {
     }
 
     private func segmentTheme(for presentation: TelegramPresentationTheme) -> ScrollableSegmentTheme {
-        return ScrollableSegmentTheme(background: .clear, border: presentation.colors.border, selector: presentation.colors.accent, inactiveText: presentation.colors.grayText, activeText: presentation.colors.text, textFont: System.liquidGlass ? NSFont.systemFont(ofSize: .text, weight: .semibold) : .normal(.text))
+        return ScrollableSegmentTheme(background: .clear, border: presentation.colors.border, selector: presentation.colors.accent, inactiveText: presentation.colors.grayText, activeText: presentation.colors.text, textFont: System.liquidGlassAvailable ? NSFont.systemFont(ofSize: .text, weight: .semibold) : .normal(.text))
     }
 
     public func updateLocalizationAndTheme(theme: PresentationTheme) {
@@ -267,7 +267,7 @@ public final class ChatListRevealView : TableStickView, AppearanceViewProtocol {
         presentationTheme = item.presentation
         let segmentTheme = self.segmentTheme(for: presentationTheme)
 
-        segmentView.capsule = System.liquidGlass
+        segmentView.capsule = System.liquidGlassAvailable
         segmentView.theme = segmentTheme
 
         var index: Int = 0

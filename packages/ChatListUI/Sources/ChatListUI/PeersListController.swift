@@ -1627,7 +1627,7 @@ public class PeerListContainerView : Control {
     }
 
     private func updateSearchBackground() {
-        if System.liquidGlass {
+        if System.liquidGlassAvailable {
             if searchBackground == nil {
                 let fill = View(frame: searchView.frame)
                 fill.isEventLess = true
@@ -1642,7 +1642,7 @@ public class PeerListContainerView : Control {
     }
 
     var pullDownSearch: Bool {
-        guard System.liquidGlass, let state = self.state else {
+        guard System.liquidGlassAvailable, let state = self.state else {
             return false
         }
         return state.splitState != .minimisize && (state.mode.isPlain || state.mode.isCommunity) && !state.mode.isForumLike
@@ -1695,7 +1695,7 @@ public class PeerListContainerView : Control {
                 
         transition.updateFrame(view: self.containerView, frame: NSMakeRect(0, inset, containerSize.width, offset))
         transition.updateFrame(view: headerPocketArea, frame: NSMakeRect(0, 0, containerSize.width, offset))
-        headerPocketArea.isHidden = !System.liquidGlass
+        headerPocketArea.isHidden = !System.liquidGlassAvailable
         
         
         transition.updateFrame(view: self.statusContainer, frame: NSMakeRect(0, 0, containerSize.width, statusHeight))
@@ -1709,7 +1709,7 @@ public class PeerListContainerView : Control {
 
         transition.updateFrame(view: self.borderView, frame: CGRect(origin: CGPoint(x: 0, y: navigationHeight_ - .borderSize), size: CGSize(width: size.width, height: .borderSize)))
         transition.updateAlpha(view: borderView, alpha: state.searchState == .Focus ? 0 : 1)
-        borderView.isHidden = System.liquidGlass
+        borderView.isHidden = System.liquidGlassAvailable
 
         forumSeparatorView.isHidden = !mode.isForumLike || displaysFullForumHeader
         transition.updateFrame(view: forumSeparatorView, frame: NSMakeRect(0, 0, .borderSize, size.height))
@@ -1760,7 +1760,7 @@ public class PeerListContainerView : Control {
 
 
         ContainedViewLayoutTransition.immediate.updateFrame(view: tableView, frame: NSMakeRect(0, 0, size.width, size.height - bottomInset))
-        if System.liquidGlass {
+        if System.liquidGlassAvailable {
             let compact = state.splitState == .single && !hasLeftSidebar
             tableView.layer?.cornerRadius = compact ? 0 : 20
         } else {
@@ -1960,7 +1960,7 @@ public class PeerListContainerView : Control {
     }
 
     public func updateTableMask(spaceHeight: CGFloat) {
-        if System.liquidGlass {
+        if System.liquidGlassAvailable {
             let radius = tableView.layer?.cornerRadius ?? 0
             guard radius > 0 else {
                 tableView.layer?.mask = nil

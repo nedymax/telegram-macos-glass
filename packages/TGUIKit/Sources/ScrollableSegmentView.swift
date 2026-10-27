@@ -489,6 +489,8 @@ public class ScrollableSegmentView: View {
     
     private let documentView = View()
     private var boundsObserver: NSObjectProtocol?
+    private var glassSettingObserver: NSObjectProtocol?
+    private var displayOptionsObserver: NSObjectProtocol?
     private var items: [ScrollableSegmentItem] = []
     private var selected:Int = 0
     
@@ -567,6 +569,16 @@ public class ScrollableSegmentView: View {
         boundsObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scrollView.clipView, queue: OperationQueue.main, using: { [weak self] notification  in
             self?.needsLayout = true
         })
+        glassSettingObserver = NotificationCenter.default.addObserver(forName: systemLiquidGlassDidChange, object: nil, queue: .main) { [weak self] _ in
+            if let self, self.capsule {
+                self.updateCapsuleMode()
+            }
+        }
+        displayOptionsObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            if let self, self.capsule {
+                self.updateCapsuleMode()
+            }
+        }
         layout()
         redraw()
         
@@ -576,6 +588,12 @@ public class ScrollableSegmentView: View {
         finishCapsuleGesture()
         if let boundsObserver {
             NotificationCenter.default.removeObserver(boundsObserver)
+        }
+        if let glassSettingObserver {
+            NotificationCenter.default.removeObserver(glassSettingObserver)
+        }
+        if let displayOptionsObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(displayOptionsObserver)
         }
         NotificationCenter.default.removeObserver(self)
     }
@@ -667,7 +685,7 @@ public class ScrollableSegmentView: View {
             let glass = LiquidGlassView(frame: bounds, cornerRadius: bounds.height / 2)
             addSubview(glass, positioned: .below, relativeTo: scrollView)
             capsuleGlass = glass
-            if let lens = LiquidGlassLensView.make(frame: documentView.bounds) {
+            if System.liquidGlass, !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency, let lens = LiquidGlassLensView.make(frame: documentView.bounds) {
                 documentView.addSubview(lens)
                 for view in views {
                     lens.contentView.addSubview(view)
