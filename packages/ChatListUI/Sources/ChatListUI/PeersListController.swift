@@ -1123,6 +1123,7 @@ public class PeerListContainerView : Control {
     private let borderView = View()
     private let forumSeparatorView = View()
     private let tableMaskLayer = CALayer()
+    private let tableOutlineMaskLayer = CAShapeLayer()
     private var layoutSize: NSSize?
 
     public override func setFrameSize(_ newSize: NSSize) {
@@ -1141,6 +1142,7 @@ public class PeerListContainerView : Control {
         tableView.wantsLayer = true
         tableView.layer?.masksToBounds = true
         tableMaskLayer.backgroundColor = NSColor.black.cgColor
+        tableOutlineMaskLayer.fillColor = NSColor.black.cgColor
         tableMaskLayer.disableActions()
         tableView.layer?.mask = tableMaskLayer
         if System.liquidGlassAvailable {
@@ -1739,7 +1741,8 @@ public class PeerListContainerView : Control {
 
         transition.updateFrame(view: searchView, frame: searchRect)
         searchView.updateLayout(size: searchRect.size, transition: transition)
-        searchView.isHidden = state.splitState == .minimisize || (mode.isForumLike && !displaysFullForumHeader)
+        let searchHidden = state.splitState == .minimisize || (mode.isForumLike && !displaysFullForumHeader)
+        searchView.isHidden = searchHidden || (pullDownSearch && reveal <= 0.75)
         if pullDownSearch {
             transition.updateAlpha(view: searchView, alpha: max(0, min(1, (reveal - 0.75) / 0.25)))
         } else {
@@ -1750,20 +1753,20 @@ public class PeerListContainerView : Control {
             let backgroundRect = NSMakeRect(searchRect.minX, searchRect.minY, searchRect.width, max(1, backgroundHeight))
             transition.updateFrame(view: searchBackground, frame: backgroundRect)
             searchBackground.layer?.cornerRadius = min(searchRect.height, backgroundRect.height) / 2
-            searchBackground.isHidden = searchView.isHidden || backgroundHeight < 1
+            searchBackground.isHidden = searchHidden || backgroundHeight < 1
             transition.updateAlpha(view: searchBackground, alpha: max(0, min(1, backgroundHeight / searchRect.height)))
         }
         
 
 
         ContainedViewLayoutTransition.immediate.updateFrame(view: tableView, frame: NSMakeRect(0, 0, size.width, size.height - bottomInset))
-        updateTableMask(spaceHeight: navigationHeight)
         if System.liquidGlass {
             let compact = state.splitState == .single && !hasLeftSidebar
             tableView.layer?.cornerRadius = compact ? 0 : 20
         } else {
             tableView.layer?.cornerRadius = 0
         }
+        updateTableMask(spaceHeight: navigationHeight)
 
         updateBottomControls(size: size, transition: transition)
         
@@ -1958,9 +1961,23 @@ public class PeerListContainerView : Control {
 
     public func updateTableMask(spaceHeight: CGFloat) {
         if System.liquidGlass {
-            tableView.layer?.mask = nil
+            let radius = tableView.layer?.cornerRadius ?? 0
+            guard radius > 0 else {
+                tableView.layer?.mask = nil
+                return
+            }
+            let scale = window?.backingScaleFactor ?? System.backingScale
+            let inset = 1 / scale
+            let rect = tableView.bounds.insetBy(dx: inset, dy: inset)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            tableOutlineMaskLayer.frame = tableView.bounds
+            tableOutlineMaskLayer.contentsScale = scale
+            tableOutlineMaskLayer.path = CGPath(roundedRect: rect, cornerWidth: max(0, radius - inset), cornerHeight: max(0, radius - inset), transform: nil)
+            tableView.layer?.mask = tableOutlineMaskLayer
+            CATransaction.commit()
             return
-        } else if tableView.layer?.mask == nil {
+        } else if tableView.layer?.mask !== tableMaskLayer {
             tableView.layer?.mask = tableMaskLayer
         }
         let tableHeight = tableView.frame.height
