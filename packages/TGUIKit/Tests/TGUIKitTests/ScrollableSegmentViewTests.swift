@@ -17,14 +17,14 @@ final class ScrollableSegmentViewTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeSegment(capsule: Bool) -> ScrollableSegmentView {
+    private func makeSegment(bubbles: Bool) -> ScrollableSegmentView {
         let segment = ScrollableSegmentView(frame: NSMakeRect(10, 10, 300, 40))
         let window = NSWindow(contentRect: NSMakeRect(0, 0, 320, 60), styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = View(frame: NSMakeRect(0, 0, 320, 60))
         window.contentView?.addSubview(segment)
         windows.append(window)
-        segment.capsule = capsule
+        segment.bubbles = bubbles
         return segment
     }
 
@@ -46,8 +46,8 @@ final class ScrollableSegmentViewTests: XCTestCase {
     }
 
     func testTitleAndPaddingHitTheSameFolderControl() throws {
-        for capsule in [false, true] {
-            let segment = makeSegment(capsule: capsule)
+        for bubbles in [false, true] {
+            let segment = makeSegment(bubbles: bubbles)
             var titles: [Control] = []
             segment.updateItems(items(selected: 0, titles: &titles), animated: false)
             segment.layoutSubtreeIfNeeded()
@@ -55,18 +55,15 @@ final class ScrollableSegmentViewTests: XCTestCase {
             let control = try XCTUnwrap(title.superview)
             for point in [NSMakePoint(37, 20), NSMakePoint(37, 37), NSMakePoint(5, 20)] {
                 let hit = segment.hitTest(control.convert(point, to: segment.superview))
-                XCTAssertTrue(hit === control, "capsule: \(capsule), point: \(point), hit: \(String(describing: hit))")
+                XCTAssertTrue(hit === control, "bubbles: \(bubbles), point: \(point), hit: \(String(describing: hit))")
             }
             control.isHidden = true
             XCTAssertFalse(segment.hitTest(control.convert(NSMakePoint(37, 20), to: segment.superview)) === control)
         }
     }
 
-    func testReplacementTitlesAreLaidOutBeforeTheCapsuleRendersThem() throws {
-        guard #available(macOS 26.0, *), LiquidGlassLensView.make() != nil else {
-            throw XCTSkip("Native glass requires macOS 26")
-        }
-        let segment = makeSegment(capsule: true)
+    func testReplacementTitlesAreLaidOutBeforeThePillsAnimate() throws {
+        let segment = makeSegment(bubbles: true)
         var titles: [Control] = []
         segment.updateItems(items(selected: 0, titles: &titles), animated: false)
         segment.layoutSubtreeIfNeeded()
@@ -76,26 +73,22 @@ final class ScrollableSegmentViewTests: XCTestCase {
         }
     }
 
-    func testReturningToWindowRestoresTheSelectedFolderPill() throws {
-        guard #available(macOS 26.0, *), LiquidGlassLensView.make() != nil else {
-            throw XCTSkip("Native glass requires macOS 26")
-        }
-        let segment = makeSegment(capsule: true)
+    func testFolderPillsDoNotCreateALensWhenSelectionChanges() throws {
+        let segment = makeSegment(bubbles: true)
         var titles: [Control] = []
-        segment.updateItems(items(selected: 1, titles: &titles), animated: false)
-        segment.layoutSubtreeIfNeeded()
-        let host = try XCTUnwrap(segment.superview)
-        let lens = try XCTUnwrap(titles[1].superview?.superview?.superview?.superview as? LiquidGlassLensView)
-        let selectedFrame = try XCTUnwrap(lens.subviews.first?.layer?.sublayers?.first { $0.name == "lensRestingBackground" }).frame
-        for _ in 0..<3 {
-            segment.removeFromSuperview()
-            XCTAssertNil(lens.subviews.first?.layer?.sublayers?.first { $0.name == "lensRestingBackground" })
-            segment.needsLayout = false
-            host.addSubview(segment)
-            host.layoutSubtreeIfNeeded()
-            let pill = try XCTUnwrap(lens.subviews.first?.layer?.sublayers?.first { $0.name == "lensRestingBackground" })
-            XCTAssertEqual(pill.frame, selectedFrame)
-            XCTAssertEqual(pill.opacity, 1)
+        for selection in [0, 1, 0] {
+            segment.updateItems(items(selected: selection, titles: &titles), animated: true)
+            segment.layoutSubtreeIfNeeded()
+            var views: [NSView] = [segment]
+            while let view = views.popLast() {
+                XCTAssertFalse(view is LiquidGlassLensView)
+                views.append(contentsOf: view.subviews)
+            }
+            for title in titles {
+                XCTAssertEqual(title.frame.origin, NSMakePoint(10, 12))
+            }
+            XCTAssertNil(segment.scrollView.layer?.mask)
+            XCTAssertEqual(segment.scrollView.frame, segment.bounds)
         }
     }
 }
