@@ -115,10 +115,10 @@ public class ChatListRevealItem: TableStickItem {
         return "ChatListRevealView"
     }
     
-    public static let capsuleHeight: CGFloat = 40
+    public static let folderBarHeight: CGFloat = 40
 
     public override var height: CGFloat {
-        return System.liquidGlassAvailable ? ChatListRevealItem.capsuleHeight + 10 : 30
+        return System.liquidGlassAvailable ? ChatListRevealItem.folderBarHeight + 10 : 30
     }
     
     static func accessibilityTabTitle(_ title: String, unreadCount: Int?) -> String {
@@ -208,7 +208,7 @@ public final class ChatListRevealView : TableStickView, AppearanceViewProtocol {
     }
 
     private func segmentTheme(for presentation: TelegramPresentationTheme) -> ScrollableSegmentTheme {
-        return ScrollableSegmentTheme(background: .clear, border: presentation.colors.border, selector: presentation.colors.accent, inactiveText: presentation.colors.grayText, activeText: presentation.colors.text, textFont: System.liquidGlassAvailable ? NSFont.systemFont(ofSize: .text, weight: .semibold) : .normal(.text))
+        return ScrollableSegmentTheme(background: .clear, border: System.liquidGlassAvailable ? .clear : presentation.colors.border, selector: presentation.colors.accent, inactiveText: System.liquidGlassAvailable ? presentation.colors.text : presentation.colors.grayText, activeText: System.liquidGlassAvailable ? presentation.colors.underSelectedColor : presentation.colors.text, textFont: System.liquidGlassAvailable ? NSFont.systemFont(ofSize: .text, weight: .semibold) : .normal(.text))
     }
 
     public func updateLocalizationAndTheme(theme: PresentationTheme) {
@@ -225,14 +225,17 @@ public final class ChatListRevealView : TableStickView, AppearanceViewProtocol {
         guard let unreadCount = item.counters.count(for: tab), unreadCount.count > 0 else {
             return nil
         }
-        let attributedString = NSAttributedString.initialize(string: "\(unreadCount.count.prettyNumber)", color: presentation.colors.background, font: .medium(.short))
+        let selectedBubble = System.liquidGlassAvailable && item.selected == tab
+        let attributedString = NSAttributedString.initialize(string: "\(unreadCount.count.prettyNumber)", color: selectedBubble ? presentation.colors.accent : presentation.colors.background, font: .medium(.short))
         let textLayout = TextNode.layoutText(maybeNode: nil, attributedString, nil, 1, .start, NSMakeSize(CGFloat.greatestFiniteMagnitude, CGFloat.greatestFiniteMagnitude), nil, false, .center)
         var size = NSMakeSize(textLayout.0.size.width + 8, textLayout.0.size.height + 5)
         size = NSMakeSize(max(size.height, size.width), size.height)
         return generateImage(size, rotatedContext: { size, ctx in
             let rect = NSMakeRect(0, 0, size.width, size.height)
             ctx.clear(rect)
-            if item.selected == tab || unreadCount.hasUnmutedUnread {
+            if selectedBubble {
+                ctx.setFillColor(presentation.colors.underSelectedColor.cgColor)
+            } else if item.selected == tab || unreadCount.hasUnmutedUnread {
                 ctx.setFillColor(presentation.colors.accent.cgColor)
             } else {
                 ctx.setFillColor(presentation.colors.badgeMuted.cgColor)
@@ -267,11 +270,11 @@ public final class ChatListRevealView : TableStickView, AppearanceViewProtocol {
         presentationTheme = item.presentation
         let segmentTheme = self.segmentTheme(for: presentationTheme)
 
-        segmentView.capsule = System.liquidGlassAvailable
+        segmentView.bubbles = System.liquidGlassAvailable
         segmentView.theme = segmentTheme
 
         var index: Int = 0
-        let insets = NSEdgeInsets(left: 10, right: 10)
+        let insets = System.liquidGlassAvailable ? NSEdgeInsets(left: 14, right: 14) : NSEdgeInsets(left: 10, right: 10)
         var items:[ScrollableSegmentItem] = []
         for tab in item.tabs {
             let unreadCount = item.counters.count(for: tab)
@@ -380,8 +383,8 @@ public final class ChatListRevealView : TableStickView, AppearanceViewProtocol {
         super.layout()
 
         containerView.frame = bounds
-        if segmentView.capsule {
-            segmentView.frame = NSMakeRect(10, 0, max(0, containerView.bounds.width - 20), ChatListRevealItem.capsuleHeight)
+        if segmentView.bubbles {
+            segmentView.frame = NSMakeRect(0, 0, containerView.bounds.width, ChatListRevealItem.folderBarHeight)
         } else {
             segmentView.frame = NSMakeRect(0, -10, containerView.bounds.width, containerView.bounds.height
              + 10)

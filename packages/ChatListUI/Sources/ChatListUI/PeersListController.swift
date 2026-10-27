@@ -969,12 +969,18 @@ private final class TitleForumView : Control {
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    private func titleWidth(for size: NSSize) -> CGFloat {
+        let hasSidebar = state.map { $0.filterData.sidebar && !$0.filterData.isEmpty } ?? false
+        let leading: CGFloat = hasSidebar ? 0 : Window.controlsInset + 15
+        return max(0, size.width - 90 - leading)
+    }
     
     func update(_ state: PeerListState, forumData: PeerListState.ForumData, arguments: Arguments) {
         self.state = state
         let size = self.frame.size
         _ = state.filterData.sidebar && !state.filterData.isEmpty
-        let text_w = size.width - 80 - 10 - 30
+        let text_w = titleWidth(for: size)
 
         
         let t_layout = TextViewLayout(.initialize(string: forumData.peer.displayTitle, color: theme.colors.text, font: .medium(.text)), maximumNumberOfLines: 1)
@@ -1003,7 +1009,7 @@ private final class TitleForumView : Control {
         guard self.state != nil else {
             return
         }
-        let text_w = frame.size.width - 80 - 10 - 40
+        let text_w = titleWidth(for: frame.size)
 
         title.resize(text_w)
         status.resize(text_w)
@@ -1021,10 +1027,10 @@ private final class TitleForumView : Control {
         let minX = !hasSidebar ? Window.controlsInset + 15 : 0
         
         var title_r = title.centerFrameX(y: 10)
-        title_r.origin.x = max(title_r.minX, minX)
+        title_r.origin.x = max(min(title_r.minX, size.width - 90 - title_r.width), minX)
         
         var status_r = status.centerFrameX(y: title_r.maxY + 1)
-        status_r.origin.x = max(status_r.minX, minX)
+        status_r.origin.x = max(min(status_r.minX, size.width - 90 - status_r.width), minX)
 
         transition.updateFrame(view: title, frame: title_r)
         transition.updateFrame(view: status, frame: status_r)
@@ -1196,6 +1202,24 @@ public class PeerListContainerView : Control {
     
     private var foldersItem: ChatListRevealItem?
     private var foldersView: ChatListRevealView?
+    fileprivate weak var forumHeader: PeerListContainerView? {
+        didSet {
+            guard System.liquidGlassAvailable, oldValue !== forumHeader else {
+                return
+            }
+            tableView.unregisterScrollPocketContainer(oldValue?.containerView ?? containerView, edge: .top)
+            tableView.registerScrollPocketContainer(forumHeader?.containerView ?? containerView, edge: .top)
+        }
+    }
+
+    fileprivate func moveHeader(to host: NSView) {
+        guard containerView.superview !== host else {
+            return
+        }
+        let frame = host.convert(containerView.bounds, from: containerView)
+        host.addSubview(containerView)
+        containerView.frame = frame
+    }
     
 
     
@@ -1599,13 +1623,17 @@ public class PeerListContainerView : Control {
             return NSMakeRect(10, 10, 30, 30)
         }
         let hasLeftSidebar = state.filterData.sidebar && !state.filterData.isEmpty
-        let inlineBackButton = !hasLeftSidebar && state.splitState != .minimisize && state.splitState != .single
+        let inlineBackButton = !hasLeftSidebar && state.splitState != .minimisize && state.splitState != .single && forumTitle == nil
         let edge: CGFloat = 10
         let componentHeight: CGFloat = 30
 
         if state.splitState == .minimisize {
             // Single-column: button is horizontally centered, 30pt from the top.
             return NSMakeRect(floorToScreenPixels(backingScaleFactor, (size.width - componentHeight) / 2), 30, componentHeight, componentHeight)
+        }
+
+        if forumTitle != nil {
+            return NSMakeRect(size.width - 80, 10, componentHeight, componentHeight)
         }
 
         if state.mode.isCommunity || state.mode.isFullForum {
@@ -1693,7 +1721,11 @@ public class PeerListContainerView : Control {
         
         let containerSize = NSMakeSize(state.splitState == .minimisize ? 90 : size.width, offset)
                 
-        transition.updateFrame(view: self.containerView, frame: NSMakeRect(0, inset, containerSize.width, offset))
+        var headerFrame = NSMakeRect(0, inset, containerSize.width, offset)
+        if let host = containerView.superview, host !== self {
+            headerFrame = convert(headerFrame, to: host)
+        }
+        transition.updateFrame(view: self.containerView, frame: headerFrame)
         transition.updateFrame(view: headerPocketArea, frame: NSMakeRect(0, 0, containerSize.width, offset))
         headerPocketArea.isHidden = !System.liquidGlassAvailable
         
@@ -1712,7 +1744,8 @@ public class PeerListContainerView : Control {
         borderView.isHidden = System.liquidGlassAvailable
 
         forumSeparatorView.isHidden = !mode.isForumLike || displaysFullForumHeader
-        transition.updateFrame(view: forumSeparatorView, frame: NSMakeRect(0, 0, .borderSize, size.height))
+        let forumSeparatorTop = forumHeader != nil ? offset : 0
+        transition.updateFrame(view: forumSeparatorView, frame: NSMakeRect(0, forumSeparatorTop, .borderSize, max(0, size.height - forumSeparatorTop)))
 
         let statusHeight: CGFloat = self.statusHeight
 
@@ -1729,7 +1762,7 @@ public class PeerListContainerView : Control {
 
         let edge: CGFloat = 10
         let hasLeftSidebar = state.filterData.sidebar && !state.filterData.isEmpty
-        let inlineBackButton = self.backButton != nil && !hasLeftSidebar && state.splitState != .minimisize && state.splitState != .single && !state.mode.isCommunity && !displaysFullForumHeader
+        let inlineBackButton = self.backButton != nil && !hasLeftSidebar && state.splitState != .minimisize && state.splitState != .single && !state.mode.isCommunity && !displaysFullForumHeader && forumTitle == nil
         let inlineBackButtonGap: CGFloat = 10
         let searchLeading: CGFloat = inlineBackButton ? backRect(size: size).maxX + inlineBackButtonGap : edge
         let searchHeight: CGFloat = pullDownSearch ? PeerListContainerView.searchFieldHeight : componentSize.height
@@ -1901,7 +1934,7 @@ public class PeerListContainerView : Control {
         }
 
         if case .forum = state.mode, state.splitState != .minimisize, !state.mode.isFullForum {
-            return 0
+            return forumHeader?.navigationHeight ?? 0
         }
         if state.splitState == .minimisize, state.filterData.sidebar {
             return 0
@@ -3826,6 +3859,12 @@ open class PeersListController<Context: AccountContextProtocol>: TelegramGeneric
     }
     open override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        if System.liquidGlassAvailable, case .forum(_, false, _) = mode, let nav = navigationController, let parent = nav.previousController as? PeersListController<Context>, parent !== self {
+            let header = parent.genericView.forumHeader ?? parent.genericView
+            header.moveHeader(to: nav.view)
+            genericView.forumHeader = header
+            relayoutStoryReveal()
+        }
         switch mode {
         case let .forum(peerId, _, _):
             context.globalForumId.set(peerId)
@@ -3837,13 +3876,27 @@ open class PeersListController<Context: AccountContextProtocol>: TelegramGeneric
         self.searchSection?.view.isHidden = false
         self.searchSection?.view._change(opacity: 1, animated: true)
     }
+
+    open override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if let header = genericView.forumHeader {
+            let next = navigationController?.controller as? PeersListController<Context>
+            if next?.genericView.forumHeader !== header {
+                header.moveHeader(to: header)
+            }
+            genericView.forumHeader = nil
+        }
+    }
     
     open override var stake: StakeSettings {
         switch mode {
         case let .forum(_, isFull, parentIsArchive):
             if !isFull {
                 return .init(keepLeft: 70, keepTop: { [weak self] in
-                    guard let state = self?.state else {
+                    guard let self, let state = self.state else {
+                        return 0
+                    }
+                    if System.liquidGlassAvailable {
                         return 0
                     }
                     var height: CGFloat = 90
