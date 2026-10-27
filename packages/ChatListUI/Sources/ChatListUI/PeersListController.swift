@@ -1073,6 +1073,7 @@ public class PeerListContainerView : Control {
     private var backButton: ImageButton?
     private var glassContainer: NSView?
     private var searchBackground: View?
+    private let headerPocketArea = ScrollPocketArea(frame: .zero, style: .soft)
     var searchRevealFraction: CGFloat = 0
     private static let searchFieldHeight: CGFloat = 28
     private static let searchBlockHeight: CGFloat = 38
@@ -1090,11 +1091,6 @@ public class PeerListContainerView : Control {
     
     
     private let containerView = Control()
-    private lazy var scrollEdgeView = PeerListScrollEdgeView(scrollView: tableView, header: containerView, nativeEffectsAvailable: System.liquidGlassAvailable)
-
-    public weak var scrollEdgeClippingView: NSView? {
-        didSet { scrollEdgeView.clippingView = scrollEdgeClippingView }
-    }
     private let statusContainer = Control()
     
     public let searchView:SearchView = SearchView(frame:NSMakeRect(10, 0, 0, 0))
@@ -1147,9 +1143,13 @@ public class PeerListContainerView : Control {
         tableMaskLayer.backgroundColor = NSColor.black.cgColor
         tableMaskLayer.disableActions()
         tableView.layer?.mask = tableMaskLayer
+        if System.liquidGlassAvailable {
+            tableView.registerScrollPocketContainer(containerView, edge: .top)
+        }
 
         addSubview(backgroundView)
-        addSubview(scrollEdgeView)
+        addSubview(tableView)
+        addSubview(containerView)
         addSubview(borderView)
         addSubview(forumSeparatorView)
         forumSeparatorView.isHidden = true
@@ -1170,6 +1170,7 @@ public class PeerListContainerView : Control {
         containerView.addSubview(statusContainer)
         
         containerView.addSubview(searchView)
+        containerView.addSubview(headerPocketArea, positioned: .below, relativeTo: nil)
         
         
         tableView.getBackgroundColor = {
@@ -1690,8 +1691,9 @@ public class PeerListContainerView : Control {
         
         let containerSize = NSMakeSize(state.splitState == .minimisize ? 90 : size.width, offset)
                 
-        ContainedViewLayoutTransition.immediate.updateFrame(view: scrollEdgeView, frame: size.bounds)
         transition.updateFrame(view: self.containerView, frame: NSMakeRect(0, inset, containerSize.width, offset))
+        transition.updateFrame(view: headerPocketArea, frame: NSMakeRect(0, 0, containerSize.width, offset))
+        headerPocketArea.isHidden = !System.liquidGlass
         
         
         transition.updateFrame(view: self.statusContainer, frame: NSMakeRect(0, 0, containerSize.width, statusHeight))
@@ -1733,9 +1735,11 @@ public class PeerListContainerView : Control {
         let reveal = searchReveal
 
 
+        let bottomInset: CGFloat = 0
+
         transition.updateFrame(view: searchView, frame: searchRect)
         searchView.updateLayout(size: searchRect.size, transition: transition)
-        searchView.isHidden = state.splitState == .minimisize || (mode.isForumLike && !displaysFullForumHeader) || (pullDownSearch && reveal <= 0.75)
+        searchView.isHidden = state.splitState == .minimisize || (mode.isForumLike && !displaysFullForumHeader)
         if pullDownSearch {
             transition.updateAlpha(view: searchView, alpha: max(0, min(1, (reveal - 0.75) / 0.25)))
         } else {
@@ -1752,7 +1756,7 @@ public class PeerListContainerView : Control {
         
 
 
-        scrollEdgeView.updateLayout()
+        ContainedViewLayoutTransition.immediate.updateFrame(view: tableView, frame: NSMakeRect(0, 0, size.width, size.height - bottomInset))
         updateTableMask(spaceHeight: navigationHeight)
         if System.liquidGlass {
             let compact = state.splitState == .single && !hasLeftSidebar
@@ -1953,7 +1957,7 @@ public class PeerListContainerView : Control {
     }
 
     public func updateTableMask(spaceHeight: CGFloat) {
-        if System.liquidGlass || System.blurEnabled {
+        if System.liquidGlass {
             tableView.layer?.mask = nil
             return
         } else if tableView.layer?.mask == nil {
@@ -2024,7 +2028,7 @@ public class PeerListContainerView : Control {
             } else {
                 current = ChatRemovalUndoView(frame: NSMakeRect(edge, frame.height, frame.width - edge * 2, ChatRemovalUndoView.height))
                 self.removalUndo = current
-                addSubview(current, positioned: .above, relativeTo: self.scrollEdgeView)
+                addSubview(current, positioned: .above, relativeTo: self.tableView)
                 if animated {
                     current.layer?.animateAlpha(from: 0, to: 1, duration: 0.2, timingFunction: .easeInEaseOut)
                 }
@@ -2062,7 +2066,7 @@ public class PeerListContainerView : Control {
             } else {
                 current = DownloadsControl(frame: downloadsFrame(in: frame.size, y: frame.height))
                 self.downloads = current
-                addSubview(current, positioned: .above, relativeTo: self.scrollEdgeView)
+                addSubview(current, positioned: .above, relativeTo: self.tableView)
                 if animated {
                     current.layer?.animateAlpha(from: 0, to: 1, duration: 0.2, timingFunction: .easeInEaseOut)
                 }
