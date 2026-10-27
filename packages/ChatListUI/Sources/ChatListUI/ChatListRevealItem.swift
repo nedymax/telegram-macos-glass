@@ -208,7 +208,7 @@ public final class ChatListRevealView : TableStickView, AppearanceViewProtocol {
     }
 
     private func segmentTheme(for presentation: TelegramPresentationTheme) -> ScrollableSegmentTheme {
-        return ScrollableSegmentTheme(background: .clear, border: presentation.colors.border, selector: presentation.colors.accent, inactiveText: presentation.colors.grayText, activeText: presentation.colors.text, textFont: System.liquidGlass ? NSFont.systemFont(ofSize: .text, weight: .bold) : .normal(.text))
+        return ScrollableSegmentTheme(background: .clear, border: presentation.colors.border, selector: presentation.colors.accent, inactiveText: presentation.colors.grayText, activeText: presentation.colors.text, textFont: System.liquidGlass ? NSFont.systemFont(ofSize: .text, weight: .semibold) : .normal(.text))
     }
 
     public func updateLocalizationAndTheme(theme: PresentationTheme) {
