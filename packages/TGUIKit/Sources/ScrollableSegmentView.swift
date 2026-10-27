@@ -124,13 +124,14 @@ public final class ScrollableSegmentItem : Equatable, Comparable, Identifiable {
     let theme: ScrollableSegmentTheme
     let insets: NSEdgeInsets
     let icon: CGImage?
+    fileprivate let iconProvider: (() -> CGImage?)?
     let equatable: UIEquatable?
     public let index: Int
     public let uniqueId: Int64
     fileprivate var customTextView: (()->NSView?)?
     public var accessibilityLabel: (()->String?)?
     
-    public init(title: String, index: Int, uniqueId: Int64, selected: Bool, insets: NSEdgeInsets, icon: CGImage?, theme: ScrollableSegmentTheme, equatable: UIEquatable?, customTextView: (()->NSView?)? = nil) {
+    public init(title: String, index: Int, uniqueId: Int64, selected: Bool, insets: NSEdgeInsets, icon: CGImage?, theme: ScrollableSegmentTheme, equatable: UIEquatable?, iconProvider: (() -> CGImage?)? = nil, customTextView: (()->NSView?)? = nil) {
         self.title = title
         self.index = index
         self.uniqueId = uniqueId
@@ -138,6 +139,7 @@ public final class ScrollableSegmentItem : Equatable, Comparable, Identifiable {
         self.theme = theme
         self.insets = insets
         self.icon = icon
+        self.iconProvider = iconProvider
         self.equatable = equatable
         self.customTextView = customTextView
     }
@@ -155,8 +157,8 @@ public final class ScrollableSegmentItem : Equatable, Comparable, Identifiable {
     fileprivate weak var view:SegmentItemView?
 }
 
-private func buildText(for item: ScrollableSegmentItem) -> TextViewLayout {
-    let layout = TextViewLayout.init(.initialize(string: item.title, color: item.selected ? item.theme.activeText : item.theme.inactiveText, font: item.theme.textFont))
+private func buildText(for item: ScrollableSegmentItem, theme: ScrollableSegmentTheme) -> TextViewLayout {
+    let layout = TextViewLayout.init(.initialize(string: item.title, color: item.selected ? theme.activeText : theme.inactiveText, font: item.theme.textFont))
     layout.measure(width: .greatestFiniteMagnitude)
     return layout
 }
@@ -177,7 +179,7 @@ private final class SegmentItemView : Control {
         self.item = item
         self.callback = callback
         self.menuItems = menuItems
-        self.textLayout = buildText(for: item)
+        self.textLayout = buildText(for: item, theme: theme)
         self.startDraggingIfNeeded = startDraggingIfNeeded
         super.init(frame: NSZeroRect)
         self.handleLongEvent = true
@@ -320,7 +322,7 @@ private final class SegmentItemView : Control {
     
     func updateItem(_ item: ScrollableSegmentItem, theme: ScrollableSegmentTheme, animated: Bool) {
         self.item = item
-        self.textLayout = buildText(for: item)
+        self.textLayout = buildText(for: item, theme: theme)
         
         if let customTextView = item.customTextView?() {
             self.customTextView?.removeFromSuperview()
@@ -351,7 +353,13 @@ private final class SegmentItemView : Control {
             current.update(textLayout)
         }
         
-        if let image = item.icon {
+        let icon: CGImage?
+        if let iconProvider = item.iconProvider {
+            icon = iconProvider()
+        } else {
+            icon = item.icon
+        }
+        if let image = icon {
             if imageView == nil {
                 imageView = ImageView()
                 imageView?.isAccessibilityDecorative = true
@@ -494,7 +502,8 @@ public class ScrollableSegmentView: View {
     private var capsuleGlass: LiquidGlassView?
     private var capsuleLens: LiquidGlassLensView?
     private var capsulePill: View?
-    private let capsuleClip = CALayer()
+    private let capsuleClip = CAShapeLayer()
+    private let capsuleFade = CAGradientLayer()
     private var capsulePressed: (view: SegmentItemView, index: Int)?
     private var capsuleDisplayedIndex: Int?
     private var capsuleTravelling: Bool = false
@@ -651,7 +660,10 @@ public class ScrollableSegmentView: View {
         layer?.masksToBounds = !capsule
         scrollView.layer?.mask = capsule ? capsuleClip : nil
         if capsule {
-            capsuleClip.backgroundColor = NSColor.black.cgColor
+            capsuleClip.fillColor = NSColor.black.cgColor
+            capsuleFade.startPoint = CGPoint(x: 0, y: 0.5)
+            capsuleFade.endPoint = CGPoint(x: 1, y: 0.5)
+            capsuleClip.mask = capsuleFade
             let glass = LiquidGlassView(frame: bounds, cornerRadius: bounds.height / 2)
             addSubview(glass, positioned: .below, relativeTo: scrollView)
             capsuleGlass = glass
@@ -775,6 +787,26 @@ public class ScrollableSegmentView: View {
         }
     }
 
+    private func updateCapsuleClip(liftedFrame: CGRect? = nil, animation: LiquidGlassLensAnimation = .immediate) {
+        let capsuleFrame = bounds.offsetBy(dx: 0, dy: verticalOverflow)
+        let visibleBounds = scrollView.clipView.bounds
+        let fade = min(6 / max(scrollView.frame.width, 1), 0.5)
+        let opaque = NSColor.black.cgColor
+        let clear = NSColor.clear.cgColor
+        let path = CGMutablePath()
+        path.addRoundedRect(in: capsuleFrame, cornerWidth: bounds.height / 2, cornerHeight: bounds.height / 2)
+        let bubbleFrame = liftedFrame?.offsetBy(dx: -scrollView.clipView.bounds.minX, dy: -scrollView.clipView.bounds.minY) ?? capsuleFrame
+        path.addRoundedRect(in: bubbleFrame, cornerWidth: bubbleFrame.height / 2, cornerHeight: bubbleFrame.height / 2)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        capsuleClip.frame = CGRect(origin: .zero, size: scrollView.frame.size)
+        capsuleFade.frame = capsuleClip.bounds
+        capsuleFade.colors = [visibleBounds.minX > 0 ? clear : opaque, opaque, opaque, visibleBounds.maxX < documentView.frame.width ? clear : opaque]
+        capsuleFade.locations = [0, NSNumber(value: Double(fade)), NSNumber(value: Double(1 - fade)), 1]
+        animation.update(capsuleClip, key: "path", value: path)
+        CATransaction.commit()
+    }
+
     private func updateCapsuleSelection(animated: Bool) {
         guard capsule else {
             return
@@ -806,8 +838,13 @@ public class ScrollableSegmentView: View {
                 return LiquidGlassLensContentSource(view: view)
             }
             let animation: LiquidGlassLensAnimation = animated && !reduceMotion ? .spring(duration: 0.4) : .immediate
+            updateCapsuleClip(liftedFrame: lifted ? frame : nil, animation: animation)
             lens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: presentation.appearance, backingScale: window?.backingScaleFactor ?? System.backingScale, animation: animation, restingBlurRadius: 16, restingTintColor: tint, contentSources: sources)
-        } else if let pill = capsulePill {
+        } else {
+            updateCapsuleClip()
+            guard let pill = capsulePill else {
+                return
+            }
             guard !items.isEmpty else {
                 pill.isHidden = true
                 return
@@ -844,12 +881,6 @@ public class ScrollableSegmentView: View {
             capsuleGlass.updateLayout(size: bounds.size, transition: .immediate)
         }
         scrollView.frame = bounds.insetBy(dx: 0, dy: -verticalOverflow)
-        if capsule {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            capsuleClip.frame = NSMakeRect(ScrollableSegmentView.capsuleInset, 0, max(0, bounds.width - ScrollableSegmentView.capsuleInset * 2), scrollView.frame.height)
-            CATransaction.commit()
-        }
         borderView.frame = NSMakeRect(0, frame.height - .borderSize, frame.width, .borderSize)
         for item in self.items {
             if let view = item.view {
@@ -1088,10 +1119,10 @@ public class ScrollableSegmentView: View {
         borderView.backgroundColor = self.theme.border
         backgroundColor = capsule ? .clear : self.theme.background
         scrollView.background = capsule ? .clear : self.theme.background
-        updateCapsuleSelection(animated: false)
         for item in self.items {
             item.view?.updateItem(item, theme: self.theme, animated: false)
         }
+        updateCapsuleSelection(animated: false)
     }
     
     required public init?(coder: NSCoder) {
