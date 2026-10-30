@@ -400,6 +400,9 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector  {
 
     private let backgroundView = View()
     private let visualEffect = NSVisualEffectView(frame: .zero)
+    private let glassHost = View()
+    private let glassMaskLayer = SimpleShapeLayer()
+    private var glassView: NSView?
     private let radiusLayer: CGFloat?
     
     private var aboveTextView: TextView?
@@ -427,6 +430,19 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector  {
         let theme = presentation
         
         backgroundView.layer?.mask = maskLayer
+        glassHost.wantsLayer = true
+        glassHost.layer?.mask = glassMaskLayer
+        glassHost.layer?.masksToBounds = true
+        if #available(macOS 26.0, *), System.liquidGlass, System.liquidGlassAvailable, !TelegramUtilsHooks.shared.isLite(.blur) {
+            let glass = NSGlassEffectView(frame: .zero)
+            glass.style = .regular
+            glass.tintColor = nil
+            glass.wantsLayer = true
+            glass.appearance = NSAppearance(named: presentation.colors.isDark ? .darkAqua : .aqua)
+            self.glassView = glass
+            glassHost.addSubview(glass)
+            backgroundView.addSubview(glassHost)
+        }
         if !TelegramUtilsHooks.shared.isLite(.blur) {
             self.visualEffect.state = .active
             self.visualEffect.wantsLayer = true
@@ -462,11 +478,11 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector  {
         }
         
         if #available(macOS 11.0, *), !TelegramUtilsHooks.shared.isLite(.blur) {
-            backgroundColorView.backgroundColor = theme.colors.background.withAlphaComponent(0.7)
+            backgroundColorView.backgroundColor = glassView != nil ? .clear : theme.colors.background.withAlphaComponent(0.7)
         } else {
-            backgroundColorView.backgroundColor = theme.colors.background
+            backgroundColorView.backgroundColor = glassView != nil ? .clear : theme.colors.background
         }
-        if #available(macOS 11.0, *), !TelegramUtilsHooks.shared.isLite(.blur) {
+        if #available(macOS 11.0, *), !TelegramUtilsHooks.shared.isLite(.blur), glassView == nil {
             backgroundView.addSubview(visualEffect)
         }
         backgroundView.addSubview(backgroundColorView)
@@ -702,6 +718,10 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector  {
         
         transition.updateFrame(view: visualEffect, frame: size.bounds)
         transition.updateFrame(view: backgroundView, frame: size.bounds)
+        transition.updateFrame(view: glassHost, frame: size.bounds)
+        if let glassView {
+            transition.updateFrame(view: glassView, frame: size.bounds)
+        }
         transition.updateFrame(view: backgroundColorView, frame: size.bounds)
         
         if let aboveText = aboveText {
@@ -714,6 +734,9 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector  {
         transition.updateFrame(layer: shadowLayer, frame: size.bounds)
 
         maskLayer.path = getMaskPath(rect: rect, hasBubble: self.hasBubble)
+        glassMaskLayer.frame = size.bounds
+        glassMaskLayer.fillColor = NSColor.black.cgColor
+        glassMaskLayer.path = getMaskPath(rect: rect, hasBubble: self.hasBubble)
         
         shadowLayer.path = getMaskPath(rect: rect, hasBubble: self.hasBubble)
         shadowLayer.shadowPath = getMaskPath(rect: rect, hasBubble: self.hasBubble)

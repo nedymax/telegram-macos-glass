@@ -1374,6 +1374,7 @@ public final class AnimatedEmojiesView : Control {
     public let searchView = SearchView(frame: .zero)
     fileprivate let searchContainer = View()
     private let visualEffect = NSVisualEffectView()
+    private let searchFrost = NSVisualEffectView()
     private let searchInside = View()
     private let searchBackdrop = View()
     
@@ -1444,9 +1445,22 @@ public final class AnimatedEmojiesView : Control {
         addSubview(self.tableView)
         
         searchView.isLeftOrientated = true
-        searchView.layer?.cornerRadius = 15
+        searchView.layer?.cornerRadius = 9
 
+        searchFrost.wantsLayer = true
+        if #available(macOS 10.14, *) {
+            searchFrost.material = .selection
+        }
+        searchFrost.blendingMode = .withinWindow
+        searchFrost.state = .active
+        searchFrost.layer?.cornerRadius = 9
+        if #available(macOS 10.15, *) {
+            searchFrost.layer?.cornerCurve = .continuous
+        }
+        searchFrost.layer?.masksToBounds = true
+        searchFrost.isHidden = true
         searchInside.addSubview(searchView)
+        searchInside.addSubview(searchFrost, positioned: .below, relativeTo: searchView)
         
         visualEffect.wantsLayer = true
         
@@ -1525,7 +1539,9 @@ public final class AnimatedEmojiesView : Control {
 
         
         
-        transition.updateFrame(view: searchView, frame: searchInside.focus(NSMakeSize(size.width - 16, 30)))
+        transition.updateFrame(view: searchView, frame: searchInside.focus(NSMakeSize(size.width - 16, 28)))
+        transition.updateFrame(view: searchFrost, frame: searchView.frame)
+        searchFrost.layer?.cornerRadius = 9
         transition.updateFrame(view: searchBorder, frame: NSMakeRect(0, searchContainer.frame.height - .borderSize, size.width, .borderSize))
         let alpha: CGFloat = inSearch && tableView.documentOffset.y > 0 ? 1 : 0
         transition.updateAlpha(view: searchBorder, alpha: alpha)
@@ -1562,6 +1578,8 @@ public final class AnimatedEmojiesView : Control {
         self.searchBorder.backgroundColor = mode.isTransparent ? .clear : isGlass ? theme.colors.grayIcon.withAlphaComponent(0.1) : theme.colors.border
         visualEffect.material = theme.colors.isDark ? .dark : .light
         visualEffect.isHidden = isGlass
+        searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
+        searchFrost.isHidden = TelegramUtilsHooks.shared.isLite(.blur)
         if let glassSurface {
             glassSurface.customTint = theme.colors.background.withAlphaComponent(EntertainmentView.glassTintAlpha)
             glassSurface.updateLocalizationAndTheme(theme: theme)
@@ -1575,7 +1593,7 @@ public final class AnimatedEmojiesView : Control {
         }
         if isClearBackground {
             let background = theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1)
-            let searchTheme = SearchTheme(background, theme.search.searchImage, theme.search.clearImage, theme.search.placeholder, theme.search.textColor, theme.search.placeholderColor)
+            let searchTheme = SearchTheme(isGlass && !TelegramUtilsHooks.shared.isLite(.blur) ? .clear : background, theme.search.searchImage, theme.search.clearImage, theme.search.placeholder, theme.search.textColor, theme.search.placeholderColor)
             self.searchView.searchTheme = searchTheme
             self.categories?.searchTheme = searchTheme
         } else {

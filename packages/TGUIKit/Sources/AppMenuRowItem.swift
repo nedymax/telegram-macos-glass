@@ -34,7 +34,7 @@ open class AppMenuBasicItem : TableRowItem {
     }
         
     open override var height: CGFloat {
-        return 4
+        return 5
     }
     open var effectiveSize: NSSize {
         return NSMakeSize(0, height)
@@ -69,7 +69,7 @@ open class AppMenuBasicItemView: TableRowView {
     
     open override func layout() {
         super.layout()
-        containerView.frame = bounds.insetBy(dx: 4, dy: 0)
+        containerView.frame = bounds.insetBy(dx: 5, dy: 1)
     }
     
     public var contentSize: NSSize {
@@ -131,7 +131,7 @@ private final class AppMenuSeparatorItemView: AppMenuBasicItemView {
     
     override func layout() {
         super.layout()
-        view.frame = NSMakeRect(11, 2, containerView.frame.width - 22, 1)
+        view.frame = NSMakeRect(16, 2, containerView.frame.width - 32, 1)
     }
     
     override func set(item: TableRowItem, animated: Bool = false) {
@@ -146,8 +146,8 @@ open class AppMenuRowItem : AppMenuBasicItem {
     
     public let item: ContextMenuItem
     public private(set) var text: TextViewLayout
-    public let leftInset: CGFloat = 11
-    public let innerInset: CGFloat = 4
+    public let leftInset: CGFloat = 16
+    public let innerInset: CGFloat = 0
     public let moreSize: NSSize = NSMakeSize(6, 8)
     public let selectedSize: NSSize = NSMakeSize(9, 8)
     
@@ -164,7 +164,7 @@ open class AppMenuRowItem : AppMenuBasicItem {
         if let attribted = item.attributedTitle {
             attr = attribted
         } else {
-            attr = parseMarkdownIntoAttributedString(item.title, attributes: MarkdownAttributes(body: MarkdownAttributeSet(font: .medium(.text), textColor: textColor), bold: MarkdownAttributeSet(font: .bold(.text), textColor: textColor), link: MarkdownAttributeSet(font: .bold(.text), textColor: presentation.colors.accentIcon), linkAttribute: { contents in
+            attr = parseMarkdownIntoAttributedString(item.title, attributes: MarkdownAttributes(body: MarkdownAttributeSet(font: .normal(.text), textColor: textColor), bold: MarkdownAttributeSet(font: .bold(.text), textColor: textColor), link: MarkdownAttributeSet(font: .bold(.text), textColor: presentation.colors.accentIcon), linkAttribute: { contents in
                 return (NSAttributedString.Key.link.rawValue, contents)
             }))
         }
@@ -175,7 +175,7 @@ open class AppMenuRowItem : AppMenuBasicItem {
         if item.keyEquivalent.isEmpty {
             keyEquivalentText = nil
         } else {
-            keyEquivalentText = TextViewLayout(.initialize(string: item.keyEquivalent, color: presentation.secondaryColor(item), font: .medium(.text)))
+            keyEquivalentText = TextViewLayout(.initialize(string: item.keyEquivalent, color: presentation.secondaryColor(item), font: .normal(.text)))
         }
         super.init(initialSize, presentation: presentation, menuItem: item, interaction: interaction)
         self.menuItem = item
@@ -241,7 +241,7 @@ open class AppMenuRowItem : AppMenuBasicItem {
         if let attributed = item.attributedTitle {
             attr = attributed
         } else {
-            attr = parseMarkdownIntoAttributedString(item.title, attributes: MarkdownAttributes(body: MarkdownAttributeSet(font: .medium(.text), textColor: textColor), bold: MarkdownAttributeSet(font: .bold(.text), textColor: textColor), link: MarkdownAttributeSet(font: .bold(.text), textColor: presentation.colors.accentIcon), linkAttribute: { contents in
+            attr = parseMarkdownIntoAttributedString(item.title, attributes: MarkdownAttributes(body: MarkdownAttributeSet(font: .normal(.text), textColor: textColor), bold: MarkdownAttributeSet(font: .bold(.text), textColor: textColor), link: MarkdownAttributeSet(font: .bold(.text), textColor: presentation.colors.accentIcon), linkAttribute: { contents in
                 return (NSAttributedString.Key.link.rawValue, contents)
             }))
         }
@@ -305,20 +305,20 @@ open class AppMenuRowItem : AppMenuBasicItem {
         var defaultSize = NSMakeSize(textSize, height)
         
         if let _ = self.item.image {
-            defaultSize.width += imageSize + leftInset - 2
+            defaultSize.width += imageSize + 6
         } else if imageSize != 18 {
-            defaultSize.width += imageSize + leftInset - 2
+            defaultSize.width += imageSize + 6
         }
         
         if hasDrawable {
-            defaultSize.width += imageSize + leftInset - 2
+            defaultSize.width += imageSize + 6
         }
         if let keyEquivalentText = keyEquivalentText {
             defaultSize.width += keyEquivalentText.layoutSize.width + 6
         }
         
         if item.submenu != nil, showMoreIfNeeded {
-            defaultSize.width += moreSize.width + leftInset
+            defaultSize.width += 31
         }
         if item.state == .on {
             defaultSize.width += selectedSize.width + leftInset
@@ -377,7 +377,7 @@ open class AppMenuRowView: AppMenuBasicItemView {
 
         containerView.scaleOnClick = true
 
-        containerView.layer?.cornerRadius = 14
+        containerView.layer?.cornerRadius = 7
         containerView.scaleOnClick = true
         
         let CheckWindow:() -> Bool = { [weak self] in
@@ -529,11 +529,11 @@ open class AppMenuRowView: AppMenuBasicItemView {
             return 0
         }
         if let _ = drawable {
-            return item.leftInset + item.imageSize + item.leftInset - 2
+            return item.leftInset + item.imageSize + 6
         } else if let _ = imageView {
-            return item.leftInset + item.imageSize + item.leftInset - 2
+            return item.leftInset + item.imageSize + 6
         } else if item.hasDrawable {
-            return item.leftInset + item.imageSize + item.leftInset - 2
+            return item.leftInset + item.imageSize + 6
         } else {
             return item.leftInset
         }
@@ -576,12 +576,12 @@ open class AppMenuRowView: AppMenuBasicItemView {
             } else {
                 drawable.setFrameOrigin(NSMakePoint(item.leftInset, 4))
             }
-            currentTextView?.setFrameOrigin(NSMakePoint(drawable.frame.maxX + item.leftInset - 2, textY))
+            currentTextView?.setFrameOrigin(NSMakePoint(drawable.frame.maxX + 6, textY))
         } else if let imageView = imageView {
             imageView.centerY(x: item.leftInset)
-            currentTextView?.setFrameOrigin(NSMakePoint(imageView.frame.maxX + item.leftInset - 2, textY))
+            currentTextView?.setFrameOrigin(NSMakePoint(imageView.frame.maxX + 6, textY))
         } else if item.hasDrawable {
-            currentTextView?.setFrameOrigin(NSMakePoint(item.leftInset + item.imageSize + item.leftInset - 2, textY))
+            currentTextView?.setFrameOrigin(NSMakePoint(item.leftInset + item.imageSize + 6, textY))
         } else {
             currentTextView?.setFrameOrigin(NSMakePoint(item.leftInset, textY))
         }

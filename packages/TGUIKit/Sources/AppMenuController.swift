@@ -80,11 +80,24 @@ final class MenuView: Control, TableViewDelegate {
     private var contextItems: [Entry] = []
     private let backgroundView: View
     private let visualView: NSVisualEffectView
+    private let glassView: NSView?
     required init(frame frameRect: NSRect) {
         self.backgroundView = View(frame: frameRect.size.bounds)
         self.visualView = NSVisualEffectView(frame: frameRect.size.bounds)
+        if #available(macOS 26.0, *), System.liquidGlass, System.liquidGlassAvailable {
+            let glass = NSGlassEffectView(frame: .zero)
+            glass.style = .regular
+            glass.cornerRadius = 12
+            glass.tintColor = nil
+            glass.wantsLayer = true
+            self.glassView = glass
+        } else {
+            self.glassView = nil
+        }
         super.init(frame: frameRect)
-        if #available(macOS 11.0, *) {
+        if let glassView {
+            addSubview(glassView)
+        } else if #available(macOS 11.0, *) {
             addSubview(visualView)
         }
         
@@ -106,13 +119,19 @@ final class MenuView: Control, TableViewDelegate {
         self.shadow = shadow
         
         self.layer?.isOpaque = false
-        self.layer?.shouldRasterize = true
-        self.layer?.rasterizationScale = System.backingScale
+        let usesNativeGlass = self.glassView != nil
+        self.layer?.shouldRasterize = !usesNativeGlass
+        if !usesNativeGlass {
+            self.layer?.rasterizationScale = System.backingScale
+        }
         
-        self.layer?.cornerRadius = 18
-        self.visualView.layer?.cornerRadius = 18
-        self.backgroundView.layer?.cornerRadius = 18
-        self.tableView.layer?.cornerRadius = 18
+        let layers = [self.layer, self.visualView.layer, self.backgroundView.layer, self.tableView.layer, self.glassView?.layer]
+        for layer in layers {
+            layer?.cornerRadius = usesNativeGlass ? 12 : 18
+            if usesNativeGlass, #available(macOS 10.15, *) {
+                layer?.cornerCurve = .continuous
+            }
+        }
         self.backgroundColor = NSColor.black.withAlphaComponent(0.001)
     }
     
@@ -127,6 +146,7 @@ final class MenuView: Control, TableViewDelegate {
     override func layout() {
         super.layout()
         visualView.frame = bounds
+        glassView?.frame = bounds
         backgroundView.frame = bounds
         tableView.frame = bounds
     }
@@ -227,11 +247,17 @@ final class MenuView: Control, TableViewDelegate {
             visualView.material = .light
         }
         effectiveSize = max
-        
-        if #available(macOS 11.0, *) {
-            backgroundView.backgroundColor = presentation.backgroundColor
+        if let glassView {
+            glassView.appearance = NSAppearance(named: presentation.colors.isDark ? .darkAqua : .aqua)
+            visualView.isHidden = true
+            backgroundView.backgroundColor = .clear
         } else {
-            backgroundView.backgroundColor = presentation.backgroundColor.withAlphaComponent(1.0)
+            visualView.isHidden = false
+            if #available(macOS 11.0, *) {
+                backgroundView.backgroundColor = presentation.backgroundColor
+            } else {
+                backgroundView.backgroundColor = presentation.backgroundColor.withAlphaComponent(1.0)
+            }
         }
         
     }

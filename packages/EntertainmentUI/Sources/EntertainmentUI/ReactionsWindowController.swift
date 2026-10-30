@@ -17,6 +17,7 @@ public final class ReactionsWindowController : NSObject {
     
     private class V : View {
         private let visualView: NSVisualEffectView
+        private let glassView: NSView?
         private let contentView: NSView
         private let backgroundView = View()
         private let container = View()
@@ -26,8 +27,22 @@ public final class ReactionsWindowController : NSObject {
             
             self.contentView = content
             self.visualView = NSVisualEffectView(frame: content.bounds)
+            if #available(macOS 26.0, *), System.liquidGlass, System.liquidGlassAvailable, !TelegramUtilsHooks.shared.isLite(.blur) {
+                let glass = NSGlassEffectView(frame: .zero)
+                glass.style = .regular
+                glass.cornerRadius = 20
+                glass.tintColor = nil
+                glass.wantsLayer = true
+                glass.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
+                self.glassView = glass
+            } else {
+                self.glassView = nil
+            }
             super.init(frame: content.bounds)
-            if #available(macOS 11.0, *), !TelegramUtilsHooks.shared.isLite(.blur) {
+            if let glassView {
+                container.addSubview(glassView)
+                backgroundView.backgroundColor = .clear
+            } else if #available(macOS 11.0, *), !TelegramUtilsHooks.shared.isLite(.blur) {
                 container.addSubview(visualView)
                 backgroundView.backgroundColor = theme.colors.background.withAlphaComponent(0.7)
             } else {
@@ -53,11 +68,13 @@ public final class ReactionsWindowController : NSObject {
             
             self.layer?.isOpaque = false
             
-            self.layer?.cornerRadius = 20
-            contentView.layer?.cornerRadius = 20
-            self.visualView.layer?.cornerRadius = 20
-            self.backgroundView.layer?.cornerRadius = 20
-            self.container.layer?.cornerRadius = 20
+            let layers = [self.layer, contentView.layer, self.visualView.layer, self.backgroundView.layer, self.container.layer, self.glassView?.layer]
+            for layer in layers {
+                layer?.cornerRadius = 20
+                if #available(macOS 10.15, *) {
+                    layer?.cornerCurve = .continuous
+                }
+            }
             contentView.layer?.opacity = 0
         }
         
@@ -120,6 +137,7 @@ public final class ReactionsWindowController : NSObject {
             self.container.frame = bounds
             self.contentView.frame = bounds
             self.visualView.frame = bounds
+            self.glassView?.frame = bounds
             self.backgroundView.frame = bounds
         }
         
