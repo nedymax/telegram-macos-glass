@@ -1586,14 +1586,14 @@ public final class AnimatedEmojiesView : Control {
         }
         searchBackdrop.backgroundColor = theme.colors.background.withAlphaComponent(0.85)
         searchBackdrop.isHidden = !isGlass
-        if isGlass {
+        if isClearBackground && !searchFrost.isHidden {
             searchInside.backgroundColor = .clear
         } else {
             searchInside.backgroundColor = mode.isTransparent ? theme.colors.background.withAlphaComponent(0.7) : theme.colors.background
         }
         if isClearBackground {
             let background = theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1)
-            let searchTheme = SearchTheme(isGlass && !TelegramUtilsHooks.shared.isLite(.blur) ? .clear : background, theme.search.searchImage, theme.search.clearImage, theme.search.placeholder, theme.search.textColor, theme.search.placeholderColor)
+            let searchTheme = SearchTheme(isClearBackground && !searchFrost.isHidden ? .clear : background, theme.search.searchImage, theme.search.clearImage, theme.search.placeholder, theme.search.textColor, theme.search.placeholderColor)
             self.searchView.searchTheme = searchTheme
             self.categories?.searchTheme = searchTheme
         } else {
