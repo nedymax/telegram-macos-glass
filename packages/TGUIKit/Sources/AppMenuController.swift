@@ -998,11 +998,12 @@ final class AppMenuController : NSObject  {
             let view = window.contentView!.subviews.first!
             let cursorAppearance = (view as? AppMenuCursorAppearance).flatMap { $0.canAppearFromCursor ? $0 : nil }
             let extra: CGFloat = cursorAppearance != nil ? AppMenuCursorAppearanceExtraHeight : 0
+            let viewSize = view.frame.size
             let rect = NSMakeRect(rect.maxX - width + 40, rect.maxY - 25 - extra, width, window.frame.height + extra)
             window.setFrame(rect, display: true)
             window.makeKeyAndOrderFront(nil)
             
-            view.frame = NSMakeRect(rect.focus(view.frame.size).minX, extra, view.frame.width, view.frame.height)
+            view.frame = NSMakeRect(rect.focus(viewSize).minX, extra, viewSize.width, viewSize.height)
             
             if let cursorAppearance {
                 let cursor = view.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
