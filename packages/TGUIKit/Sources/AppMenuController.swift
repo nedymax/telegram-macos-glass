@@ -109,8 +109,15 @@ final class MenuView: Control, TableViewDelegate {
         
         tableView.verticalScroller = nil
         
-        addSubview(backgroundView)
-        addSubview(tableView)
+        if #available(macOS 26.0, *), let glass = glassView as? NSGlassEffectView {
+            let contentHost = View(frame: frameRect.size.bounds)
+            contentHost.addSubview(backgroundView)
+            contentHost.addSubview(tableView)
+            glass.contentView = contentHost
+        } else {
+            addSubview(backgroundView)
+            addSubview(tableView)
+        }
         self.visualView.wantsLayer = true
         self.visualView.state = .active
         self.visualView.blendingMode = .behindWindow
