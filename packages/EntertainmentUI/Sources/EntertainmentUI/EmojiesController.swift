@@ -2014,7 +2014,15 @@ public final class AnimatedEmojiesView : Control {
             return nil
         }
         
-        let stableId = tableView.item(at: max(1, tableView.visibleRows().location)).stableId
+        var firstRow = tableView.visibleRows().location
+        let headerInset = tableView.contentInsets.top
+        if headerInset > 0 {
+            let row = tableView.row(at: NSMakePoint(1, tableView.documentOffset.y + headerInset + 1))
+            if row >= 0 {
+                firstRow = row
+            }
+        }
+        let stableId = tableView.item(at: max(1, min(firstRow, tableView.count - 1))).stableId
         var _stableId: AnyHashable?
         var _segment: EmojiSegment?
 
