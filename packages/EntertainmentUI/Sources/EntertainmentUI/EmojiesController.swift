@@ -1414,7 +1414,7 @@ public final class AnimatedEmojiesView : Control {
         return mode.isTransparent || isGlass
     }
     private var usesPickerStyle: Bool {
-        return mode.isTransparent || mode == .status
+        return mode.isTransparent
     }
 
     private func updateTableBlur(enabled: Bool, height: CGFloat) -> Bool {
@@ -1614,10 +1614,10 @@ public final class AnimatedEmojiesView : Control {
         }
         transition.updateFrame(view: searchBackdrop, frame: searchInsideRect)
         
-        let blursTableContent = updateTableBlur(enabled: blursUnderHeader, height: max(tabs.frame.maxY, searchContainer.frame.maxY) - tableView.frame.minY)
+        let blursTableContent = updateTableBlur(enabled: blursUnderHeader, height: 46 - tableView.frame.minY)
         headerBlur.isHidden = !blursUnderHeader || blursTableContent
         if blursUnderHeader && !blursTableContent {
-            transition.updateFrame(view: headerBlur, frame: NSMakeRect(0, 0, size.width, max(0, tabs.frame.maxY, searchContainer.frame.maxY)))
+            transition.updateFrame(view: headerBlur, frame: NSMakeRect(0, 0, size.width, 46))
         }
         
         if let categories = categories {
@@ -2106,7 +2106,7 @@ public enum EmojiesControllerMode {
     }
     public var isTransparent: Bool {
         switch self {
-        case .reactions, .defaultTags:
+        case .reactions, .defaultTags, .status:
             return true
         case .messageEffects:
             return true
