@@ -314,7 +314,7 @@ open class AppMenuRowItem : AppMenuBasicItem {
             defaultSize.width += imageSize + 6
         }
         if let keyEquivalentText = keyEquivalentText {
-            defaultSize.width += keyEquivalentText.layoutSize.width + 6
+            defaultSize.width += keyEquivalentText.layoutSize.width + 20
         }
         
         if item.submenu != nil, showMoreIfNeeded {

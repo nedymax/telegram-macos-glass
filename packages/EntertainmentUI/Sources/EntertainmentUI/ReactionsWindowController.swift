@@ -94,14 +94,15 @@ public final class ReactionsWindowController : NSObject {
                     return
                 }
                 let seconds = CACurrentMediaTime() - start
-                if seconds >= 0.6 {
+                if seconds >= 0.45 {
                     self.finishMorph()
                     return
                 }
-                let progress = morphSpring(seconds, omega: 19, damping: 0.86)
+                let progress = morphSpring(seconds, omega: 24, damping: 0.88)
                 let rect = NSMakeRect(bar.minX + (target.minX - bar.minX) * progress, bar.minY + (target.minY - bar.minY) * progress, bar.width + (target.width - bar.width) * progress, bar.height + (target.height - bar.height) * progress)
                 self.applyMorph(rect)
-                let fade = 1 - pow(1 - min(1, seconds / 0.32), 3)
+                let linear = min(1, seconds / 0.45)
+                let fade = linear * linear * (3 - 2 * linear)
                 self.tintGlass?.alphaValue = 1 - fade
             }
             RunLoop.main.add(timer, forMode: .common)
@@ -128,6 +129,10 @@ public final class ReactionsWindowController : NSObject {
                 self.layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 20, cornerHeight: 20, transform: nil)
             }
             needsLayout = true
+        }
+
+        var usesGlass: Bool {
+            return glassView != nil
         }
 
         func initFake(_ bar: NSRect) {
@@ -468,7 +473,7 @@ public final class ReactionsWindowController : NSObject {
         
         var panel: Window? = self.panel
         if animated {
-            if let v = panel?.contentView?.subviews.first(where: { $0 is V }) {
+            if let v = panel?.contentView?.subviews.first(where: { $0 is V }) as? V, !v.usesGlass {
                 v.layer?.rasterizationScale = System.backingScale
                 v.layer?.shouldRasterize = true
             }

@@ -1370,6 +1370,7 @@ public final class AnimatedEmojiesView : Control {
     private let borderView = View()
     private let tabs = View()
     private let selectionView: View = View(frame: NSMakeRect(0, 0, 36, 36))
+    private var selectionFrost: NSVisualEffectView?
     
     public let searchView = SearchView(frame: .zero)
     fileprivate let searchContainer = View()
@@ -1944,9 +1945,29 @@ public final class AnimatedEmojiesView : Control {
         let rect = NSMakeRect(viewPoint.y - point.y, 5, item.height, packsView.frame.height)
         
         selectionView.layer?.cornerRadius = item.height == item.width && item.index != 1 ? .cornerRadius : item.width / 2
-        if mode == .reactions || isGlass {
+        if (mode == .reactions || isGlass), !TelegramUtilsHooks.shared.isLite(.blur) {
+            let frost: NSVisualEffectView
+            if let current = selectionFrost {
+                frost = current
+            } else {
+                frost = NSVisualEffectView(frame: selectionView.bounds)
+                frost.wantsLayer = true
+                frost.material = .selection
+                frost.blendingMode = .withinWindow
+                frost.state = .active
+                frost.autoresizingMask = [.width, .height]
+                selectionView.addSubview(frost)
+                selectionFrost = frost
+            }
+            frost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
+            selectionView.background = .clear
+        } else if mode == .reactions || isGlass {
+            selectionFrost?.removeFromSuperview()
+            selectionFrost = nil
             selectionView.background = theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1)
         } else {
+            selectionFrost?.removeFromSuperview()
+            selectionFrost = nil
             selectionView.background = theme.colors.grayBackground.withAlphaComponent(item.height == item.width ? 1 : 0.9)
         }
         if animated {
