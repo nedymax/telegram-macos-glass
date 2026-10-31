@@ -11,6 +11,10 @@ on:
           - '26'
           - both
         default: '27'
+      checkout_ref:
+        description: Branch or commit to build instead of the dispatched ref, so it reuses this branch's caches
+        type: string
+        default: ''
   push:
     branches:
       - 'feature/**'
@@ -31,6 +35,8 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Fetch submodules over HTTPS
         run: |
