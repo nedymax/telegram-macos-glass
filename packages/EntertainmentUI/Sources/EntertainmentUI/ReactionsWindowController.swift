@@ -83,6 +83,9 @@ public final class ReactionsWindowController : NSObject {
         }
         
         func revealContent() {
+            guard contentView.layer?.opacity != 1 else {
+                return
+            }
             contentView.layer?.opacity = 1
             contentView.layer?.animateAlpha(from: 0, to: 1, duration: 0.15)
         }
@@ -154,6 +157,7 @@ public final class ReactionsWindowController : NSObject {
 
         func initFake(_ bar: NSRect) {
             isMorphing = true
+            contentView.layer?.opacity = 1
             if #available(macOS 26.0, *), let glassView {
                 let tint = NSGlassEffectView(frame: .zero)
                 tint.style = .regular
