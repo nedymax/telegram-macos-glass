@@ -995,16 +995,22 @@ final class AppMenuController : NSObject  {
         if let window = menu.topWindow {
             
             let width = window.frame.width
-            let rect = NSMakeRect(rect.maxX - width + 40, rect.maxY - 25, width, window.frame.height)
+            let view = window.contentView!.subviews.first!
+            let cursorAppearance = (view as? AppMenuCursorAppearance).flatMap { $0.canAppearFromCursor ? $0 : nil }
+            let extra: CGFloat = cursorAppearance != nil ? AppMenuCursorAppearanceExtraHeight : 0
+            let rect = NSMakeRect(rect.maxX - width + 40, rect.maxY - 25 - extra, width, window.frame.height + extra)
             window.setFrame(rect, display: true)
             window.makeKeyAndOrderFront(nil)
             
-            let view = window.contentView!.subviews.first!
+            view.frame = NSMakeRect(rect.focus(view.frame.size).minX, extra, view.frame.width, view.frame.height)
             
-            view.frame = NSMakeRect(rect.focus(view.frame.size).minX, 0, view.frame.width, view.frame.height)
-            
-            window.contentView?.layer?.animateAlpha(from: 0.1, to: 1, duration: 0.2)
-            window.contentView?.layer?.animateScaleSpringFrom(anchor: NSMakePoint(anchor.x, rect.height / 2), from: 0.2, to: 1, duration: 0.28, bounce: true)
+            if let cursorAppearance {
+                let cursor = view.convert(window.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil)
+                cursorAppearance.appearFromCursor(cursor)
+            } else {
+                window.contentView?.layer?.animateAlpha(from: 0.1, to: 1, duration: 0.2)
+                window.contentView?.layer?.animateScaleSpringFrom(anchor: NSMakePoint(anchor.x, rect.height / 2), from: 0.2, to: 1, duration: 0.28, bounce: true)
+            }
             
             window.set(mouseHandler: { [weak self] event in
                 if self?.menu.closeOutside == true {
@@ -1133,6 +1139,13 @@ public extension NSGlassEffectView {
             unsafeBitCast(method(for: adaptive), to: SetAdaptive.self)(self, adaptive, 1)
         }
     }
+}
+
+public let AppMenuCursorAppearanceExtraHeight: CGFloat = 40
+
+public protocol AppMenuCursorAppearance: AnyObject {
+    var canAppearFromCursor: Bool { get }
+    func appearFromCursor(_ point: NSPoint)
 }
 
 public final class MenuPanelWindow: Window {

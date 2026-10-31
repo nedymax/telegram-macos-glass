@@ -21,10 +21,13 @@ public final class ReactionsWindowController : NSObject {
         private let contentView: NSView
         private let backgroundView = View()
         private let container = View()
-        private var mask: SimpleShapeLayer?
+        private let theme: TelegramPresentationTheme
+        private var tintGlass: NSView?
+        private var morphTimer: Foundation.Timer?
+        private var isMorphing = false
         init(_ content: NSView, theme: TelegramPresentationTheme) {
             
-            
+            self.theme = theme
             self.contentView = content
             self.visualView = NSVisualEffectView(frame: content.bounds)
             if #available(macOS 26.0, *), System.liquidGlass, System.liquidGlassAvailable, !TelegramUtilsHooks.shared.isLite(.blur) {
@@ -80,62 +83,85 @@ public final class ReactionsWindowController : NSObject {
             contentView.layer?.opacity = 0
         }
         
-        func appearAnimated(from: NSRect, to: NSRect) {
-            
-            let shadow = NSShadow()
-            shadow.shadowBlurRadius = 2
-            shadow.shadowColor = NSColor.black.withAlphaComponent(0.2)
-            shadow.shadowOffset = NSMakeSize(0, 0)
-            self.shadow = shadow
-            self.layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 20, cornerHeight: 20, transform: nil)
-            
+        func appearAnimated(from bar: NSRect) {
             contentView.layer?.opacity = 1
-            let duration: Double = 0.35
-            
-            self.container.layer?.mask = nil
-            self.mask = nil
-
-            
-            var offset: NSPoint = .zero
-            offset.y = to.height - from.height / 2 - from.origin.y - 5
-            offset.x = 10
-            
-            self.container.layer?.animateBounds(from: from.size.bounds.offsetBy(dx: offset.x, dy: offset.y), to: to.size.bounds, duration: duration, timingFunction: .spring)
-            
-            self.container.layer?.animatePosition(from: offset, to: .zero, duration: duration, timingFunction: .spring)
-        }
-        
-        func initFake(_ from: NSRect, to: NSRect) {
-            
-            var offset: NSPoint = .zero
-            offset.y = to.height - from.height / 2 - from.origin.y - 5
-            offset.x = 10
-            
-            var rect = from.size.bounds.offsetBy(dx: offset.x, dy: offset.y)
-            rect.size.width -= 20
-            rect.size.height = 20
-            
-            if from.height > 60 {
-                rect.size.height += (from.height - 60)
-                offset.y -= (from.height - 60) / 2
+            let target = bounds
+            let start = CACurrentMediaTime()
+            morphTimer?.invalidate()
+            let timer = Foundation.Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] timer in
+                guard let self else {
+                    timer.invalidate()
+                    return
+                }
+                let seconds = CACurrentMediaTime() - start
+                if seconds >= 0.6 {
+                    self.finishMorph()
+                    return
+                }
+                let progress = morphSpring(seconds, omega: 19, damping: 0.86)
+                let rect = NSMakeRect(bar.minX + (target.minX - bar.minX) * progress, bar.minY + (target.minY - bar.minY) * progress, bar.width + (target.width - bar.width) * progress, bar.height + (target.height - bar.height) * progress)
+                self.applyMorph(rect)
+                let fade = 1 - pow(1 - min(1, seconds / 0.32), 3)
+                self.tintGlass?.alphaValue = 1 - fade
             }
-            
-           // rect.size.height += 20
+            RunLoop.main.add(timer, forMode: .common)
+            morphTimer = timer
+        }
 
-            let mask = SimpleShapeLayer()
-            self.mask = mask
+        deinit {
+            morphTimer?.invalidate()
+        }
 
-            let path = CGMutablePath()
-            path.addRoundedRect(in: rect.size.bounds, cornerWidth: rect.height / 2, cornerHeight: rect.height / 2)
-            mask.path = path
-            mask.frame = rect
-            mask.cornerRadius = 20
-            container.layer?.mask = mask
+        private func finishMorph() {
+            morphTimer?.invalidate()
+            morphTimer = nil
+            isMorphing = false
+            tintGlass?.removeFromSuperview()
+            tintGlass = nil
+            applyMorph(bounds)
+            if glassView == nil {
+                let shadow = NSShadow()
+                shadow.shadowBlurRadius = 2
+                shadow.shadowColor = NSColor.black.withAlphaComponent(0.2)
+                shadow.shadowOffset = NSMakeSize(0, 0)
+                self.shadow = shadow
+                self.layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 20, cornerHeight: 20, transform: nil)
+            }
+            needsLayout = true
+        }
 
+        func initFake(_ bar: NSRect) {
+            isMorphing = true
+            if #available(macOS 26.0, *), let glassView {
+                let tint = NSGlassEffectView(frame: .zero)
+                tint.style = .regular
+                tint.cornerRadius = 20
+                tint.tintColor = theme.colors.background.withAlphaComponent(0.3)
+                tint.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
+                container.addSubview(tint, positioned: .above, relativeTo: glassView)
+                tintGlass = tint
+            }
+            applyMorph(bar)
+        }
+
+        private func applyMorph(_ rect: NSRect) {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            container.frame = rect
+            let inner = rect.size.bounds
+            glassView?.frame = inner
+            tintGlass?.frame = inner
+            visualView.frame = inner
+            backgroundView.frame = inner
+            contentView.frame = NSRect(origin: NSMakePoint(-rect.minX, -rect.minY), size: bounds.size)
+            CATransaction.commit()
         }
         
         override func layout() {
             super.layout()
+            if isMorphing {
+                return
+            }
             self.container.frame = bounds
             self.contentView.frame = bounds
             self.visualView.frame = bounds
@@ -388,7 +414,9 @@ public final class ReactionsWindowController : NSObject {
             }
         })
         
-        view.initFake(initialView.frame, to: view.frame)
+        let barInInitial = NSMakeRect(10, 5, initialView.frame.width - 20, initialView.frame.height - 20)
+        let barRect = view.convert(barInInitial, from: initialView)
+        view.initFake(barRect)
 
         overlay.frame = context.window.bounds
         context.window.contentView?.addSubview(overlay)
@@ -405,7 +433,7 @@ public final class ReactionsWindowController : NSObject {
 
             self.initialPlayers = initialView.collect()
             CATransaction.begin()
-            view.appearAnimated(from: initialView.frame, to: view.frame)
+            view.appearAnimated(from: barRect)
             CATransaction.commit()
             
             if initialScreenRect.origin.y - 200 < 0, let panel = self.panel {
@@ -453,4 +481,9 @@ public final class ReactionsWindowController : NSObject {
         }
         reactions = nil
     }
+}
+
+private func morphSpring(_ seconds: Double, omega: Double, damping: Double) -> CGFloat {
+    let dampedOmega = omega * (1 - damping * damping).squareRoot()
+    return CGFloat(1 - exp(-damping * omega * seconds) * (cos(dampedOmega * seconds) + damping * omega / dampedOmega * sin(dampedOmega * seconds)))
 }
