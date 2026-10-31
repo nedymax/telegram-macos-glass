@@ -1379,7 +1379,8 @@ public final class AnimatedEmojiesView : Control {
     private let searchBackdrop = View()
     
     private let searchBorder = View()
-    private let headerEdge = EdgeEffectView()
+    private let headerBlur = NSVisualEffectView()
+    private var headerBlurMaskHeight: CGFloat = 0
     private let searchStatusView = PanelSearchStatusView(frame: .zero)
     private var searchStatus: PanelSearchPresentation = .hidden
     
@@ -1444,7 +1445,10 @@ public final class AnimatedEmojiesView : Control {
             .clear
         }
         addSubview(self.tableView)
-        addSubview(headerEdge)
+        headerBlur.blendingMode = .withinWindow
+        headerBlur.state = .active
+        headerBlur.material = .menu
+        addSubview(headerBlur)
         
         searchView.isLeftOrientated = true
         searchView.layer?.cornerRadius = 9
@@ -1523,7 +1527,8 @@ public final class AnimatedEmojiesView : Control {
         transition.updateFrame(view: tabs, frame: NSMakeRect(0, initial, size.width, 46))
         transition.updateFrame(view: packsView, frame: tabs.focus(NSMakeSize(size.width, 36)))
         transition.updateFrame(view: borderView, frame: NSMakeRect(0, tabs.frame.maxY, size.width, .borderSize))
-        let headerInset: CGFloat = mode.isTransparent ? 46 : 0
+        let blursUnderHeader = mode.isTransparent && !TelegramUtilsHooks.shared.isLite(.blur)
+        let headerInset: CGFloat = blursUnderHeader ? 46 : 0
         if tableView.contentInsets.top != headerInset {
             var insets = tableView.contentInsets
             insets.top = headerInset
@@ -1558,15 +1563,23 @@ public final class AnimatedEmojiesView : Control {
         }
         transition.updateFrame(view: searchBackdrop, frame: searchInsideRect)
         
-        headerEdge.isHidden = !mode.isTransparent
-        if mode.isTransparent {
+        headerBlur.isHidden = !blursUnderHeader
+        if blursUnderHeader {
             let fade: CGFloat = 16
-            let edgeRect = NSMakeRect(0, 0, size.width, searchContainer.frame.maxY + fade)
-            let isLite = TelegramUtilsHooks.shared.isLite(.blur)
-            let blur = isLite ? nil : EdgeEffectView.Blur(rect: edgeRect, edgeSize: fade)
-            let color = isLite ? (presentation ?? theme).colors.background : .clear
-            transition.updateFrame(view: headerEdge, frame: edgeRect)
-            headerEdge.update(color: color, blur: blur, alpha: 1, edge: .bottom, edgeSize: fade, rect: edgeRect, transition: transition)
+            if headerBlurMaskHeight != fade {
+                headerBlurMaskHeight = fade
+                let mask = NSImage(size: NSMakeSize(1, fade + 2), flipped: false, drawingHandler: { rect in
+                    let gradient = NSGradient(starting: .clear, ending: .black)
+                    gradient?.draw(in: NSMakeRect(0, 0, rect.width, fade), angle: 90)
+                    NSColor.black.setFill()
+                    NSMakeRect(0, fade, rect.width, 2).fill()
+                    return true
+                })
+                mask.capInsets = NSEdgeInsets(top: 0, left: 0, bottom: fade, right: 0)
+                mask.resizingMode = .stretch
+                headerBlur.maskImage = mask
+            }
+            transition.updateFrame(view: headerBlur, frame: NSMakeRect(0, 0, size.width, max(0, searchContainer.frame.maxY) + fade))
         }
         
         if let categories = categories {
@@ -1597,6 +1610,7 @@ public final class AnimatedEmojiesView : Control {
         self.searchBorder.backgroundColor = mode.isTransparent ? .clear : isGlass ? theme.colors.grayIcon.withAlphaComponent(0.1) : theme.colors.border
         visualEffect.material = theme.colors.isDark ? .dark : .light
         visualEffect.isHidden = isGlass || mode.isTransparent
+        headerBlur.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         searchFrost.isHidden = TelegramUtilsHooks.shared.isLite(.blur)
         if let glassSurface {
