@@ -81,13 +81,14 @@ final class MenuView: Control, TableViewDelegate {
     private let backgroundView: View
     private let visualView: NSVisualEffectView
     private let glassView: NSView?
+    static let cornerRadius: CGFloat = 12
     required init(frame frameRect: NSRect) {
         self.backgroundView = View(frame: frameRect.size.bounds)
         self.visualView = NSVisualEffectView(frame: frameRect.size.bounds)
         if #available(macOS 26.0, *), System.liquidGlass, System.liquidGlassAvailable {
             let glass = NSGlassEffectView(frame: .zero)
             glass.style = .regular
-            glass.cornerRadius = 12
+            glass.cornerRadius = MenuView.cornerRadius
             glass.tintColor = nil
             glass.wantsLayer = true
             self.glassView = glass
@@ -97,7 +98,7 @@ final class MenuView: Control, TableViewDelegate {
         super.init(frame: frameRect)
         if let glassView {
             addSubview(glassView)
-        } else if #available(macOS 11.0, *) {
+        } else if System.blurEnabled {
             addSubview(visualView)
         }
         
@@ -108,6 +109,7 @@ final class MenuView: Control, TableViewDelegate {
         self.visualView.wantsLayer = true
         self.visualView.state = .active
         self.visualView.blendingMode = .behindWindow
+        self.visualView.material = .menu
         self.tableView.delegate = self
         self.visualView.autoresizingMask = []
         self.autoresizesSubviews = false
@@ -119,19 +121,19 @@ final class MenuView: Control, TableViewDelegate {
         self.shadow = shadow
         
         self.layer?.isOpaque = false
-        let usesNativeGlass = self.glassView != nil
-        self.layer?.shouldRasterize = !usesNativeGlass
-        if !usesNativeGlass {
+        self.layer?.shouldRasterize = glassView == nil
+        if glassView == nil {
             self.layer?.rasterizationScale = System.backingScale
         }
         
-        let layers = [self.layer, self.visualView.layer, self.backgroundView.layer, self.tableView.layer, self.glassView?.layer]
+        let layers = [self.layer, self.visualView.layer, self.backgroundView.layer, self.tableView.layer]
         for layer in layers {
-            layer?.cornerRadius = usesNativeGlass ? 12 : 18
-            if usesNativeGlass, #available(macOS 10.15, *) {
+            layer?.cornerRadius = MenuView.cornerRadius
+            if #available(macOS 10.15, *) {
                 layer?.cornerCurve = .continuous
             }
         }
+        self.visualView.layer?.masksToBounds = true
         self.backgroundColor = NSColor.black.withAlphaComponent(0.001)
     }
     
@@ -149,6 +151,7 @@ final class MenuView: Control, TableViewDelegate {
         glassView?.frame = bounds
         backgroundView.frame = bounds
         tableView.frame = bounds
+        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: MenuView.cornerRadius, cornerHeight: MenuView.cornerRadius, transform: nil)
     }
     
     override func setFrameSize(_ newSize: NSSize) {
@@ -165,7 +168,7 @@ final class MenuView: Control, TableViewDelegate {
 
         let restingRadius = selfLayer.cornerRadius
         let pillRadius = max(restingRadius, floor(min(frame.width, frame.height) / 2))
-        let morphsCorner = pillRadius > restingRadius
+        let morphsCorner = pillRadius > restingRadius && glassView == nil
 
         var innerLayers: [CALayer] = []
         if #available(macOS 11.0, *) {
@@ -241,25 +244,17 @@ final class MenuView: Control, TableViewDelegate {
         })
         
         self.setFrameSize(max, min(tableView.listHeight, min(maxHeight ?? appearMode.max, screen.visibleFrame.height - 200)))
-        if presentation.colors.isDark {
-            visualView.material = .dark
-        } else {
-            visualView.material = .light
-        }
         effectiveSize = max
+        let appearance = NSAppearance(named: presentation.colors.isDark ? .darkAqua : .aqua)
         if let glassView {
-            glassView.appearance = NSAppearance(named: presentation.colors.isDark ? .darkAqua : .aqua)
-            visualView.isHidden = true
+            glassView.appearance = appearance
+            backgroundView.backgroundColor = .clear
+        } else if System.blurEnabled {
+            visualView.appearance = appearance
             backgroundView.backgroundColor = .clear
         } else {
-            visualView.isHidden = false
-            if #available(macOS 11.0, *) {
-                backgroundView.backgroundColor = presentation.backgroundColor
-            } else {
-                backgroundView.backgroundColor = presentation.backgroundColor.withAlphaComponent(1.0)
-            }
+            backgroundView.backgroundColor = presentation.colors.background
         }
-        
     }
     
     func insertItems(_ items:[ContextMenuItem], presentation: AppMenu.Presentation, interaction: AppMenuBasicItem.Interaction) {

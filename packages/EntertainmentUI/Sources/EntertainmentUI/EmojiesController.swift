@@ -1379,6 +1379,7 @@ public final class AnimatedEmojiesView : Control {
     private let searchBackdrop = View()
     
     private let searchBorder = View()
+    private let headerEdge = EdgeEffectView()
     private let searchStatusView = PanelSearchStatusView(frame: .zero)
     private var searchStatus: PanelSearchPresentation = .hidden
     
@@ -1443,6 +1444,7 @@ public final class AnimatedEmojiesView : Control {
             .clear
         }
         addSubview(self.tableView)
+        addSubview(headerEdge)
         
         searchView.isLeftOrientated = true
         searchView.layer?.cornerRadius = 9
@@ -1521,12 +1523,18 @@ public final class AnimatedEmojiesView : Control {
         transition.updateFrame(view: tabs, frame: NSMakeRect(0, initial, size.width, 46))
         transition.updateFrame(view: packsView, frame: tabs.focus(NSMakeSize(size.width, 36)))
         transition.updateFrame(view: borderView, frame: NSMakeRect(0, tabs.frame.maxY, size.width, .borderSize))
-        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabs.frame.maxY, size.width, size.height - initial))
+        let headerInset: CGFloat = mode.isTransparent ? 46 : 0
+        if tableView.contentInsets.top != headerInset {
+            var insets = tableView.contentInsets
+            insets.top = headerInset
+            tableView.contentInsets = insets
+        }
+        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabs.frame.maxY - headerInset, size.width, size.height - initial + headerInset))
         
-        transition.updateAlpha(view: borderView, alpha: inSearch ? 0 : 1)
+        transition.updateAlpha(view: borderView, alpha: inSearch || mode.isTransparent ? 0 : 1)
 
         
-        let dest = max(0, min(tableView.rectOf(index: 0).minY + (tableView.clipView.destination?.y ?? tableView.documentOffset.y), 46))
+        let dest = max(0, min(tableView.rectOf(index: 0).minY + (tableView.clipView.destination?.y ?? tableView.documentOffset.y) + headerInset, 46))
 
         let searchDest = inSearch ? 0 : dest
         transition.updateFrame(view: searchContainer, frame: NSMakeRect(0, tabs.frame.maxY, size.width, 46 - min(searchDest, 46)))
@@ -1543,12 +1551,23 @@ public final class AnimatedEmojiesView : Control {
         transition.updateFrame(view: searchFrost, frame: searchView.frame)
         searchFrost.layer?.cornerRadius = 9
         transition.updateFrame(view: searchBorder, frame: NSMakeRect(0, searchContainer.frame.height - .borderSize, size.width, .borderSize))
-        let alpha: CGFloat = inSearch && tableView.documentOffset.y > 0 ? 1 : 0
+        let alpha: CGFloat = inSearch && tableView.documentOffset.y > -headerInset ? 1 : 0
         transition.updateAlpha(view: searchBorder, alpha: alpha)
         if isGlass {
             transition.updateAlpha(view: searchBackdrop, alpha: alpha)
         }
         transition.updateFrame(view: searchBackdrop, frame: searchInsideRect)
+        
+        headerEdge.isHidden = !mode.isTransparent
+        if mode.isTransparent {
+            let fade: CGFloat = 16
+            let edgeRect = NSMakeRect(0, 0, size.width, searchContainer.frame.maxY + fade)
+            let isLite = TelegramUtilsHooks.shared.isLite(.blur)
+            let blur = isLite ? nil : EdgeEffectView.Blur(rect: edgeRect, edgeSize: fade)
+            let color = isLite ? (presentation ?? theme).colors.background : .clear
+            transition.updateFrame(view: headerEdge, frame: edgeRect)
+            headerEdge.update(color: color, blur: blur, alpha: 1, edge: .bottom, edgeSize: fade, rect: edgeRect, transition: transition)
+        }
         
         if let categories = categories {
             transition.updateFrame(view: categories, frame: categories.centerFrameY(x: searchInside.frame.width - categories.frame.width - searchView.frame.minX))
@@ -1577,7 +1596,7 @@ public final class AnimatedEmojiesView : Control {
         self.searchContainer.background = isClearBackground ? .clear : theme.colors.background
         self.searchBorder.backgroundColor = mode.isTransparent ? .clear : isGlass ? theme.colors.grayIcon.withAlphaComponent(0.1) : theme.colors.border
         visualEffect.material = theme.colors.isDark ? .dark : .light
-        visualEffect.isHidden = isGlass
+        visualEffect.isHidden = isGlass || mode.isTransparent
         searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         searchFrost.isHidden = TelegramUtilsHooks.shared.isLite(.blur)
         if let glassSurface {
@@ -1642,7 +1661,11 @@ public final class AnimatedEmojiesView : Control {
     }
     
     fileprivate func update(sections: TableUpdateTransition, packs: TableUpdateTransition, state: State, context: any AccountContextProtocol, arguments: Arguments, mode: EmojiesController.Mode) {
+        let modeChanged = self.mode != mode
         self.mode = mode
+        if modeChanged {
+            updateLocalizationAndTheme(theme: presentation ?? theme)
+        }
         
         let previous = self.state
         self.state = state

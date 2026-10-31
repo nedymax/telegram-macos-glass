@@ -44,7 +44,7 @@ public final class ReactionsWindowController : NSObject {
                 backgroundView.backgroundColor = .clear
             } else if #available(macOS 11.0, *), !TelegramUtilsHooks.shared.isLite(.blur) {
                 container.addSubview(visualView)
-                backgroundView.backgroundColor = theme.colors.background.withAlphaComponent(0.7)
+                backgroundView.backgroundColor = .clear
             } else {
                 backgroundView.backgroundColor = theme.colors.background
             }
@@ -60,7 +60,8 @@ public final class ReactionsWindowController : NSObject {
                 self.visualView.state = .active
                 self.visualView.blendingMode = .behindWindow
                 self.visualView.autoresizingMask = []
-                self.visualView.material = theme.colors.isDark ? .dark : .light
+                self.visualView.material = .menu
+                self.visualView.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
             }
             
             self.autoresizesSubviews = false
@@ -68,7 +69,7 @@ public final class ReactionsWindowController : NSObject {
             
             self.layer?.isOpaque = false
             
-            let layers = [self.layer, contentView.layer, self.visualView.layer, self.backgroundView.layer, self.container.layer, self.glassView?.layer]
+            let layers = [self.layer, contentView.layer, self.visualView.layer, self.backgroundView.layer, self.container.layer]
             for layer in layers {
                 layer?.cornerRadius = 20
                 if #available(macOS 10.15, *) {

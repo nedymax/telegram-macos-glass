@@ -131,7 +131,7 @@ private final class AppMenuSeparatorItemView: AppMenuBasicItemView {
     
     override func layout() {
         super.layout()
-        view.frame = NSMakeRect(16, 2, containerView.frame.width - 32, 1)
+        view.frame = NSMakeRect(16, floorToScreenPixels((containerView.frame.height - .borderSize) / 2), containerView.frame.width - 32, .borderSize)
     }
     
     override func set(item: TableRowItem, animated: Bool = false) {
@@ -147,7 +147,7 @@ open class AppMenuRowItem : AppMenuBasicItem {
     public let item: ContextMenuItem
     public private(set) var text: TextViewLayout
     public let leftInset: CGFloat = 16
-    public let innerInset: CGFloat = 0
+    public let innerInset: CGFloat = 5
     public let moreSize: NSSize = NSMakeSize(6, 8)
     public let selectedSize: NSSize = NSMakeSize(9, 8)
     

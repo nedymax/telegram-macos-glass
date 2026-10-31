@@ -29,7 +29,7 @@ public final class AppMenu {
             return colors.grayText.withAlphaComponent(0.75)
         }
         public var highlightColor: NSColor {
-            return colors.isDark ? NSColor(white: 1, alpha: 0.045) : NSColor(white: 0, alpha: 0.035)
+            return colors.grayIcon.withAlphaComponent(0.15)
         }
         public var borderColor: NSColor {
             return colors.grayIcon.withAlphaComponent(0.1)
