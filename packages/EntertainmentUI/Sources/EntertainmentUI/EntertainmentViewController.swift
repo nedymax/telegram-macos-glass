@@ -83,9 +83,16 @@ public final class EntertainmentView : View {
         }
     }
 
+    private let menuGlass: NSView?
+    var didChangeGlassBackground: ((Bool) -> Void)?
+
     var showsGlassBackground: Bool = true {
         didSet {
-            glassView.isHidden = !showsGlassBackground
+            glassView.isHidden = !showsGlassBackground || menuGlass != nil
+            menuGlass?.isHidden = !showsGlassBackground
+            if oldValue != showsGlassBackground {
+                didChangeGlassBackground?(showsGlassBackground)
+            }
         }
     }
     
@@ -113,8 +120,22 @@ public final class EntertainmentView : View {
 
     public init(sectionView: NSView, frame: NSRect) {
         self.sectionView = sectionView
+        if #available(macOS 26.0, *), System.liquidGlass, System.liquidGlassAvailable, !TelegramUtilsHooks.shared.isLite(.blur) {
+            let glass = NSGlassEffectView(frame: .zero)
+            glass.style = .regular
+            glass.cornerRadius = 18
+            glass.tintColor = nil
+            glass.applyNativeMenuMaterial()
+            self.menuGlass = glass
+        } else {
+            self.menuGlass = nil
+        }
         super.init(frame: frame)
         self.addSubview(self.glassView)
+        if let menuGlass {
+            self.glassView.isHidden = true
+            self.addSubview(menuGlass)
+        }
         self.addSubview(self.sectionView)
         self.addSubview(self.edgeView)
         self.addSubview(self.tabs)
@@ -135,6 +156,7 @@ public final class EntertainmentView : View {
         self.edgeView.shadowBackground = theme.colors.background.withAlphaComponent(0.6)
         self.glassView.customTint = theme.colors.background.withAlphaComponent(EntertainmentView.glassTintAlpha)
         self.glassView.updateLocalizationAndTheme(theme: theme)
+        self.menuGlass?.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         self.updateTabs(animated: false)
     }
     
@@ -208,6 +230,7 @@ public final class EntertainmentView : View {
         let tabsAreaHeight = EntertainmentView.tabsAreaHeight
         self.glassView.frame = bounds
         self.glassView.updateLayout(size: bounds.size, transition: .immediate)
+        self.menuGlass?.frame = bounds
         self.sectionView.frame = bounds
         self.edgeView.frame = NSMakeRect(0, frame.height - tabsAreaHeight, frame.width, tabsAreaHeight)
         let tabsSize = self.tabs.contentSize
@@ -420,16 +443,20 @@ public class EntertainmentViewController<Context: AccountContextProtocol>: Teleg
         if self.section.genericView._backgroundColor != .clear {
             self.section.genericView._backgroundColor = .clear
         }
+        let usesMenuPanel = isLoaded() ? genericView.showsGlassBackground : true
+        emoji.usesMenuPanel = usesMenuPanel
         if emoji.isLoaded() {
             emoji.view.background = .clear
         }
         if stickers.isLoaded() {
             stickers.view.background = .clear
             stickers.genericView.isGlass = true
+            stickers.genericView.usesMenuPanel = usesMenuPanel
         }
         if gifs.isLoaded() {
             gifs.view.background = .clear
             gifs.genericView.isGlass = true
+            gifs.genericView.usesMenuPanel = usesMenuPanel
         }
     }
     
@@ -531,6 +558,10 @@ public class EntertainmentViewController<Context: AccountContextProtocol>: Teleg
     
     public override func viewDidLoad() {
         super.viewDidLoad()
+
+        genericView.didChangeGlassBackground = { [weak self] _ in
+            self?.applyGlassStyle()
+        }
 
         let state:EntertainmentState
         if mode == .selectAvatar {

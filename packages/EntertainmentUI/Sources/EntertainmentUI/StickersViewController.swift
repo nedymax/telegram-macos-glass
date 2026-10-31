@@ -755,10 +755,21 @@ public class NStickersView : View {
     private let searchInside = View()
     private let searchBackdrop = View()
     private let searchFrost = NSVisualEffectView()
+    private var selectionFrost: NSVisualEffectView?
+    private let headerBlurFilter = PickerHeaderBlur()
 
     public var isGlass: Bool = false {
         didSet {
             if oldValue != isGlass {
+                updateLocalizationAndTheme(theme: presentation ?? theme)
+                needsLayout = true
+            }
+        }
+    }
+
+    public var usesMenuPanel: Bool = false {
+        didSet {
+            if oldValue != usesMenuPanel {
                 updateLocalizationAndTheme(theme: presentation ?? theme)
                 needsLayout = true
             }
@@ -970,7 +981,27 @@ public class NStickersView : View {
         let rect = NSMakeRect(view.frame.origin.y - point.y, 5, item.height, packsView.frame.height)
         
         selectionView.layer?.cornerRadius = item.height == item.width ? .cornerRadius : item.width / 2
-        selectionView.background = isGlass ? theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1) : theme.colors.grayBackground
+        if usesMenuPanel, !TelegramUtilsHooks.shared.isLite(.blur) {
+            let frost: NSVisualEffectView
+            if let current = selectionFrost {
+                frost = current
+            } else {
+                frost = NSVisualEffectView(frame: selectionView.bounds)
+                frost.wantsLayer = true
+                frost.material = .selection
+                frost.blendingMode = .withinWindow
+                frost.state = .active
+                frost.autoresizingMask = [.width, .height]
+                selectionView.addSubview(frost)
+                selectionFrost = frost
+            }
+            frost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
+            selectionView.background = .clear
+        } else {
+            selectionFrost?.removeFromSuperview()
+            selectionFrost = nil
+            selectionView.background = isGlass ? theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1) : theme.colors.grayBackground
+        }
         if animated {
             selectionView.layer?.animateCornerRadius()
         }
@@ -1079,7 +1110,7 @@ public class NStickersView : View {
         self.searchBackdrop.backgroundColor = theme.colors.background.withAlphaComponent(0.85)
         self.searchBackdrop.isHidden = !isGlass
 
-        self.searchFrost.isHidden = !isGlass || TelegramUtilsHooks.shared.isLite(.blur)
+        self.searchFrost.isHidden = !usesMenuPanel || TelegramUtilsHooks.shared.isLite(.blur)
         self.searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         if isGlass {
             let searchBackground = searchFrost.isHidden ? theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1) : .clear
@@ -1104,7 +1135,15 @@ public class NStickersView : View {
         transition.updateFrame(view: packsView, frame: tabsContainer.focus(NSMakeSize(size.width, 36)))
 
         
-        let dest = max(0, min(tableView.rectOf(index: 0).minY + (tableView.clipView.destination?.y ?? tableView.documentOffset.y), 46))
+        let headerInset: CGFloat = usesMenuPanel && !TelegramUtilsHooks.shared.isLite(.blur) ? 46 : 0
+        if tableView.contentInsets.top != headerInset {
+            var insets = tableView.contentInsets
+            insets.top = headerInset
+            tableView.contentInsets = insets
+        }
+        separator.isHidden = usesMenuPanel
+
+        let dest = max(0, min(tableView.rectOf(index: 0).minY + (tableView.clipView.destination?.y ?? tableView.documentOffset.y) + headerInset, 46))
 
         let searchDest = inSearch ? 0 : dest
                 
@@ -1119,7 +1158,7 @@ public class NStickersView : View {
         transition.updateFrame(view: searchView, frame: searchInside.focus(NSMakeSize(size.width - 16, 30)))
         transition.updateFrame(view: searchFrost, frame: searchView.frame)
         transition.updateFrame(view: searchBorder, frame: NSMakeRect(0, searchContainer.frame.height - .borderSize, size.width, .borderSize))
-        let alpha: CGFloat = inSearch && tableView.documentOffset.y > 0 ? 1 : 0
+        let alpha: CGFloat = inSearch && tableView.documentOffset.y > -headerInset ? 1 : 0
         transition.updateAlpha(view: searchBorder, alpha: alpha)
         if isGlass {
             transition.updateAlpha(view: searchBackdrop, alpha: alpha)
@@ -1136,7 +1175,8 @@ public class NStickersView : View {
         if let restrictedView = restrictedView {
             transition.updateFrame(view: restrictedView, frame: size.bounds)
         }
-        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabsContainer.frame.maxY, size.width, size.height))
+        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabsContainer.frame.maxY - headerInset, size.width, size.height + headerInset))
+        _ = headerBlurFilter.update(tableView, enabled: headerInset > 0, height: 46 - tableView.frame.minY)
 
                 
         transition.updateFrame(view: searchStatusView, frame: NSMakeRect(0, searchContainer.frame.maxY, size.width, max(0, size.height - searchContainer.frame.maxY - 56)))
@@ -1372,7 +1412,16 @@ public class NStickersViewController<Context: AccountContextProtocol>: TelegramG
             guard let `self` = self, position.visibleRows.length > 0 else {
                 return
             }
-            let item = self.genericView.tableView.item(at: position.visibleRows.location)
+            let tableView = self.genericView.tableView
+            var firstRow = position.visibleRows.location
+            let headerInset = tableView.contentInsets.top
+            if headerInset > 0 {
+                let row = tableView.row(at: NSMakePoint(1, tableView.documentOffset.y + headerInset + 1))
+                if row >= 0 {
+                    firstRow = row
+                }
+            }
+            let item = tableView.item(at: min(firstRow, tableView.count - 1))
             self.genericView.packsView.changeSelection(stableId: item.stableId)
             self.genericView.packsView.scroll(to: .center(id: item.stableId, innerId: nil, animated: true, focus: .init(focus: false), inset: 0))
             self.genericView.updateSelectionState(animated: true)

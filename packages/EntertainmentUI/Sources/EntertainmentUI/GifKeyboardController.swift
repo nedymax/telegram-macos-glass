@@ -257,6 +257,16 @@ public final class GifKeyboardView : View {
             }
         }
     }
+
+    public var usesMenuPanel: Bool = false {
+        didSet {
+            if oldValue != usesMenuPanel {
+                updateLocalizationAndTheme(theme: presentation ?? theme)
+                needsLayout = true
+            }
+        }
+    }
+    private let headerBlurFilter = PickerHeaderBlur()
     
     public required init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -337,16 +347,24 @@ public final class GifKeyboardView : View {
         transition.updateFrame(view: tabs, frame: NSMakeRect(0, initial, size.width, 46))
         transition.updateFrame(view: packsView, frame: tabs.focus(NSMakeSize(size.width, 36)))
         transition.updateFrame(view: borderView, frame: NSMakeRect(0, tabs.frame.maxY, size.width, .borderSize))
+        borderView.isHidden = usesMenuPanel
 
-        
-        let searchDest = max(0, min((tableView.firstItem?.frame.minY ?? 0) + (tableView.clipView.destination?.y ?? tableView.documentOffset.y), 46))
+        let headerInset: CGFloat = usesMenuPanel && !TelegramUtilsHooks.shared.isLite(.blur) ? 46 : 0
+        if tableView.contentInsets.top != headerInset {
+            var insets = tableView.contentInsets
+            insets.top = headerInset
+            tableView.contentInsets = insets
+        }
+
+        let searchDest = max(0, min((tableView.firstItem?.frame.minY ?? 0) + (tableView.clipView.destination?.y ?? tableView.documentOffset.y) + headerInset, 46))
                 
         transition.updateFrame(view: searchContainer, frame: NSMakeRect(0, min(max(tabs.frame.maxY - searchDest, 0), tabs.frame.maxY), size.width, 46))
         transition.updateFrame(view: searchView, frame: searchContainer.focus(NSMakeSize(size.width - 16, 30)))
         transition.updateFrame(view: searchFrost, frame: searchView.frame)
         transition.updateFrame(view: searchBorder, frame: NSMakeRect(0, searchContainer.frame.height - .borderSize, size.width, .borderSize))
         
-        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabs.frame.maxY, size.width, size.height))
+        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabs.frame.maxY - headerInset, size.width, size.height + headerInset))
+        _ = headerBlurFilter.update(tableView, enabled: headerInset > 0, height: 46 - tableView.frame.minY)
 
         transition.updateFrame(view: searchStatusView, frame: NSMakeRect(0, searchContainer.frame.maxY, size.width, max(0, size.height - searchContainer.frame.maxY - 56)))
 
@@ -378,7 +396,7 @@ public final class GifKeyboardView : View {
         searchBackdrop.backgroundColor = theme.colors.background.withAlphaComponent(0.85)
         searchBackdrop.isHidden = !isGlass
         self.searchView.updateLocalizationAndTheme(theme: theme)
-        searchFrost.isHidden = !isGlass || TelegramUtilsHooks.shared.isLite(.blur)
+        searchFrost.isHidden = !usesMenuPanel || TelegramUtilsHooks.shared.isLite(.blur)
         searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         if isGlass {
             let searchBackground = searchFrost.isHidden ? theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1) : .clear

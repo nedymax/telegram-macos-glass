@@ -1383,8 +1383,7 @@ public final class AnimatedEmojiesView : Control {
     
     private let searchBorder = View()
     private let headerBlur = PassthroughVisualEffectView()
-    private var tableBlurFilter: NSObject?
-    private var tableBlurMaskKey: NSSize?
+    private let headerBlurFilter = PickerHeaderBlur()
     private let searchStatusView = PanelSearchStatusView(frame: .zero)
     private var searchStatus: PanelSearchPresentation = .hidden
     
@@ -1413,52 +1412,16 @@ public final class AnimatedEmojiesView : Control {
     private var isClearBackground: Bool {
         return mode.isTransparent || isGlass
     }
+    public var usesMenuPanel: Bool = false {
+        didSet {
+            if oldValue != usesMenuPanel {
+                updateLocalizationAndTheme(theme: presentation ?? theme)
+                needsLayout = true
+            }
+        }
+    }
     private var usesPickerStyle: Bool {
-        return mode.isTransparent
-    }
-
-    private func updateTableBlur(enabled: Bool, height: CGFloat) -> Bool {
-        guard #available(macOS 26.0, *), enabled, let layer = tableView.layer else {
-            if tableBlurFilter != nil {
-                tableView.layer?.filters = nil
-                tableBlurFilter = nil
-                tableBlurMaskKey = nil
-            }
-            return false
-        }
-        if tableBlurFilter == nil {
-            guard let filter = ee2_makeVariableBlurFilter() else {
-                return false
-            }
-            filter.setValue(14, forKey: "inputRadius")
-            filter.setValue(false, forKey: "inputNormalizeEdges")
-            tableBlurFilter = filter
-        }
-        guard let filter = tableBlurFilter else {
-            return false
-        }
-        let key = NSMakeSize(floor(max(0, height)), floor(layer.bounds.height))
-        if key != tableBlurMaskKey, key.height > 0 {
-            tableBlurMaskKey = key
-            filter.setValue(AnimatedEmojiesView.headerBlurMask(blurHeight: key.width, height: key.height), forKey: "inputMaskImage")
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            layer.filters = [filter]
-            CATransaction.commit()
-        }
-        return true
-    }
-
-    private static func headerBlurMask(blurHeight: CGFloat, height: CGFloat) -> CGImage? {
-        let scale = System.backingScale
-        let pixelHeight = Int(min(2048, height * scale))
-        let unit = CGFloat(pixelHeight) / height
-        guard pixelHeight > 0, let context = CGContext(data: nil, width: 1, height: pixelHeight, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
-            return nil
-        }
-        context.setFillColor(NSColor.black.cgColor)
-        context.fill(CGRect(x: 0, y: CGFloat(pixelHeight) - blurHeight * unit, width: 1, height: blurHeight * unit))
-        return context.makeImage()
+        return mode.isTransparent || usesMenuPanel
     }
 
     private func updateGlassSurface() {
@@ -1614,7 +1577,7 @@ public final class AnimatedEmojiesView : Control {
         }
         transition.updateFrame(view: searchBackdrop, frame: searchInsideRect)
         
-        let blursTableContent = updateTableBlur(enabled: blursUnderHeader, height: 46 - tableView.frame.minY)
+        let blursTableContent = headerBlurFilter.update(tableView, enabled: blursUnderHeader, height: 46 - tableView.frame.minY)
         headerBlur.isHidden = !blursUnderHeader || blursTableContent
         if blursUnderHeader && !blursTableContent {
             transition.updateFrame(view: headerBlur, frame: NSMakeRect(0, 0, size.width, 46))
@@ -1650,14 +1613,14 @@ public final class AnimatedEmojiesView : Control {
         visualEffect.isHidden = isGlass || mode.isTransparent
         headerBlur.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
-        searchFrost.isHidden = TelegramUtilsHooks.shared.isLite(.blur)
+        searchFrost.isHidden = !usesPickerStyle || TelegramUtilsHooks.shared.isLite(.blur)
         if let glassSurface {
             glassSurface.customTint = theme.colors.background.withAlphaComponent(EntertainmentView.glassTintAlpha)
             glassSurface.updateLocalizationAndTheme(theme: theme)
         }
         searchBackdrop.backgroundColor = theme.colors.background.withAlphaComponent(0.85)
         searchBackdrop.isHidden = !isGlass
-        if (isClearBackground || usesPickerStyle) && !searchFrost.isHidden {
+        if isGlass || (usesPickerStyle && !searchFrost.isHidden) {
             searchInside.backgroundColor = .clear
         } else {
             searchInside.backgroundColor = mode.isTransparent ? theme.colors.background.withAlphaComponent(0.7) : theme.colors.background
@@ -1935,7 +1898,7 @@ public final class AnimatedEmojiesView : Control {
         let rect = NSMakeRect(viewPoint.y - point.y, 5, item.height, packsView.frame.height)
         
         selectionView.layer?.cornerRadius = item.height == item.width && item.index != 1 ? .cornerRadius : item.width / 2
-        if (usesPickerStyle || isGlass), !TelegramUtilsHooks.shared.isLite(.blur) {
+        if usesPickerStyle, !TelegramUtilsHooks.shared.isLite(.blur) {
             let frost: NSVisualEffectView
             if let current = selectionFrost {
                 frost = current
@@ -1951,7 +1914,7 @@ public final class AnimatedEmojiesView : Control {
             }
             frost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
             selectionView.background = .clear
-        } else if usesPickerStyle || isGlass {
+        } else if mode == .reactions || isGlass {
             selectionFrost?.removeFromSuperview()
             selectionFrost = nil
             selectionView.background = theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1)
@@ -2159,6 +2122,14 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
         }
     }
 
+    public var usesMenuPanel: Bool = false {
+        didSet {
+            if isLoaded() {
+                genericView.usesMenuPanel = usesMenuPanel
+            }
+        }
+    }
+
     public override var popoverBackgroundColor: NSColor {
         return showsGlassSurface ? .clear : super.popoverBackgroundColor
     }
@@ -2322,6 +2293,7 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
         genericView.presentation = self.presentation
         genericView.isGlass = isGlass || showsGlassSurface
         genericView.showsGlassSurface = showsGlassSurface
+        genericView.usesMenuPanel = usesMenuPanel
         genericView.packsView.delegate = self
         
        
@@ -3148,5 +3120,54 @@ public extension MessageReaction.Reaction {
 private final class PassthroughVisualEffectView: NSVisualEffectView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         return nil
+    }
+}
+
+final class PickerHeaderBlur {
+    private var filter: NSObject?
+    private var maskKey: NSSize?
+
+    func update(_ view: NSView, enabled: Bool, height: CGFloat) -> Bool {
+        guard #available(macOS 26.0, *), enabled, let layer = view.layer else {
+            if filter != nil {
+                view.layer?.filters = nil
+                filter = nil
+                maskKey = nil
+            }
+            return false
+        }
+        if filter == nil {
+            guard let created = ee2_makeVariableBlurFilter() else {
+                return false
+            }
+            created.setValue(14, forKey: "inputRadius")
+            created.setValue(false, forKey: "inputNormalizeEdges")
+            filter = created
+        }
+        guard let filter else {
+            return false
+        }
+        let key = NSMakeSize(floor(max(0, height)), floor(layer.bounds.height))
+        if key != maskKey, key.height > 0 {
+            maskKey = key
+            filter.setValue(PickerHeaderBlur.mask(blurHeight: key.width, height: key.height), forKey: "inputMaskImage")
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.filters = [filter]
+            CATransaction.commit()
+        }
+        return true
+    }
+
+    private static func mask(blurHeight: CGFloat, height: CGFloat) -> CGImage? {
+        let scale = System.backingScale
+        let pixelHeight = Int(min(2048, height * scale))
+        let unit = CGFloat(pixelHeight) / height
+        guard pixelHeight > 0, let context = CGContext(data: nil, width: 1, height: pixelHeight, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            return nil
+        }
+        context.setFillColor(NSColor.black.cgColor)
+        context.fill(CGRect(x: 0, y: CGFloat(pixelHeight) - blurHeight * unit, width: 1, height: blurHeight * unit))
+        return context.makeImage()
     }
 }
