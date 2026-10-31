@@ -1451,11 +1451,11 @@ public final class AnimatedEmojiesView : Control {
         guard pixelHeight > 0, let context = CGContext(data: nil, width: 1, height: pixelHeight, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
             return nil
         }
-        let fade: CGFloat = 16
+        let fade: CGFloat = min(16, blurHeight / 2)
         let top = CGFloat(pixelHeight)
-        let solidBottom = top - blurHeight * unit
+        let solidBottom = top - (blurHeight - fade) * unit
         context.setFillColor(NSColor.black.cgColor)
-        context.fill(CGRect(x: 0, y: solidBottom, width: 1, height: blurHeight * unit))
+        context.fill(CGRect(x: 0, y: solidBottom, width: 1, height: (blurHeight - fade) * unit))
         let colors = [NSColor.black.cgColor, NSColor.black.withAlphaComponent(0).cgColor] as CFArray
         if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
             context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: solidBottom), end: CGPoint(x: 0, y: solidBottom - fade * unit), options: [])
