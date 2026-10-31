@@ -1381,9 +1381,8 @@ public final class AnimatedEmojiesView : Control {
     private let searchBorder = View()
     private let headerBlur = NSVisualEffectView()
     private var headerBlurMaskHeight: CGFloat = 0
-    private static let tableBlurMaskName = "header_blur_mask"
-    private let tableBlurMask = CALayer()
-    private var tableBlurApplied = false
+    private var tableBlurFilter: NSObject?
+    private var tableBlurMaskKey: NSSize?
     private let searchStatusView = PanelSearchStatusView(frame: .zero)
     private var searchStatus: PanelSearchPresentation = .hidden
     
@@ -1415,46 +1414,53 @@ public final class AnimatedEmojiesView : Control {
 
     private func updateTableBlur(enabled: Bool, height: CGFloat) -> Bool {
         guard #available(macOS 26.0, *), enabled, let layer = tableView.layer else {
-            if tableBlurApplied {
+            if tableBlurFilter != nil {
                 tableView.layer?.filters = nil
-                tableBlurMask.removeFromSuperlayer()
-                tableBlurApplied = false
+                tableBlurFilter = nil
+                tableBlurMaskKey = nil
             }
             return false
         }
-        if !tableBlurApplied {
+        if tableBlurFilter == nil {
             guard let filter = ee2_makeVariableBlurFilter() else {
                 return false
             }
             filter.setValue(10, forKey: "inputRadius")
-            filter.setValue(true, forKey: "inputNormalizeEdges")
-            filter.setValue(AnimatedEmojiesView.tableBlurMaskName, forKey: "inputSourceSublayerName")
-            tableBlurMask.name = AnimatedEmojiesView.tableBlurMaskName
-            let steps = 8
-            for i in 0 ..< steps + 1 {
-                let stripe = CALayer()
-                stripe.backgroundColor = NSColor.black.withAlphaComponent(i == 0 ? 1 : 1 - CGFloat(i) / CGFloat(steps + 1)).cgColor
-                tableBlurMask.addSublayer(stripe)
-            }
+            filter.setValue(false, forKey: "inputNormalizeEdges")
+            tableBlurFilter = filter
+        }
+        guard let filter = tableBlurFilter else {
+            return false
+        }
+        let key = NSMakeSize(floor(max(0, height)), floor(layer.bounds.height))
+        if key != tableBlurMaskKey, key.height > 0 {
+            tableBlurMaskKey = key
+            filter.setValue(AnimatedEmojiesView.headerBlurMask(blurHeight: key.width, height: key.height), forKey: "inputMaskImage")
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             layer.filters = [filter]
-            layer.addSublayer(tableBlurMask)
-            tableBlurApplied = true
+            CATransaction.commit()
+        }
+        return true
+    }
+
+    private static func headerBlurMask(blurHeight: CGFloat, height: CGFloat) -> CGImage? {
+        let scale = System.backingScale
+        let pixelHeight = Int(min(2048, height * scale))
+        let unit = CGFloat(pixelHeight) / height
+        guard pixelHeight > 0, let context = CGContext(data: nil, width: 1, height: pixelHeight, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            return nil
         }
         let fade: CGFloat = 16
-        let stripes = tableBlurMask.sublayers ?? []
-        let step = fade / CGFloat(max(1, stripes.count - 1))
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        tableBlurMask.frame = layer.bounds
-        for (i, stripe) in stripes.enumerated() {
-            if i == 0 {
-                stripe.frame = CGRect(x: 0, y: 0, width: layer.bounds.width, height: max(0, height))
-            } else {
-                stripe.frame = CGRect(x: 0, y: max(0, height) + step * CGFloat(i - 1), width: layer.bounds.width, height: step)
-            }
+        let top = CGFloat(pixelHeight)
+        let solidBottom = top - blurHeight * unit
+        context.setFillColor(NSColor.black.cgColor)
+        context.fill(CGRect(x: 0, y: solidBottom, width: 1, height: blurHeight * unit))
+        let colors = [NSColor.black.cgColor, NSColor.black.withAlphaComponent(0).cgColor] as CFArray
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
+            context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: solidBottom), end: CGPoint(x: 0, y: solidBottom - fade * unit), options: [])
         }
-        CATransaction.commit()
-        return true
+        return context.makeImage()
     }
 
     private func updateGlassSurface() {
