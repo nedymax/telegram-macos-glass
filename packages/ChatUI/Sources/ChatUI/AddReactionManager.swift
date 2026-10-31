@@ -450,8 +450,8 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector  {
             let appearance = NSAppearance(named: presentation.colors.isDark ? .darkAqua : .aqua)
             for _ in 0 ..< (hasBubble ? 2 : 1) {
                 let glass = NSGlassEffectView(frame: .zero)
-                glass.style = .clear
-                glass.tintColor = nil
+                glass.style = .regular
+                glass.tintColor = presentation.colors.background.withAlphaComponent(0.3)
                 glass.appearance = appearance
                 content.addSubview(glass)
                 glassShapes.append(glass)
