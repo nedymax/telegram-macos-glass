@@ -33,6 +33,7 @@ public final class ReactionsWindowController : NSObject {
                 glass.cornerRadius = 20
                 glass.tintColor = nil
                 glass.wantsLayer = true
+                glass.applyNativeMenuMaterial()
                 glass.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
                 self.glassView = glass
             } else {

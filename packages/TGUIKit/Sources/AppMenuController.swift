@@ -82,6 +82,8 @@ final class MenuView: Control, TableViewDelegate {
     private let visualView: NSVisualEffectView
     private let glassView: NSView?
     static let cornerRadius: CGFloat = 12
+    private let shadowLayer = CALayer()
+    private let shadowMask = CAShapeLayer()
     required init(frame frameRect: NSRect) {
         self.backgroundView = View(frame: frameRect.size.bounds)
         self.visualView = NSVisualEffectView(frame: frameRect.size.bounds)
@@ -91,6 +93,7 @@ final class MenuView: Control, TableViewDelegate {
             glass.cornerRadius = MenuView.cornerRadius
             glass.tintColor = nil
             glass.wantsLayer = true
+            glass.applyNativeMenuMaterial()
             self.glassView = glass
         } else {
             self.glassView = nil
@@ -114,11 +117,14 @@ final class MenuView: Control, TableViewDelegate {
         self.visualView.autoresizingMask = []
         self.autoresizesSubviews = false
         
-        let shadow = NSShadow()
-        shadow.shadowBlurRadius = 8
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.2)
-        shadow.shadowOffset = NSMakeSize(0, 0)
-        self.shadow = shadow
+        shadowLayer.shadowColor = NSColor.black.cgColor
+        shadowLayer.shadowOpacity = 0.3
+        shadowLayer.shadowRadius = 12
+        shadowLayer.shadowOffset = NSMakeSize(0, -3)
+        shadowLayer.mask = shadowMask
+        shadowMask.fillRule = .evenOdd
+        self.layer?.masksToBounds = false
+        self.layer?.insertSublayer(shadowLayer, at: 0)
         
         self.layer?.isOpaque = false
         self.layer?.shouldRasterize = glassView == nil
@@ -151,7 +157,16 @@ final class MenuView: Control, TableViewDelegate {
         glassView?.frame = bounds
         backgroundView.frame = bounds
         tableView.frame = bounds
-        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: MenuView.cornerRadius, cornerHeight: MenuView.cornerRadius, transform: nil)
+        let outline = CGPath(roundedRect: bounds, cornerWidth: MenuView.cornerRadius, cornerHeight: MenuView.cornerRadius, transform: nil)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        shadowLayer.frame = bounds
+        shadowLayer.shadowPath = outline
+        let cutout = CGMutablePath()
+        cutout.addRect(bounds.insetBy(dx: -40, dy: -40))
+        cutout.addPath(outline)
+        shadowMask.path = cutout
+        CATransaction.commit()
     }
     
     override func setFrameSize(_ newSize: NSSize) {
@@ -1076,4 +1091,19 @@ public func contextOnScreen()->Window? {
         }
     }
     return nil
+}
+
+@available(macOS 26.0, *)
+public extension NSGlassEffectView {
+    func applyNativeMenuMaterial() {
+        let subvariant = Selector(("set_subvariant:"))
+        if responds(to: subvariant) {
+            perform(subvariant, with: "menu")
+        }
+        let adaptive = Selector(("set_adaptiveAppearance:"))
+        if responds(to: adaptive) {
+            typealias SetAdaptive = @convention(c) (NSObject, Selector, Int) -> Void
+            unsafeBitCast(method(for: adaptive), to: SetAdaptive.self)(self, adaptive, 1)
+        }
+    }
 }
