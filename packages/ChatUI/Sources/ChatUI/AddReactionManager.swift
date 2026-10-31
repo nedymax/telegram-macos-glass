@@ -721,7 +721,7 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
     private var isAppearing: Bool = false
 
     public var canAppearFromCursor: Bool {
-        return glassContainer != nil && hasBubble && aboveText == nil && !TelegramUtilsHooks.shared.isLite(.animations)
+        return glassContainer != nil && hasBubble && !TelegramUtilsHooks.shared.isLite(.animations)
     }
 
     public func appearFromCursor(_ point: NSPoint) {
@@ -748,6 +748,9 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
 
         var revealed: [(NSView, CGFloat)] = documentView.subviews.map { ($0, documentView.convert($0.frame, to: self).midX) }
         revealed.append((showMore, showMore.frame.midX))
+        if let aboveTextView {
+            revealed.append((aboveTextView, aboveTextView.frame.midX))
+        }
         for (view, _) in revealed {
             view.layer?.opacity = 0
         }

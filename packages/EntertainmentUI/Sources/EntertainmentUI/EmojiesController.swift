@@ -1945,7 +1945,7 @@ public final class AnimatedEmojiesView : Control {
         let rect = NSMakeRect(viewPoint.y - point.y, 5, item.height, packsView.frame.height)
         
         selectionView.layer?.cornerRadius = item.height == item.width && item.index != 1 ? .cornerRadius : item.width / 2
-        if (mode == .reactions || isGlass), !TelegramUtilsHooks.shared.isLite(.blur) {
+        if (mode.isTransparent || isGlass), !TelegramUtilsHooks.shared.isLite(.blur) {
             let frost: NSVisualEffectView
             if let current = selectionFrost {
                 frost = current
@@ -1961,7 +1961,7 @@ public final class AnimatedEmojiesView : Control {
             }
             frost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
             selectionView.background = .clear
-        } else if mode == .reactions || isGlass {
+        } else if mode.isTransparent || isGlass {
             selectionFrost?.removeFromSuperview()
             selectionFrost = nil
             selectionView.background = theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1)
@@ -2108,7 +2108,7 @@ public enum EmojiesControllerMode {
     }
     public var isTransparent: Bool {
         switch self {
-        case .reactions:
+        case .reactions, .defaultTags:
             return true
         case .messageEffects:
             return true
