@@ -754,6 +754,7 @@ public class NStickersView : View {
 
     private let searchInside = View()
     private let searchBackdrop = View()
+    private let searchFrost = NSVisualEffectView()
 
     public var isGlass: Bool = false {
         didSet {
@@ -770,9 +771,20 @@ public class NStickersView : View {
         addSubview(tableView)
                 
         searchView.isLeftOrientated = true
-        searchView.layer?.cornerRadius = 15
+        searchView.layer?.cornerRadius = 10
 
+        searchFrost.wantsLayer = true
+        searchFrost.material = .selection
+        searchFrost.blendingMode = .withinWindow
+        searchFrost.state = .active
+        searchFrost.layer?.cornerRadius = 10
+        if #available(macOS 10.15, *) {
+            searchFrost.layer?.cornerCurve = .continuous
+        }
+        searchFrost.layer?.masksToBounds = true
+        searchFrost.isHidden = true
         searchInside.addSubview(searchView)
+        searchInside.addSubview(searchFrost, positioned: .below, relativeTo: searchView)
 
         addSubview(searchContainer)
         
@@ -1067,8 +1079,10 @@ public class NStickersView : View {
         self.searchBackdrop.backgroundColor = theme.colors.background.withAlphaComponent(0.85)
         self.searchBackdrop.isHidden = !isGlass
 
+        self.searchFrost.isHidden = !isGlass || TelegramUtilsHooks.shared.isLite(.blur)
+        self.searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         if isGlass {
-            let searchBackground = theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1)
+            let searchBackground = searchFrost.isHidden ? theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1) : .clear
             let searchTheme = SearchTheme(searchBackground, theme.search.searchImage, theme.search.clearImage, theme.search.placeholder, theme.search.textColor, theme.search.placeholderColor)
             self.searchView.searchTheme = searchTheme
             self.categories?.searchTheme = searchTheme
@@ -1103,6 +1117,7 @@ public class NStickersView : View {
 
         
         transition.updateFrame(view: searchView, frame: searchInside.focus(NSMakeSize(size.width - 16, 30)))
+        transition.updateFrame(view: searchFrost, frame: searchView.frame)
         transition.updateFrame(view: searchBorder, frame: NSMakeRect(0, searchContainer.frame.height - .borderSize, size.width, .borderSize))
         let alpha: CGFloat = inSearch && tableView.documentOffset.y > 0 ? 1 : 0
         transition.updateAlpha(view: searchBorder, alpha: alpha)

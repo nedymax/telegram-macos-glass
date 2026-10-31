@@ -242,6 +242,7 @@ public final class GifKeyboardView : View {
     private let searchContainer = View()
     private let searchBorder = View()
     private let searchBackdrop = View()
+    private let searchFrost = NSVisualEffectView()
     private let searchStatusView = PanelSearchStatusView(frame: .zero)
     private var searchStatus: PanelSearchPresentation = .hidden
 
@@ -269,7 +270,19 @@ public final class GifKeyboardView : View {
         }
         addSubview(self.tableView)
 
+        searchFrost.wantsLayer = true
+        searchFrost.material = .selection
+        searchFrost.blendingMode = .withinWindow
+        searchFrost.state = .active
+        searchFrost.layer?.cornerRadius = 10
+        if #available(macOS 10.15, *) {
+            searchFrost.layer?.cornerCurve = .continuous
+        }
+        searchFrost.layer?.masksToBounds = true
+        searchFrost.isHidden = true
+        searchView.layer?.cornerRadius = 10
         searchContainer.addSubview(searchBackdrop)
+        searchContainer.addSubview(searchFrost)
         searchContainer.addSubview(searchView)
         searchContainer.addSubview(searchBorder)
         addSubview(searchContainer)
@@ -331,6 +344,7 @@ public final class GifKeyboardView : View {
                 
         transition.updateFrame(view: searchContainer, frame: NSMakeRect(0, min(max(tabs.frame.maxY - searchDest, 0), tabs.frame.maxY), size.width, 46))
         transition.updateFrame(view: searchView, frame: searchContainer.focus(NSMakeSize(size.width - 16, 30)))
+        transition.updateFrame(view: searchFrost, frame: searchView.frame)
         transition.updateFrame(view: searchBorder, frame: NSMakeRect(0, searchContainer.frame.height - .borderSize, size.width, .borderSize))
         
         transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabs.frame.maxY, size.width, size.height))
@@ -365,8 +379,10 @@ public final class GifKeyboardView : View {
         searchBackdrop.backgroundColor = theme.colors.background.withAlphaComponent(0.85)
         searchBackdrop.isHidden = !isGlass
         self.searchView.updateLocalizationAndTheme(theme: theme)
+        searchFrost.isHidden = !isGlass || TelegramUtilsHooks.shared.isLite(.blur)
+        searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         if isGlass {
-            let searchBackground = theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1)
+            let searchBackground = searchFrost.isHidden ? theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1) : .clear
             self.searchView.searchTheme = SearchTheme(searchBackground, theme.search.searchImage, theme.search.clearImage, theme.search.placeholder, theme.search.textColor, theme.search.placeholderColor)
         } else {
             self.searchView.searchTheme = theme.search
