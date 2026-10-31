@@ -539,8 +539,11 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
                 view.showMore.startLoading()
                 revealReactions?(view)
                 if view.glassContainer != nil, view.window !== previousWindow {
-                    view.glassHandedOff = true
-                    view.glassShapes.first?.isHidden = true
+                    if view.tailTimer != nil {
+                        view.handOffAfterTail = true
+                    } else {
+                        view.handOffGlass()
+                    }
                 }
             }
         }, for: .Click)
@@ -789,6 +792,12 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
     private var appearTimer: Foundation.Timer?
     private var tailTimer: Foundation.Timer?
     private var glassHandedOff: Bool = false
+    private var handOffAfterTail: Bool = false
+
+    private func handOffGlass() {
+        glassHandedOff = true
+        glassShapes.first?.isHidden = true
+    }
     private var isAppearing: Bool = false
 
     private func collapseTail() {
@@ -798,11 +807,14 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
         let tail = glassShapes[1]
         let bar = barRect(size: frame.size)
         let from = tail.frame
-        let start = CACurrentMediaTime()
+        var start: CFTimeInterval?
         isAppearing = true
         tailTimer?.invalidate()
         let timer = Foundation.Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] timer in
-            let progress = min(1, (CACurrentMediaTime() - start) / 0.12)
+            let now = CACurrentMediaTime()
+            let begin = start ?? now
+            start = begin
+            let progress = min(1, (now - begin) / 0.12)
             let suck = CGFloat(progress * progress)
             let size = from.width - (from.width - 8) * suck
             let centerY = from.midY + (bar.midY - from.midY) * suck
@@ -821,6 +833,10 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
                 }
                 self.tailTimer = nil
                 self.isAppearing = false
+                if self.handOffAfterTail {
+                    self.handOffAfterTail = false
+                    self.handOffGlass()
+                }
                 self.hasBubble = false
                 self.updateLayout(size: self.frame.size, transition: .immediate)
             }

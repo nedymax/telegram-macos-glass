@@ -157,7 +157,6 @@ public final class ReactionsWindowController : NSObject {
 
         func initFake(_ bar: NSRect) {
             isMorphing = true
-            contentView.layer?.opacity = 1
             if #available(macOS 26.0, *), let glassView {
                 let tint = NSGlassEffectView(frame: .zero)
                 tint.style = .regular
@@ -166,6 +165,7 @@ public final class ReactionsWindowController : NSObject {
                 tint.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
                 container.addSubview(tint, positioned: .above, relativeTo: glassView)
                 tintGlass = tint
+                tint.alphaValue = 0
                 glassView.alphaValue = 0
             }
             applyMorph(bar)
@@ -173,12 +173,21 @@ public final class ReactionsWindowController : NSObject {
             let target = bounds
             let swell = bar.insetBy(dx: -2, dy: -1.5)
             let duration: Double = 0.42
-            let start = CACurrentMediaTime()
+            let absorb: Double = 0.12
+            var start: CFTimeInterval?
             startTicking { [weak self] now in
                 guard let self else {
                     return true
                 }
-                let seconds = now - start
+                let begin = start ?? now
+                start = begin
+                let seconds = now - begin - absorb
+                if seconds < 0 {
+                    return false
+                }
+                if self.contentView.layer?.opacity != 1 {
+                    self.contentView.layer?.opacity = 1
+                }
                 if seconds >= duration {
                     self.finishMorph()
                     return true
