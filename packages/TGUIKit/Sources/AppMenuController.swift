@@ -709,7 +709,7 @@ final class AppMenuController : NSObject  {
 
     
     private func getView(for menu: ContextMenu, screen: NSScreen, parentView: Window?, submenuId: Int64?) -> Window {
-        let panel = Window(contentRect: .zero, styleMask: [.fullSizeContentView], backing: .buffered, defer: false)
+        let panel = MenuPanelWindow(contentRect: .zero, styleMask: [.fullSizeContentView], backing: .buffered, defer: false)
         panel._canBecomeMain = false
         panel._canBecomeKey = false
         panel.level = .screenSaver
@@ -1105,5 +1105,12 @@ public extension NSGlassEffectView {
             typealias SetAdaptive = @convention(c) (NSObject, Selector, Int) -> Void
             unsafeBitCast(method(for: adaptive), to: SetAdaptive.self)(self, adaptive, 1)
         }
+    }
+}
+
+public final class MenuPanelWindow: Window {
+    @objc(_hasActiveAppearanceIgnoringKeyFocus)
+    func hasActiveAppearanceIgnoringKeyFocus() -> Bool {
+        return true
     }
 }
