@@ -87,7 +87,6 @@ jobs:
           echo "frameworks=frameworks-$XCODE_HASH-$SUBMODULES-" >> "$GITHUB_OUTPUT"
           echo "xcode=$XCODE_HASH" >> "$GITHUB_OUTPUT"
           echo "cas=compilation-cache-$XCODE_HASH-" >> "$GITHUB_OUTPUT"
-          echo "dd=deriveddata-$XCODE_HASH-" >> "$GITHUB_OUTPUT"
 
       - name: Restore native frameworks
         id: restore-frameworks
@@ -134,46 +133,6 @@ jobs:
           restore-keys: |
             ${{ steps.keys.outputs.cas }}
 
-      - name: Restore DerivedData
-        id: restore-dd
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            build/DerivedData/Build
-            build/DerivedData/ModuleCache.noindex
-            build/DerivedData/SDKExplicitPrecompiledModules
-            build/DerivedData/SDKStatCaches.noindex
-            build/DerivedData/info.plist
-            build/DerivedData/source-state
-          key: ${{ steps.keys.outputs.dd }}${{ github.sha }}
-          restore-keys: |
-            ${{ steps.keys.outputs.dd }}
-
-      - name: Prepare incremental build
-        run: |
-          defaults write com.apple.dt.XCBuild IgnoreFileSystemDeviceInodeChanges -bool YES
-          STAMP=200001010000
-          git ls-files -z | xargs -0 touch -h -t "$STAMP" 2>/dev/null || true
-          git submodule foreach --recursive --quiet "git ls-files -z | xargs -0 touch -h -t $STAMP 2>/dev/null || true"
-          STATE=build/DerivedData/source-state
-          OLD="$(sed -n 1p "$STATE" 2>/dev/null || true)"
-          OLD_PATCH="$(sed -n 2p "$STATE" 2>/dev/null || true)"
-          [ -n "$OLD" ] || exit 0
-          if ! git cat-file -e "$OLD^{commit}" 2>/dev/null && ! git fetch -q --depth=1 origin "$OLD"; then
-            echo "Previous commit $OLD is gone, rebuilding everything"
-            rm -rf build/DerivedData/Build
-            exit 0
-          fi
-          git diff --name-only -z --no-renames --diff-filter=AMT "$OLD" HEAD | xargs -0 touch -h 2>/dev/null || true
-          git diff --raw --no-abbrev "$OLD" HEAD | awk '$1 == ":160000" || $2 == "160000" { print $NF }' | while read -r SUB; do
-            echo "Submodule $SUB changed"
-            find "$SUB" -type f -not -path '*/.git/*' -exec touch -h {} +
-          done
-          if [ "$(git diff HEAD | shasum -a 256 | cut -d' ' -f1)" != "$OLD_PATCH" ]; then
-            git diff --name-only -z HEAD | xargs -0 touch -h 2>/dev/null || true
-          fi
-          echo "Incremental build from $OLD: $(git diff --name-only "$OLD" HEAD | wc -l | tr -d ' ') changed paths"
-
       - name: Build app
         id: build-app
         run: |
@@ -198,26 +157,6 @@ jobs:
         with:
           path: build/DerivedData/CompilationCache.noindex
           key: ${{ steps.keys.outputs.cas }}${{ github.sha }}
-
-      - name: Record DerivedData source state
-        id: dd-state
-        if: steps.build-app.conclusion == 'success' && steps.restore-dd.outputs.cache-hit != 'true'
-        run: |
-          git rev-parse HEAD > build/DerivedData/source-state
-          git diff HEAD | shasum -a 256 | cut -d' ' -f1 >> build/DerivedData/source-state
-
-      - name: Save DerivedData
-        if: steps.dd-state.conclusion == 'success'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            build/DerivedData/Build
-            build/DerivedData/ModuleCache.noindex
-            build/DerivedData/SDKExplicitPrecompiledModules
-            build/DerivedData/SDKStatCaches.noindex
-            build/DerivedData/info.plist
-            build/DerivedData/source-state
-          key: ${{ steps.keys.outputs.dd }}${{ github.sha }}
 
       - name: Package app
         run: |
