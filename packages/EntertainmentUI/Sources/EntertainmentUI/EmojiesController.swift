@@ -1382,8 +1382,7 @@ public final class AnimatedEmojiesView : Control {
     private let searchBackdrop = View()
     
     private let searchBorder = View()
-    private let headerBlur = NSVisualEffectView()
-    private var headerBlurMaskHeight: CGFloat = 0
+    private let headerBlur = PassthroughVisualEffectView()
     private var tableBlurFilter: NSObject?
     private var tableBlurMaskKey: NSSize?
     private let searchStatusView = PanelSearchStatusView(frame: .zero)
@@ -1615,21 +1614,7 @@ public final class AnimatedEmojiesView : Control {
         let blursTableContent = updateTableBlur(enabled: blursUnderHeader, height: tabs.frame.maxY - tableView.frame.minY)
         headerBlur.isHidden = !blursUnderHeader || blursTableContent
         if blursUnderHeader && !blursTableContent {
-            let fade: CGFloat = 16
-            if headerBlurMaskHeight != fade {
-                headerBlurMaskHeight = fade
-                let mask = NSImage(size: NSMakeSize(1, fade + 2), flipped: false, drawingHandler: { rect in
-                    let gradient = NSGradient(starting: .clear, ending: .black)
-                    gradient?.draw(in: NSMakeRect(0, 0, rect.width, fade), angle: 90)
-                    NSColor.black.setFill()
-                    NSMakeRect(0, fade, rect.width, 2).fill()
-                    return true
-                })
-                mask.capInsets = NSEdgeInsets(top: 0, left: 0, bottom: fade, right: 0)
-                mask.resizingMode = .stretch
-                headerBlur.maskImage = mask
-            }
-            transition.updateFrame(view: headerBlur, frame: NSMakeRect(0, 0, size.width, max(0, searchContainer.frame.maxY) + fade))
+            transition.updateFrame(view: headerBlur, frame: NSMakeRect(0, 0, size.width, max(0, tabs.frame.maxY)))
         }
         
         if let categories = categories {
@@ -3146,5 +3131,11 @@ public extension MessageReaction.Reaction {
         default:
             return ""
         }
+    }
+}
+
+private final class PassthroughVisualEffectView: NSVisualEffectView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        return nil
     }
 }
