@@ -529,10 +529,19 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
         
         showMore.set(handler: { [weak self] control in
             if let view = self {
-                view.hasBubble = false
-                view.updateLayout(size: view.frame.size, transition: .immediate)
+                let previousWindow = view.window
+                if view.glassContainer != nil, view.hasBubble {
+                    view.collapseTail()
+                } else {
+                    view.hasBubble = false
+                    view.updateLayout(size: view.frame.size, transition: .immediate)
+                }
                 view.showMore.startLoading()
                 revealReactions?(view)
+                if view.glassContainer != nil, view.window !== previousWindow {
+                    view.glassHandedOff = true
+                    view.glassShapes.first?.isHidden = true
+                }
             }
         }, for: .Click)
         
@@ -771,13 +780,54 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
 
     deinit {
         appearTimer?.invalidate()
+        tailTimer?.invalidate()
         if let boundsObserver {
             NotificationCenter.default.removeObserver(boundsObserver)
         }
     }
 
     private var appearTimer: Foundation.Timer?
+    private var tailTimer: Foundation.Timer?
+    private var glassHandedOff: Bool = false
     private var isAppearing: Bool = false
+
+    private func collapseTail() {
+        guard glassShapes.count == 2 else {
+            return
+        }
+        let tail = glassShapes[1]
+        let bar = barRect(size: frame.size)
+        let from = tail.frame
+        let start = CACurrentMediaTime()
+        isAppearing = true
+        tailTimer?.invalidate()
+        let timer = Foundation.Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] timer in
+            let progress = min(1, (CACurrentMediaTime() - start) / 0.12)
+            let suck = CGFloat(progress * progress)
+            let size = from.width - (from.width - 8) * suck
+            let centerY = from.midY + (bar.midY - from.midY) * suck
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            tail.frame = NSMakeRect(from.midX - size / 2, centerY - size / 2, size, size)
+            if #available(macOS 26.0, *) {
+                (tail as? NSGlassEffectView)?.cornerRadius = size / 2
+            }
+            CATransaction.commit()
+            if progress >= 1 {
+                timer.invalidate()
+                tail.isHidden = true
+                guard let self else {
+                    return
+                }
+                self.tailTimer = nil
+                self.isAppearing = false
+                self.hasBubble = false
+                self.updateLayout(size: self.frame.size, transition: .immediate)
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        tailTimer = timer
+    }
 
     public var canAppearFromCursor: Bool {
         return glassContainer != nil && hasBubble && !TelegramUtilsHooks.shared.isLite(.animations)
@@ -971,7 +1021,7 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
             transition.updateFrame(view: glassContainer, frame: size.bounds)
             let shapes = hasBubble ? glassShapeRects(rect: rect) : [rect]
             for (index, glass) in glassShapes.enumerated() {
-                glass.isHidden = index >= shapes.count
+                glass.isHidden = index >= shapes.count || glassHandedOff
             }
             for (glass, shape) in zip(glassShapes, shapes) {
                 transition.updateFrame(view: glass, frame: shape)
