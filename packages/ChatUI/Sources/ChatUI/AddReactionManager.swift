@@ -448,7 +448,7 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector  {
             let content = GlassContentView(frame: frameRect.size.bounds)
             container.contentView = content
             let appearance = NSAppearance(named: presentation.colors.isDark ? .darkAqua : .aqua)
-            for _ in 0 ..< (hasBubble ? 3 : 1) {
+            for _ in 0 ..< (hasBubble ? 2 : 1) {
                 let glass = NSGlassEffectView(frame: .zero)
                 glass.style = .clear
                 glass.tintColor = nil
@@ -780,8 +780,7 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector  {
     
     private func glassShapeRects(rect: CGRect) -> [CGRect] {
         let bubbleRect = NSMakeRect(rect.width - 40, rect.maxY - 10, 20, 20)
-        let dotRect = NSMakeRect(bubbleRect.maxX + 2, bubbleRect.maxY - 3, 6, 6)
-        return [rect, bubbleRect, dotRect]
+        return [rect, bubbleRect]
     }
     
     private func getMaskPath(rect: CGRect, hasBubble: Bool = true) -> CGPath {

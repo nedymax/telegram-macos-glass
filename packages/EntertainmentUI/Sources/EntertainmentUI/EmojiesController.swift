@@ -1381,6 +1381,9 @@ public final class AnimatedEmojiesView : Control {
     private let searchBorder = View()
     private let headerBlur = NSVisualEffectView()
     private var headerBlurMaskHeight: CGFloat = 0
+    private static let tableBlurMaskName = "header_blur_mask"
+    private let tableBlurMask = CALayer()
+    private var tableBlurApplied = false
     private let searchStatusView = PanelSearchStatusView(frame: .zero)
     private var searchStatus: PanelSearchPresentation = .hidden
     
@@ -1408,6 +1411,50 @@ public final class AnimatedEmojiesView : Control {
     private var glassSurface: LiquidGlassView?
     private var isClearBackground: Bool {
         return mode.isTransparent || isGlass
+    }
+
+    private func updateTableBlur(enabled: Bool, height: CGFloat) -> Bool {
+        guard #available(macOS 26.0, *), enabled, let layer = tableView.layer else {
+            if tableBlurApplied {
+                tableView.layer?.filters = nil
+                tableBlurMask.removeFromSuperlayer()
+                tableBlurApplied = false
+            }
+            return false
+        }
+        if !tableBlurApplied {
+            guard let filter = ee2_makeVariableBlurFilter() else {
+                return false
+            }
+            filter.setValue(10, forKey: "inputRadius")
+            filter.setValue(true, forKey: "inputNormalizeEdges")
+            filter.setValue(AnimatedEmojiesView.tableBlurMaskName, forKey: "inputSourceSublayerName")
+            tableBlurMask.name = AnimatedEmojiesView.tableBlurMaskName
+            let steps = 8
+            for i in 0 ..< steps + 1 {
+                let stripe = CALayer()
+                stripe.backgroundColor = NSColor.black.withAlphaComponent(i == 0 ? 1 : 1 - CGFloat(i) / CGFloat(steps + 1)).cgColor
+                tableBlurMask.addSublayer(stripe)
+            }
+            layer.filters = [filter]
+            layer.addSublayer(tableBlurMask)
+            tableBlurApplied = true
+        }
+        let fade: CGFloat = 16
+        let stripes = tableBlurMask.sublayers ?? []
+        let step = fade / CGFloat(max(1, stripes.count - 1))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tableBlurMask.frame = layer.bounds
+        for (i, stripe) in stripes.enumerated() {
+            if i == 0 {
+                stripe.frame = CGRect(x: 0, y: 0, width: layer.bounds.width, height: max(0, height))
+            } else {
+                stripe.frame = CGRect(x: 0, y: max(0, height) + step * CGFloat(i - 1), width: layer.bounds.width, height: step)
+            }
+        }
+        CATransaction.commit()
+        return true
     }
 
     private func updateGlassSurface() {
@@ -1563,8 +1610,9 @@ public final class AnimatedEmojiesView : Control {
         }
         transition.updateFrame(view: searchBackdrop, frame: searchInsideRect)
         
-        headerBlur.isHidden = !blursUnderHeader
-        if blursUnderHeader {
+        let blursTableContent = updateTableBlur(enabled: blursUnderHeader, height: searchContainer.frame.maxY - tableView.frame.minY)
+        headerBlur.isHidden = !blursUnderHeader || blursTableContent
+        if blursUnderHeader && !blursTableContent {
             let fade: CGFloat = 16
             if headerBlurMaskHeight != fade {
                 headerBlurMaskHeight = fade
