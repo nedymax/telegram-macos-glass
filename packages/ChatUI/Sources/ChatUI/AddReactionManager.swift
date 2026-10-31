@@ -807,8 +807,15 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
 
         var revealed: [(NSView, CGFloat)] = documentView.subviews.map { ($0, documentView.convert($0.frame, to: self).midX) }
         revealed.append((showMore, showMore.frame.midX))
+        let textMask = CAGradientLayer()
+        let hint = aboveTextView
         if let aboveTextView {
-            revealed.append((aboveTextView, aboveTextView.frame.midX))
+            textMask.startPoint = CGPoint(x: 0, y: 0.5)
+            textMask.endPoint = CGPoint(x: 1, y: 0.5)
+            textMask.colors = [NSColor.clear.cgColor, NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
+            textMask.frame = .zero
+            aboveTextView.layer?.mask = textMask
+            aboveTextView.layer?.opacity = 0
         }
         for (view, _) in revealed {
             view.layer?.opacity = 0
@@ -836,6 +843,8 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
                 view.layer?.opacity = 1
                 view.layer?.transform = CATransform3DIdentity
             }
+            self.aboveTextView?.layer?.mask = nil
+            self.aboveTextView?.layer?.opacity = 1
             self.backgroundView.layer?.mask = savedMask
             self.backgroundView.layer?.masksToBounds = true
             self.scrollView.layer?.masksToBounds = true
@@ -879,6 +888,17 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
                 if #available(macOS 26.0, *) {
                     (tail as? NSGlassEffectView)?.cornerRadius = tailSize / 2
                 }
+            }
+
+            if let aboveTextView = hint {
+                let text = aboveTextView.frame
+                let feather: CGFloat = 24
+                let span = NSMakeRect(current.minX - text.minX - feather / 2, 0, current.width + feather, text.height)
+                textMask.frame = span
+                let edge = NSNumber(value: Double(min(0.5, feather / max(1, span.width))))
+                textMask.locations = [0, edge, NSNumber(value: 1 - edge.doubleValue), 1]
+                let coverage = min(1, max(0, (text.maxY - current.minY) / max(1, text.height)))
+                aboveTextView.layer?.opacity = Float(coverage)
             }
 
             let offsetY = current.midY - bar.midY
