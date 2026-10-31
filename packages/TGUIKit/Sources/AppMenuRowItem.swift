@@ -639,6 +639,7 @@ open class AppMenuRowView: AppMenuBasicItemView {
                 current = view
             } else {
                 current = TextView()
+                current.smoothFonts = true
                 self.textView = current
                 self.addSubview(current)
                 current.userInteractionEnabled = false
@@ -742,6 +743,7 @@ open class AppMenuRowView: AppMenuBasicItemView {
                 current = view
             } else {
                 current = TextView()
+                current.smoothFonts = true
                 current.userInteractionEnabled = false
                 current.isSelectable = false
                 current.isEventLess = true

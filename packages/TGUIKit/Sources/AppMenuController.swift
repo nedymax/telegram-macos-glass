@@ -84,6 +84,8 @@ final class MenuView: Control, TableViewDelegate {
     static let cornerRadius: CGFloat = 12
     private let shadowLayer = CALayer()
     private let shadowMask = CAShapeLayer()
+    private let rimLayer = CALayer()
+    private let hairlineLayer = CALayer()
     required init(frame frameRect: NSRect) {
         self.backgroundView = View(frame: frameRect.size.bounds)
         self.visualView = NSVisualEffectView(frame: frameRect.size.bounds)
@@ -125,6 +127,15 @@ final class MenuView: Control, TableViewDelegate {
         shadowMask.fillRule = .evenOdd
         self.layer?.masksToBounds = false
         self.layer?.insertSublayer(shadowLayer, at: 0)
+        rimLayer.borderWidth = 1
+        hairlineLayer.borderWidth = 0.5
+        for layer in [rimLayer, hairlineLayer] {
+            layer.cornerRadius = MenuView.cornerRadius
+            if #available(macOS 10.15, *) {
+                layer.cornerCurve = .continuous
+            }
+            self.layer?.addSublayer(layer)
+        }
         
         self.layer?.isOpaque = false
         self.layer?.shouldRasterize = glassView == nil
@@ -166,6 +177,11 @@ final class MenuView: Control, TableViewDelegate {
         cutout.addRect(bounds.insetBy(dx: -40, dy: -40))
         cutout.addPath(outline)
         shadowMask.path = cutout
+        rimLayer.frame = bounds
+        hairlineLayer.frame = bounds.insetBy(dx: -0.5, dy: -0.5)
+        hairlineLayer.cornerRadius = MenuView.cornerRadius + 0.5
+        rimLayer.zPosition = 1
+        hairlineLayer.zPosition = 1
         CATransaction.commit()
     }
     
@@ -197,6 +213,8 @@ final class MenuView: Control, TableViewDelegate {
         if let layer = tableView.layer {
             innerLayers.append(layer)
         }
+        innerLayers.append(rimLayer)
+        innerLayers.append(hairlineLayer)
         if morphsCorner {
             for layer in innerLayers where !layer.masksToBounds {
                 layer.masksToBounds = true
@@ -261,6 +279,8 @@ final class MenuView: Control, TableViewDelegate {
         self.setFrameSize(max, min(tableView.listHeight, min(maxHeight ?? appearMode.max, screen.visibleFrame.height - 200)))
         effectiveSize = max
         let appearance = NSAppearance(named: presentation.colors.isDark ? .darkAqua : .aqua)
+        rimLayer.borderColor = NSColor.white.withAlphaComponent(presentation.colors.isDark ? 0.1 : 0.5).cgColor
+        hairlineLayer.borderColor = NSColor.black.withAlphaComponent(presentation.colors.isDark ? 0.85 : 0.2).cgColor
         if let glassView {
             glassView.appearance = appearance
             backgroundView.backgroundColor = .clear
