@@ -274,13 +274,12 @@ public final class GifKeyboardView : View {
         searchFrost.material = .selection
         searchFrost.blendingMode = .withinWindow
         searchFrost.state = .active
-        searchFrost.layer?.cornerRadius = 10
+        searchFrost.layer?.cornerRadius = 15
         if #available(macOS 10.15, *) {
             searchFrost.layer?.cornerCurve = .continuous
         }
         searchFrost.layer?.masksToBounds = true
         searchFrost.isHidden = true
-        searchView.layer?.cornerRadius = 10
         searchContainer.addSubview(searchBackdrop)
         searchContainer.addSubview(searchFrost)
         searchContainer.addSubview(searchView)

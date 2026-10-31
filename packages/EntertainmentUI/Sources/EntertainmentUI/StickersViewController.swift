@@ -771,13 +771,13 @@ public class NStickersView : View {
         addSubview(tableView)
                 
         searchView.isLeftOrientated = true
-        searchView.layer?.cornerRadius = 10
+        searchView.layer?.cornerRadius = 15
 
         searchFrost.wantsLayer = true
         searchFrost.material = .selection
         searchFrost.blendingMode = .withinWindow
         searchFrost.state = .active
-        searchFrost.layer?.cornerRadius = 10
+        searchFrost.layer?.cornerRadius = 15
         if #available(macOS 10.15, *) {
             searchFrost.layer?.cornerCurve = .continuous
         }

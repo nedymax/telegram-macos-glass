@@ -1502,7 +1502,7 @@ public final class AnimatedEmojiesView : Control {
         addSubview(headerBlur)
         
         searchView.isLeftOrientated = true
-        searchView.layer?.cornerRadius = 10
+        searchView.layer?.cornerRadius = 15
 
         searchFrost.wantsLayer = true
         if #available(macOS 10.14, *) {
@@ -1510,7 +1510,7 @@ public final class AnimatedEmojiesView : Control {
         }
         searchFrost.blendingMode = .withinWindow
         searchFrost.state = .active
-        searchFrost.layer?.cornerRadius = 10
+        searchFrost.layer?.cornerRadius = 15
         if #available(macOS 10.15, *) {
             searchFrost.layer?.cornerCurve = .continuous
         }
@@ -1605,7 +1605,7 @@ public final class AnimatedEmojiesView : Control {
         
         transition.updateFrame(view: searchView, frame: searchInside.focus(NSMakeSize(size.width - 16, 30)))
         transition.updateFrame(view: searchFrost, frame: searchView.frame)
-        searchFrost.layer?.cornerRadius = 10
+        searchFrost.layer?.cornerRadius = 15
         transition.updateFrame(view: searchBorder, frame: NSMakeRect(0, searchContainer.frame.height - .borderSize, size.width, .borderSize))
         let alpha: CGFloat = inSearch && tableView.documentOffset.y > -headerInset ? 1 : 0
         transition.updateAlpha(view: searchBorder, alpha: alpha)
