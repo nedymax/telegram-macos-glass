@@ -36,45 +36,48 @@ public final class GlassSegmentView: View {
 
     public var usesMenuMaterial: Bool = false {
         didSet {
-            guard oldValue != usesMenuMaterial else {
-                return
+            if oldValue != usesMenuMaterial {
+                refreshMenuMaterial()
             }
-            let fallback = usesMenuMaterial && !(System.liquidGlass && System.liquidGlassAvailable) && System.blurEnabled
-            if fallback, menuBlur == nil {
-                let blur = NSVisualEffectView(frame: bounds)
-                blur.wantsLayer = true
-                blur.material = .menu
-                blur.blendingMode = .withinWindow
-                blur.state = .active
-                blur.layer?.cornerRadius = GlassSegmentView.height / 2
-                blur.layer?.masksToBounds = true
-                addSubview(blur, positioned: .above, relativeTo: glass)
-                menuBlur = blur
-                menuShadow.shadowColor = NSColor.black.cgColor
-                menuShadow.shadowOpacity = 0.2
-                menuShadow.shadowRadius = 8
-                menuShadow.shadowOffset = NSMakeSize(0, -2)
-                menuShadowMask.fillRule = .evenOdd
-                menuShadow.mask = menuShadowMask
-                menuRim.borderWidth = 1
-                menuHairline.borderWidth = 0.5
-                layer?.insertSublayer(menuShadow, at: 0)
-                for layer in [menuRim, menuHairline] {
-                    layer.cornerRadius = GlassSegmentView.height / 2
-                    layer.zPosition = 1
-                    self.layer?.addSublayer(layer)
-                }
-            } else if !fallback, let blur = menuBlur {
-                blur.removeFromSuperview()
-                menuBlur = nil
-                for layer in [menuShadow, menuRim, menuHairline] {
-                    layer.removeFromSuperlayer()
-                }
-            }
-            glass.isHidden = menuBlur != nil
-            applyTheme()
-            needsLayout = true
         }
+    }
+
+    public func refreshMenuMaterial() {
+        let fallback = usesMenuMaterial && !(System.liquidGlass && System.liquidGlassAvailable) && System.blurEnabled
+        if fallback, menuBlur == nil {
+            let blur = NSVisualEffectView(frame: bounds)
+            blur.wantsLayer = true
+            blur.material = .menu
+            blur.blendingMode = .withinWindow
+            blur.state = .active
+            blur.layer?.cornerRadius = GlassSegmentView.height / 2
+            blur.layer?.masksToBounds = true
+            addSubview(blur, positioned: .above, relativeTo: glass)
+            menuBlur = blur
+            menuShadow.shadowColor = NSColor.black.cgColor
+            menuShadow.shadowOpacity = 0.2
+            menuShadow.shadowRadius = 8
+            menuShadow.shadowOffset = NSMakeSize(0, -2)
+            menuShadowMask.fillRule = .evenOdd
+            menuShadow.mask = menuShadowMask
+            menuRim.borderWidth = 1
+            menuHairline.borderWidth = 0.5
+            layer?.insertSublayer(menuShadow, at: 0)
+            for layer in [menuRim, menuHairline] {
+                layer.cornerRadius = GlassSegmentView.height / 2
+                layer.zPosition = 1
+                self.layer?.addSublayer(layer)
+            }
+        } else if !fallback, let blur = menuBlur {
+            blur.removeFromSuperview()
+            menuBlur = nil
+            for layer in [menuShadow, menuRim, menuHairline] {
+                layer.removeFromSuperlayer()
+            }
+        }
+        glass.isHidden = menuBlur != nil
+        applyTheme()
+        needsLayout = true
     }
 
     public var contentSize: NSSize {

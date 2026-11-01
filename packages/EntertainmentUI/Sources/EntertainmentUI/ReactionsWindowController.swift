@@ -155,6 +155,8 @@ public final class ReactionsWindowController : NSObject {
             return glassView != nil
         }
 
+        var didStartMorph: (() -> Void)?
+
         func initFake(_ bar: NSRect) {
             isMorphing = true
             if #available(macOS 26.0, *), let glassView {
@@ -184,6 +186,11 @@ public final class ReactionsWindowController : NSObject {
                 let seconds = now - begin - absorb
                 if seconds < 0 {
                     return false
+                }
+                if self.contentView.layer?.opacity != 1 {
+                    self.contentView.layer?.opacity = 1
+                    self.didStartMorph?()
+                    self.didStartMorph = nil
                 }
                 if seconds >= duration {
                     self.finishMorph()
@@ -473,6 +480,11 @@ public final class ReactionsWindowController : NSObject {
         
         let barInInitial = NSMakeRect(10, 5, initialView.frame.width - 20, initialView.frame.height - 20)
         let barRect = view.convert(barInInitial, from: initialView)
+        self.initialPlayers = initialView.collect()
+        view.didStartMorph = { [weak initialView] in
+            initialView?.revealDidStart()
+            initialView?.removeFromSuperview()
+        }
         view.initFake(barRect)
 
         overlay.frame = context.window.bounds
@@ -480,16 +492,10 @@ public final class ReactionsWindowController : NSObject {
 
         
         let ready = emojies.ready.get() |> take(1)
-        _ = ready.start(next: { [weak view, weak initialView, weak self] _ in
-            guard let view = view, let initialView = initialView, let `self` = self else {
+        _ = ready.start(next: { [weak view, weak self] _ in
+            guard let view = view, let `self` = self else {
                 return
             }
-            initialView.revealDidStart()
-            CATransaction.begin()
-            initialView.removeFromSuperview()
-            CATransaction.commit()
-
-            self.initialPlayers = initialView.collect()
             CATransaction.begin()
             view.revealContent()
             CATransaction.commit()

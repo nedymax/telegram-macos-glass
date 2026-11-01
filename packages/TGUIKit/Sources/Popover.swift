@@ -539,6 +539,9 @@ public func showPopover(for control:Control, with controller:ViewController, edg
 
 private extension NSView {
     var containsGlass: Bool {
+        if self is NSVisualEffectView {
+            return true
+        }
         if #available(macOS 26.0, *), self is NSGlassEffectView {
             return true
         }
