@@ -93,6 +93,7 @@ jobs:
           echo "frameworks=frameworks-$XCODE_HASH-$SUBMODULES-" >> "$GITHUB_OUTPUT"
           echo "xcode=$XCODE_HASH" >> "$GITHUB_OUTPUT"
           echo "cas=compilation-cache-$XCODE_HASH-" >> "$GITHUB_OUTPUT"
+          echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Restore native frameworks
         id: restore-frameworks
@@ -135,7 +136,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: build/DerivedData/CompilationCache.noindex
-          key: ${{ steps.keys.outputs.cas }}${{ github.sha }}
+          key: ${{ steps.keys.outputs.cas }}${{ steps.keys.outputs.head }}
           restore-keys: |
             ${{ steps.keys.outputs.cas }}
 
@@ -162,7 +163,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: build/DerivedData/CompilationCache.noindex
-          key: ${{ steps.keys.outputs.cas }}${{ github.sha }}
+          key: ${{ steps.keys.outputs.cas }}${{ steps.keys.outputs.head }}
 
       - name: Package app
         run: |
