@@ -405,7 +405,7 @@ private enum StickerPackEntry : TableItemListNodeEntry {
     func item(_ arguments: StickerPanelArguments, initialSize: NSSize) -> TableRowItem {
         switch self {
         case let .whitespace(_, value):
-            return GeneralRowItem.init(initialSize, height: value, stableId: stableId)
+            return GeneralRowItem.init(initialSize, height: value, stableId: stableId, backgroundColor: .clear)
         case let .pack(_, files, packInfo, collectionId, hasCreate):
             let addTile = hasCreate ? arguments.createSticker.map { action in
                 return StickerPackPanelAddTile(position: .leading, accessibilityLabel: strings().stickersViewControllerCreateSticker, action: action)
@@ -780,6 +780,9 @@ public class NStickersView : View {
         super.init(frame: frameRect)
         
         addSubview(tableView)
+        tableView.getBackgroundColor = { [weak self] in
+            return self?.isGlass == true ? .clear : (self?.presentation ?? theme).colors.background
+        }
                 
         searchView.isLeftOrientated = true
         searchView.layer?.cornerRadius = 15
@@ -852,7 +855,7 @@ public class NStickersView : View {
     
     func updateSearchStatus(isSearching: Bool, isLoading: Bool) {
         searchStatus = .resolve(isSearching: isSearching, isLoading: isLoading, hasResults: !isSearching || stickerSearchHasResults(tableView))
-        searchStatusView.updateSearchStatus(searchStatus, kind: .stickers, query: searchView.query, theme: searchPresentationTheme ?? theme)
+        searchStatusView.updateSearchStatus(searchStatus, kind: .stickers, query: searchView.query, theme: searchPresentationTheme ?? theme, clearBackground: usesMenuPanel)
         needsLayout = true
     }
 
@@ -1103,12 +1106,12 @@ public class NStickersView : View {
         self.tableView.backgroundColor = background
         self.tableView.documentView?.background = background
         searchPresentationTheme = theme
-        self.searchStatusView.updateSearchStatus(searchStatus, kind: .stickers, query: searchView.query, theme: theme)
+        self.searchStatusView.updateSearchStatus(searchStatus, kind: .stickers, query: searchView.query, theme: theme, clearBackground: usesMenuPanel)
         self.searchContainer.backgroundColor = background
         self.tabsContainer.backgroundColor = background
         self.searchBorder.backgroundColor = border
         self.searchBackdrop.backgroundColor = theme.colors.background.withAlphaComponent(0.85)
-        self.searchBackdrop.isHidden = !isGlass
+        self.searchBackdrop.isHidden = !isGlass || usesMenuPanel
 
         self.searchFrost.isHidden = !usesMenuPanel || TelegramUtilsHooks.shared.isLite(.blur)
         self.searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
@@ -1175,7 +1178,8 @@ public class NStickersView : View {
         if let restrictedView = restrictedView {
             transition.updateFrame(view: restrictedView, frame: size.bounds)
         }
-        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabsContainer.frame.maxY - headerInset, size.width, size.height + headerInset))
+        let tableY = headerInset > 0 ? max(0, tabsContainer.frame.maxY - headerInset) : tabsContainer.frame.maxY
+        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tableY, size.width, headerInset > 0 ? size.height - tableY : size.height))
         _ = headerBlurFilter.update(tableView, enabled: headerInset > 0, height: 46 - tableView.frame.minY)
 
                 

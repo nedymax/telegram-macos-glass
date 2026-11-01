@@ -1548,7 +1548,8 @@ public final class AnimatedEmojiesView : Control {
             insets.top = headerInset
             tableView.contentInsets = insets
         }
-        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabs.frame.maxY - headerInset, size.width, size.height - initial + headerInset))
+        let tableY = headerInset > 0 ? max(0, tabs.frame.maxY - headerInset) : tabs.frame.maxY
+        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tableY, size.width, headerInset > 0 ? size.height - tableY : size.height - initial))
         
         transition.updateAlpha(view: borderView, alpha: inSearch || usesPickerStyle ? 0 : 1)
 
@@ -1619,7 +1620,7 @@ public final class AnimatedEmojiesView : Control {
             glassSurface.updateLocalizationAndTheme(theme: theme)
         }
         searchBackdrop.backgroundColor = theme.colors.background.withAlphaComponent(0.85)
-        searchBackdrop.isHidden = !isGlass
+        searchBackdrop.isHidden = !isGlass || usesPickerStyle
         if isGlass || (usesPickerStyle && !searchFrost.isHidden) {
             searchInside.backgroundColor = .clear
         } else {
@@ -1636,7 +1637,7 @@ public final class AnimatedEmojiesView : Control {
         }
         
         self.searchView.updateLocalizationAndTheme(theme: theme)
-        searchStatusView.updateSearchStatus(searchStatus, kind: .emoji, query: searchView.query, theme: presentation ?? (theme as! TelegramPresentationTheme))
+        searchStatusView.updateSearchStatus(searchStatus, kind: .emoji, query: searchView.query, theme: presentation ?? (theme as! TelegramPresentationTheme), clearBackground: usesPickerStyle)
     }
     
     public required init?(coder: NSCoder) {
@@ -1708,7 +1709,7 @@ public final class AnimatedEmojiesView : Control {
             }
         }
         searchStatus = .resolve(isSearching: state.search != nil, isLoading: state.searchLoading, hasResults: hasSearchResults)
-        searchStatusView.updateSearchStatus(searchStatus, kind: .emoji, query: searchView.query, theme: presentation ?? theme)
+        searchStatusView.updateSearchStatus(searchStatus, kind: .emoji, query: searchView.query, theme: presentation ?? theme, clearBackground: usesPickerStyle)
         
 //        searchContainer.isHidden = mode == .reactions
 //        tableView.scrollerInsets = mode == .reactions ? .init() : .init(left: 0, right: 0, top: 46, bottom: 50)

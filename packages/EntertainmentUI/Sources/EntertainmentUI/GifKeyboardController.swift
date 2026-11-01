@@ -363,7 +363,8 @@ public final class GifKeyboardView : View {
         transition.updateFrame(view: searchFrost, frame: searchView.frame)
         transition.updateFrame(view: searchBorder, frame: NSMakeRect(0, searchContainer.frame.height - .borderSize, size.width, .borderSize))
         
-        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabs.frame.maxY - headerInset, size.width, size.height + headerInset))
+        let tableY = headerInset > 0 ? max(0, tabs.frame.maxY - headerInset) : tabs.frame.maxY
+        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tableY, size.width, headerInset > 0 ? size.height - tableY : size.height))
         _ = headerBlurFilter.update(tableView, enabled: headerInset > 0, height: 46 - tableView.frame.minY)
 
         transition.updateFrame(view: searchStatusView, frame: NSMakeRect(0, searchContainer.frame.maxY, size.width, max(0, size.height - searchContainer.frame.maxY - 56)))
@@ -388,13 +389,13 @@ public final class GifKeyboardView : View {
         super.updateLocalizationAndTheme(theme: theme)
         let border: NSColor = isGlass ? theme.colors.grayIcon.withAlphaComponent(0.1) : theme.colors.border
         self.backgroundColor = isGlass ? .clear : theme.colors.background
-        searchStatusView.updateSearchStatus(searchStatus, kind: .gifs, query: searchView.query, theme: presentation ?? (theme as! TelegramPresentationTheme))
+        searchStatusView.updateSearchStatus(searchStatus, kind: .gifs, query: searchView.query, theme: presentation ?? (theme as! TelegramPresentationTheme), clearBackground: usesMenuPanel)
         borderView.backgroundColor = border
         tabs.backgroundColor = isGlass ? .clear : theme.colors.background
         searchContainer.backgroundColor = isGlass ? .clear : theme.colors.background
         searchBorder.backgroundColor = border
         searchBackdrop.backgroundColor = theme.colors.background.withAlphaComponent(0.85)
-        searchBackdrop.isHidden = !isGlass
+        searchBackdrop.isHidden = !isGlass || usesMenuPanel
         self.searchView.updateLocalizationAndTheme(theme: theme)
         searchFrost.isHidden = !usesMenuPanel || TelegramUtilsHooks.shared.isLite(.blur)
         searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
@@ -425,7 +426,7 @@ public final class GifKeyboardView : View {
     
     func update(sections: TableUpdateTransition, packs: TableUpdateTransition, searchStatus: PanelSearchPresentation) {
         self.searchStatus = searchStatus
-        searchStatusView.updateSearchStatus(searchStatus, kind: .gifs, query: searchView.query, theme: presentation ?? theme)
+        searchStatusView.updateSearchStatus(searchStatus, kind: .gifs, query: searchView.query, theme: presentation ?? theme, clearBackground: usesMenuPanel)
         self.tableView.merge(with: sections)
         self.packsView.merge(with: packs)
     }
