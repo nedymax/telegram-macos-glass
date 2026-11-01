@@ -781,7 +781,7 @@ public class NStickersView : View {
         
         addSubview(tableView)
         tableView.getBackgroundColor = { [weak self] in
-            return self?.isGlass == true ? .clear : (self?.presentation ?? theme).colors.background
+            return self?.usesMenuPanel == true ? .clear : (self?.presentation ?? theme).colors.background
         }
                 
         searchView.isLeftOrientated = true
@@ -1103,6 +1103,7 @@ public class NStickersView : View {
         let border: NSColor = isGlass ? theme.colors.grayIcon.withAlphaComponent(0.1) : theme.colors.border
         self.separator.backgroundColor = border
         self.tableView.updateLocalizationAndTheme(theme: theme)
+        self.tableView.layer?.backgroundColor = self.tableView.getBackgroundColor().cgColor
         self.tableView.backgroundColor = background
         self.tableView.documentView?.background = background
         searchPresentationTheme = theme
