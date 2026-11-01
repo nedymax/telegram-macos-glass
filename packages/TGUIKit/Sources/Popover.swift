@@ -53,6 +53,7 @@ open class Popover: NSObject {
     
     var readyDisposable:MetaDisposable = MetaDisposable()
     private let `static`: Bool
+    private let glassShadowContainer = CALayer()
     private let glassShadow = CALayer()
     private let glassShadowMask = CAShapeLayer()
     required public init(controller:ViewController, static: Bool, animationMode: AnimationMode) {
@@ -157,7 +158,7 @@ open class Popover: NSObject {
     }
 
     private func updateShadowPath(force: Bool = false) {
-        guard let layer = background.layer, force || layer.shadowPath != nil || glassShadow.superlayer != nil else {
+        guard let layer = background.layer, force || layer.shadowPath != nil || glassShadowContainer.superlayer != nil else {
             return
         }
         guard let overlay = overlay else {
@@ -178,21 +179,23 @@ open class Popover: NSObject {
             if #available(macOS 14.0, *) {
                 background.clipsToBounds = false
             }
-            if glassShadow.superlayer == nil {
+            if glassShadowContainer.superlayer == nil {
                 glassShadowMask.fillRule = .evenOdd
-                glassShadow.mask = glassShadowMask
-                layer.insertSublayer(glassShadow, at: 0)
+                glassShadowContainer.mask = glassShadowMask
+                glassShadowContainer.addSublayer(glassShadow)
+                layer.insertSublayer(glassShadowContainer, at: 0)
             }
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            glassShadow.frame = layer.bounds
-            glassShadow.shadowPath = outline
-            let maskFrame = layer.bounds.insetBy(dx: -40, dy: -40)
+            let containerFrame = layer.bounds.insetBy(dx: -40, dy: -40)
             let cutout = CGMutablePath()
-            cutout.addRect(maskFrame.size.bounds)
+            cutout.addRect(containerFrame.size.bounds)
             cutout.addPath(outline, transform: CGAffineTransform(translationX: 40, y: 40))
-            glassShadowMask.frame = maskFrame
+            glassShadowContainer.frame = containerFrame
+            glassShadowMask.frame = containerFrame.size.bounds
             glassShadowMask.path = cutout
+            glassShadow.frame = NSMakeRect(40, 40, layer.bounds.width, layer.bounds.height)
+            glassShadow.shadowPath = outline
             CATransaction.commit()
         } else {
             layer.shadowPath = outline

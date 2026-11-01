@@ -10,6 +10,7 @@ public final class GlassSegmentView: View {
     private let selectionView = View()
     private var menuBlur: NSVisualEffectView?
     private let menuVeil = View()
+    private let menuShadowContainer = CALayer()
     private let menuShadow = CALayer()
     private let menuShadowMask = CAShapeLayer()
     private let menuRim = CALayer()
@@ -66,10 +67,11 @@ public final class GlassSegmentView: View {
             menuShadow.shadowRadius = 8
             menuShadow.shadowOffset = NSMakeSize(0, -2)
             menuShadowMask.fillRule = .evenOdd
-            menuShadow.mask = menuShadowMask
+            menuShadowContainer.mask = menuShadowMask
+            menuShadowContainer.addSublayer(menuShadow)
             menuRim.borderWidth = 1
             menuHairline.borderWidth = 0.5
-            layer?.insertSublayer(menuShadow, at: 0)
+            layer?.insertSublayer(menuShadowContainer, at: 0)
             for layer in [menuRim, menuHairline] {
                 layer.cornerRadius = GlassSegmentView.height / 2
                 layer.zPosition = 1
@@ -78,7 +80,7 @@ public final class GlassSegmentView: View {
         } else if !fallback, let blur = menuBlur {
             blur.removeFromSuperview()
             menuBlur = nil
-            for layer in [menuShadow, menuRim, menuHairline] {
+            for layer in [menuShadowContainer, menuRim, menuHairline] {
                 layer.removeFromSuperlayer()
             }
         }
@@ -227,15 +229,16 @@ public final class GlassSegmentView: View {
             transition.updateFrame(view: menuBlur, frame: size.bounds)
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            menuShadow.frame = size.bounds
             let outline = CGPath(roundedRect: size.bounds, cornerWidth: size.height / 2, cornerHeight: size.height / 2, transform: nil)
-            menuShadow.shadowPath = outline
-            let maskFrame = size.bounds.insetBy(dx: -30, dy: -30)
+            let containerFrame = size.bounds.insetBy(dx: -30, dy: -30)
             let cutout = CGMutablePath()
-            cutout.addRect(maskFrame.size.bounds)
+            cutout.addRect(containerFrame.size.bounds)
             cutout.addPath(outline, transform: CGAffineTransform(translationX: 30, y: 30))
-            menuShadowMask.frame = maskFrame
+            menuShadowContainer.frame = containerFrame
+            menuShadowMask.frame = containerFrame.size.bounds
             menuShadowMask.path = cutout
+            menuShadow.frame = NSMakeRect(30, 30, size.width, size.height)
+            menuShadow.shadowPath = outline
             menuRim.frame = size.bounds
             menuHairline.frame = size.bounds.insetBy(dx: -0.5, dy: -0.5)
             menuHairline.cornerRadius = GlassSegmentView.height / 2 + 0.5
