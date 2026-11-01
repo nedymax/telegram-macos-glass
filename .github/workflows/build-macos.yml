@@ -94,6 +94,9 @@ jobs:
           echo "xcode=$XCODE_HASH" >> "$GITHUB_OUTPUT"
           echo "cas=compilation-cache-$XCODE_HASH-" >> "$GITHUB_OUTPUT"
           echo "head=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          MANIFESTS="$(git ls-files -z '*Package.swift' '*Package.resolved' | xargs -0 shasum -a 256 | shasum -a 256 | cut -d' ' -f1)"
+          echo "spm=spm-$XCODE_HASH-$MANIFESTS" >> "$GITHUB_OUTPUT"
+          echo "spm_prefix=spm-$XCODE_HASH-" >> "$GITHUB_OUTPUT"
 
       - name: Restore native frameworks
         id: restore-frameworks
@@ -140,6 +143,17 @@ jobs:
           restore-keys: |
             ${{ steps.keys.outputs.cas }}
 
+      - name: Restore package graph
+        id: restore-spm
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            build/DerivedData/SourcePackages
+          key: ${{ steps.keys.outputs.spm }}
+          restore-keys: |
+            ${{ steps.keys.outputs.spm_prefix }}
+
       - name: Build app
         id: build-app
         run: |
@@ -153,8 +167,9 @@ jobs:
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
             COMPILER_INDEX_STORE_ENABLE=NO \
             COMPILATION_CACHE_ENABLE_CACHING=YES \
+            -showBuildTimingSummary \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build 2>&1 | tee xcodebuild.log | grep -E '(error|warning: unable|BUILD (SUCCEEDED|FAILED))' || true
+            build 2>&1 | tee xcodebuild.log | grep -E '(error|warning: unable|BUILD (SUCCEEDED|FAILED)|Resolve Package Graph|Resolved source packages|Build Timing Summary| seconds \()' || true
           du -sh build/DerivedData/* 2>/dev/null || true
           grep -q 'BUILD SUCCEEDED' xcodebuild.log
 
@@ -164,6 +179,15 @@ jobs:
         with:
           path: build/DerivedData/CompilationCache.noindex
           key: ${{ steps.keys.outputs.cas }}${{ steps.keys.outputs.head }}
+
+      - name: Save package graph
+        if: always() && steps.build-app.conclusion != 'skipped' && steps.restore-spm.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            build/DerivedData/SourcePackages
+          key: ${{ steps.keys.outputs.spm }}
 
       - name: Package app
         run: |
