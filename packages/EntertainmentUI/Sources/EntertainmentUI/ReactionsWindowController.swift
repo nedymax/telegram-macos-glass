@@ -94,15 +94,17 @@ public final class ReactionsWindowController : NSObject {
                     return
                 }
                 let seconds = CACurrentMediaTime() - start
-                if seconds >= 0.6 {
+                if seconds >= 0.45 {
                     self.finishMorph()
                     return
                 }
-                let progress = morphSpring(seconds, omega: 19, damping: 0.86)
+                let progress = morphSpring(seconds, omega: 24, damping: 0.88)
                 let rect = NSMakeRect(bar.minX + (target.minX - bar.minX) * progress, bar.minY + (target.minY - bar.minY) * progress, bar.width + (target.width - bar.width) * progress, bar.height + (target.height - bar.height) * progress)
                 self.applyMorph(rect)
-                let fade = 1 - pow(1 - min(1, seconds / 0.32), 3)
-                self.tintGlass?.alphaValue = 1 - fade
+                let linear = min(1, seconds / 0.45)
+                let material = linear * linear * (3 - 2 * linear)
+                self.glassView?.alphaValue = min(1, material / 0.4)
+                self.tintGlass?.alphaValue = 1 - max(0, (material - 0.25) / 0.75)
             }
             RunLoop.main.add(timer, forMode: .common)
             morphTimer = timer
@@ -118,6 +120,7 @@ public final class ReactionsWindowController : NSObject {
             isMorphing = false
             tintGlass?.removeFromSuperview()
             tintGlass = nil
+            glassView?.alphaValue = 1
             applyMorph(bounds)
             if glassView == nil {
                 let shadow = NSShadow()
@@ -130,6 +133,10 @@ public final class ReactionsWindowController : NSObject {
             needsLayout = true
         }
 
+        var usesGlass: Bool {
+            return glassView != nil
+        }
+
         func initFake(_ bar: NSRect) {
             isMorphing = true
             if #available(macOS 26.0, *), let glassView {
@@ -140,6 +147,7 @@ public final class ReactionsWindowController : NSObject {
                 tint.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
                 container.addSubview(tint, positioned: .above, relativeTo: glassView)
                 tintGlass = tint
+                glassView.alphaValue = 0
             }
             applyMorph(bar)
         }
@@ -469,7 +477,7 @@ public final class ReactionsWindowController : NSObject {
         
         var panel: Window? = self.panel
         if animated {
-            if let v = panel?.contentView?.subviews.first(where: { $0 is V }) {
+            if let v = panel?.contentView?.subviews.first(where: { $0 is V }) as? V, !v.usesGlass {
                 v.layer?.rasterizationScale = System.backingScale
                 v.layer?.shouldRasterize = true
             }
