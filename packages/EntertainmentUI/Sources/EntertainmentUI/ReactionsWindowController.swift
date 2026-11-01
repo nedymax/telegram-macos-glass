@@ -23,6 +23,7 @@ public final class ReactionsWindowController : NSObject {
         private let container = View()
         private let theme: TelegramPresentationTheme
         private var tintGlass: NSView?
+        private var morphTimer: Foundation.Timer?
         private var isMorphing = false
         init(_ content: NSView, theme: TelegramPresentationTheme) {
             
@@ -82,63 +83,41 @@ public final class ReactionsWindowController : NSObject {
             contentView.layer?.opacity = 0
         }
         
-        func revealContent() {
-            guard contentView.layer?.opacity != 1 else {
-                return
-            }
+        func appearAnimated(from bar: NSRect) {
             contentView.layer?.opacity = 1
-            contentView.layer?.animateAlpha(from: 0, to: 1, duration: 0.15)
-        }
-
-        private var morphLink: AnyObject?
-        private var morphTimer: Foundation.Timer?
-        private var morphStep: ((CFTimeInterval) -> Bool)?
-
-        private func startTicking(_ step: @escaping (CFTimeInterval) -> Bool) {
-            stopTicking()
-            morphStep = step
-            if #available(macOS 14.0, *) {
-                let link = displayLink(target: self, selector: #selector(tick))
-                link.add(to: .main, forMode: .common)
-                morphLink = link
-            } else {
-                let timer = Foundation.Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] timer in
-                    guard let self else {
-                        timer.invalidate()
-                        return
-                    }
-                    self.tick()
-                }
-                RunLoop.main.add(timer, forMode: .common)
-                morphTimer = timer
-            }
-        }
-
-        private func stopTicking() {
-            if #available(macOS 14.0, *) {
-                (morphLink as? CADisplayLink)?.invalidate()
-            }
-            morphLink = nil
+            let target = bounds
+            let start = CACurrentMediaTime()
             morphTimer?.invalidate()
-            morphTimer = nil
-            morphStep = nil
-        }
-
-        @objc private func tick() {
-            if morphStep?(CACurrentMediaTime()) == true {
-                stopTicking()
+            let timer = Foundation.Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] timer in
+                guard let self else {
+                    timer.invalidate()
+                    return
+                }
+                let seconds = CACurrentMediaTime() - start
+                if seconds >= 0.6 {
+                    self.finishMorph()
+                    return
+                }
+                let progress = morphSpring(seconds, omega: 19, damping: 0.86)
+                let rect = NSMakeRect(bar.minX + (target.minX - bar.minX) * progress, bar.minY + (target.minY - bar.minY) * progress, bar.width + (target.width - bar.width) * progress, bar.height + (target.height - bar.height) * progress)
+                self.applyMorph(rect)
+                let fade = 1 - pow(1 - min(1, seconds / 0.32), 3)
+                self.tintGlass?.alphaValue = 1 - fade
             }
+            RunLoop.main.add(timer, forMode: .common)
+            morphTimer = timer
         }
 
         deinit {
-            stopTicking()
+            morphTimer?.invalidate()
         }
 
         private func finishMorph() {
+            morphTimer?.invalidate()
+            morphTimer = nil
             isMorphing = false
             tintGlass?.removeFromSuperview()
             tintGlass = nil
-            glassView?.alphaValue = 1
             applyMorph(bounds)
             if glassView == nil {
                 let shadow = NSShadow()
@@ -151,10 +130,6 @@ public final class ReactionsWindowController : NSObject {
             needsLayout = true
         }
 
-        var usesGlass: Bool {
-            return glassView != nil
-        }
-
         func initFake(_ bar: NSRect) {
             isMorphing = true
             if #available(macOS 26.0, *), let glassView {
@@ -165,43 +140,8 @@ public final class ReactionsWindowController : NSObject {
                 tint.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
                 container.addSubview(tint, positioned: .above, relativeTo: glassView)
                 tintGlass = tint
-                tint.alphaValue = 0
-                glassView.alphaValue = 0
             }
             applyMorph(bar)
-
-            let target = bounds
-            let swell = bar.insetBy(dx: -2, dy: -1.5)
-            let duration: Double = 0.42
-            let absorb: Double = 0.04
-            var start: CFTimeInterval?
-            startTicking { [weak self] now in
-                guard let self else {
-                    return true
-                }
-                let begin = start ?? now
-                start = begin
-                let seconds = now - begin - absorb
-                if seconds < 0 {
-                    return false
-                }
-                if self.contentView.layer?.opacity != 1 {
-                    self.contentView.layer?.opacity = 1
-                }
-                if seconds >= duration {
-                    self.finishMorph()
-                    return true
-                }
-                let anticipation = CGFloat(sin(min(1, seconds / 0.05) * .pi / 2))
-                let from = NSMakeRect(bar.minX + (swell.minX - bar.minX) * anticipation, bar.minY + (swell.minY - bar.minY) * anticipation, bar.width + (swell.width - bar.width) * anticipation, bar.height + (swell.height - bar.height) * anticipation)
-                let progress = seconds < 0.03 ? 0 : morphSpring(seconds - 0.03, omega: 22, damping: 0.74)
-                self.applyMorph(NSMakeRect(from.minX + (target.minX - from.minX) * progress, from.minY + (target.minY - from.minY) * progress, from.width + (target.width - from.width) * progress, from.height + (target.height - from.height) * progress))
-                let linear = min(1, seconds / 0.3)
-                let material = linear * linear * (3 - 2 * linear)
-                self.glassView?.alphaValue = min(1, material / 0.4)
-                self.tintGlass?.alphaValue = 1 - max(0, (material - 0.25) / 0.75)
-                return false
-            }
         }
 
         private func applyMorph(_ rect: NSRect) {
@@ -487,14 +427,13 @@ public final class ReactionsWindowController : NSObject {
             guard let view = view, let initialView = initialView, let `self` = self else {
                 return
             }
-            initialView.revealDidStart()
             CATransaction.begin()
             initialView.removeFromSuperview()
             CATransaction.commit()
 
             self.initialPlayers = initialView.collect()
             CATransaction.begin()
-            view.revealContent()
+            view.appearAnimated(from: barRect)
             CATransaction.commit()
             
             if initialScreenRect.origin.y - 200 < 0, let panel = self.panel {
@@ -529,13 +468,11 @@ public final class ReactionsWindowController : NSObject {
         
         var panel: Window? = self.panel
         if animated {
-            if let v = panel?.contentView?.subviews.first(where: { $0 is V }) as? V {
-                v.layer?.animateScaleCenter(from: 1, to: 0.9, duration: 0.2, removeOnCompletion: false, timingFunction: .easeIn)
+            if let v = panel?.contentView?.subviews.first(where: { $0 is V }) {
+                v.layer?.rasterizationScale = System.backingScale
+                v.layer?.shouldRasterize = true
             }
-            NSAnimationContext.runAnimationGroup({ context in
-                context.duration = 0.2
-                panel?.animator().alphaValue = 0
-            }, completionHandler: {
+            panel?.contentView?.layer?.animateAlpha(from: 1, to: 0, duration: 0.2, removeOnCompletion: false, completion: { _ in
                 panel?.orderOut(nil)
                 panel = nil
             })
