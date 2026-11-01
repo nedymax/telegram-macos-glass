@@ -402,7 +402,7 @@ public final class GifKeyboardView : View {
         searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         if isGlass {
             let searchBackground = searchFrost.isHidden ? theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1) : .clear
-            self.searchView.searchTheme = SearchTheme(searchBackground, theme.search.searchImage, theme.search.clearImage, theme.search.placeholder, theme.search.textColor, theme.search.placeholderColor)
+            self.searchView.searchTheme = pickerSearchTheme(searchBackground, theme: theme, black: usesMenuPanel)
         } else {
             self.searchView.searchTheme = theme.search
         }

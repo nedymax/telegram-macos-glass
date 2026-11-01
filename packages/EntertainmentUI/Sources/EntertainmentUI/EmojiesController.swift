@@ -295,8 +295,12 @@ private struct State : Equatable {
     var availableReactions: AvailableReactions?
     
     var color: NSColor? = nil
+    var blackChrome: Bool = false
     
     static func ==(lhs: State, rhs: State) -> Bool {
+        if lhs.blackChrome != rhs.blackChrome {
+            return false
+        }
         
         if lhs.sections != rhs.sections {
             return false
@@ -416,6 +420,20 @@ private func emojiesRowSelection(_ selected: [EmojiesSectionRowItem.SelectedItem
     }
 }
 
+private struct EmojiTabsEquatable: Equatable {
+    let state: State.EmojiState
+    let blackChrome: Bool
+}
+
+func pickerChromeColor(_ enabled: Bool) -> NSColor? {
+    return enabled && !theme.colors.isDark ? theme.colors.text : nil
+}
+
+func pickerSearchTheme(_ background: NSColor, theme: PresentationTheme, black: Bool) -> SearchTheme {
+    let chrome: NSColor? = black && !theme.colors.isDark ? theme.colors.text : nil
+    return SearchTheme(background, chrome.map { theme.search.searchImage._NSImage.precomposed($0) } ?? theme.search.searchImage, theme.search.clearImage, theme.search.placeholder, theme.search.textColor, chrome ?? theme.search.placeholderColor)
+}
+
 private func packEntries(_ state: State, arguments: Arguments, presentation: TelegramPresentationTheme?) -> [InputDataEntry] {
     var entries:[InputDataEntry] = []
     
@@ -448,9 +466,9 @@ private func packEntries(_ state: State, arguments: Arguments, presentation: Tel
     }
     if hasRecent {
         let recentImage = TelegramThemeHooks.shared.image(.iconEmojiTabRecent)
-        let color = state.color ?? theme.colors.grayIcon
+        let color = state.color ?? pickerChromeColor(state.blackChrome) ?? theme.colors.grayIcon
         let icon = recentImage.precomposed(color.withAlphaComponent(0.8))
-        let activeIcon = recentImage.precomposed((state.color ?? theme.colors.grayIcon.darker()))
+        let activeIcon = recentImage.precomposed((state.color ?? pickerChromeColor(state.blackChrome) ?? theme.colors.grayIcon.darker()))
         entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_recent_pack, equatable: .init(color), comparable: nil, item: { initialSize, stableId in
             return ETabRowItem(initialSize, stableId: stableId, icon: icon, iconSelected: activeIcon)
         }))
@@ -459,8 +477,8 @@ private func packEntries(_ state: State, arguments: Arguments, presentation: Tel
    
 
     if arguments.mode == .emoji || arguments.mode == .stories {
-        entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_segments_pack, equatable: InputDataEquatable(state.emojiState), comparable: nil, item: { initialSize, stableId in
-            return EmojiTabsItem(initialSize, stableId: stableId, segments: EmojiSegment.all, selected: state.emojiState.selected, select: arguments.selectEmojiSegment, presentation: presentation)
+        entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_segments_pack, equatable: InputDataEquatable(EmojiTabsEquatable(state: state.emojiState, blackChrome: state.blackChrome)), comparable: nil, item: { initialSize, stableId in
+            return EmojiTabsItem(initialSize, stableId: stableId, segments: EmojiSegment.all, selected: state.emojiState.selected, select: arguments.selectEmojiSegment, presentation: presentation, tint: pickerChromeColor(state.blackChrome))
         }))
         index += 1
     }
@@ -1042,10 +1060,12 @@ public final class AnimatedEmojiesCategories : Control {
         
         private var selectionView : SimpleLayer?
         private var presenation: TelegramPresentationTheme? = nil
+        private var iconColor: NSColor?
         
-        required init(frame frameRect: NSRect, context: any AccountContextProtocol, category: EmojiSearchCategories.Group, isSelected: Bool, presenation: TelegramPresentationTheme? = nil) {
+        required init(frame frameRect: NSRect, context: any AccountContextProtocol, category: EmojiSearchCategories.Group, isSelected: Bool, presenation: TelegramPresentationTheme? = nil, iconColor: NSColor? = nil) {
             
             self.presenation = presenation
+            self.iconColor = iconColor
             self.category = category
             self.context = context
            
@@ -1058,7 +1078,7 @@ public final class AnimatedEmojiesCategories : Control {
             let lite = self.isLite
             if let image = category.icon {
                 let imageView = ImageView()
-                imageView.image = image
+                imageView.image = iconColor.map { image._NSImage.precomposed($0) } ?? image
                 imageView.sizeToFit()
                 imageView.isAccessibilityDecorative = true
                 addSubview(imageView)
@@ -1080,7 +1100,7 @@ public final class AnimatedEmojiesCategories : Control {
                 if let player = self.player {
                     performSublayerRemoval(player, animated: animated)
                 }
-                let color = presentation.colors.grayIcon.withAlphaComponent(0.8)
+                let color = self.iconColor ?? presentation.colors.grayIcon.withAlphaComponent(0.8)
                 let inline = InlineStickerItemLayer(account: context.account, inlinePacksContext: context.inlinePacksContext, emoji: .init(fileId: category.id, file: self.player?.file, emoji: ""), size: NSMakeSize(23, 23), playPolicy: policy, getColors: { _ in
                     return [.init(keyPath: "", color: color)]
                 }, ignorePreview: true)
@@ -1119,6 +1139,19 @@ public final class AnimatedEmojiesCategories : Control {
         
         var isLite: Bool {
             return self.context.isLite(.emoji)
+        }
+
+        func updateIconColor(_ color: NSColor?) {
+            guard self.iconColor != color else {
+                return
+            }
+            self.iconColor = color
+            if let imageView = self.imageView, let image = category.icon {
+                imageView.image = color.map { image._NSImage.precomposed($0) } ?? image
+            } else {
+                self.currentKey = nil
+                self.apply(key: "select", policy: .toEnd(from: .max))
+            }
         }
         
         func playAppearAnimation() {
@@ -1211,6 +1244,17 @@ public final class AnimatedEmojiesCategories : Control {
             updateLocalizationAndTheme(theme: presentation ?? theme)
         }
     }
+
+    public var iconColor: NSColor? {
+        didSet {
+            guard oldValue != iconColor else {
+                return
+            }
+            for view in documentView.subviews.compactMap({ $0 as? CategoryView }) {
+                view.updateIconColor(iconColor)
+            }
+        }
+    }
     
     public override func updateLocalizationAndTheme(theme: PresentationTheme) {
         super.updateLocalizationAndTheme(theme: theme)
@@ -1282,7 +1326,7 @@ public final class AnimatedEmojiesCategories : Control {
         
         
         for (idx, item, _) in indicesAndItems {
-            let subview = CategoryView(frame: NSMakeRect(CGFloat(idx) * 30, 0, 30, 30), context: context, category: item, isSelected: selected == item, presenation: presentation)
+            let subview = CategoryView(frame: NSMakeRect(CGFloat(idx) * 30, 0, 30, 30), context: context, category: item, isSelected: selected == item, presenation: presentation, iconColor: iconColor)
             subview.set(handler: { [weak self] _ in
                 self?.select?(item)
             }, for: .Click)
@@ -1629,9 +1673,10 @@ public final class AnimatedEmojiesView : Control {
         }
         if isClearBackground || usesPickerStyle {
             let background = theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1)
-            let searchTheme = SearchTheme(!searchFrost.isHidden ? .clear : background, theme.search.searchImage, theme.search.clearImage, theme.search.placeholder, theme.search.textColor, theme.search.placeholderColor)
+            let searchTheme = pickerSearchTheme(!searchFrost.isHidden ? .clear : background, theme: theme, black: usesPickerStyle)
             self.searchView.searchTheme = searchTheme
             self.categories?.searchTheme = searchTheme
+            self.categories?.iconColor = pickerChromeColor(usesPickerStyle)
         } else {
             self.searchView.searchTheme = theme.search
             self.categories?.searchTheme = theme.search
@@ -1842,6 +1887,7 @@ public final class AnimatedEmojiesView : Control {
                 current = view
             } else {
                 current = AnimatedEmojiesCategories(frame: categoryRect, presentation: presentation)
+                current.iconColor = pickerChromeColor(usesPickerStyle)
                 self.categories = current
                 searchInside.addSubview(current)
                 
@@ -2129,6 +2175,12 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
             if isLoaded() {
                 genericView.usesMenuPanel = usesMenuPanel
             }
+            let blackChrome = mode.isTransparent || usesMenuPanel
+            self.updateState?({ current in
+                var current = current
+                current.blackChrome = blackChrome
+                return current
+            })
         }
     }
 
@@ -2307,7 +2359,8 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
         let mode = self.mode
         let actionsDisposable = DisposableSet()
         
-        let initialState = State(sections: [], itemsDict: [:], selectedItems: self.selectedItems, color: self.color)
+        var initialState = State(sections: [], itemsDict: [:], selectedItems: self.selectedItems, color: self.color)
+        initialState.blackChrome = mode.isTransparent || self.usesMenuPanel
         
         let statePromise = ValuePromise<State>(ignoreRepeated: true)
         let stateValue = Atomic(value: initialState)

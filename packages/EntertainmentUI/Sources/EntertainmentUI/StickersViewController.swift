@@ -929,6 +929,7 @@ public class NStickersView : View {
                 current = view
             } else {
                 current = AnimatedEmojiesCategories(frame: categoryRect, presentation: presentation)
+                current.iconColor = pickerChromeColor(usesMenuPanel)
                 self.categories = current
                 searchInside.addSubview(current)
                 
@@ -1118,9 +1119,10 @@ public class NStickersView : View {
         self.searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         if isGlass {
             let searchBackground = searchFrost.isHidden ? theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1) : .clear
-            let searchTheme = SearchTheme(searchBackground, theme.search.searchImage, theme.search.clearImage, theme.search.placeholder, theme.search.textColor, theme.search.placeholderColor)
+            let searchTheme = pickerSearchTheme(searchBackground, theme: theme, black: usesMenuPanel)
             self.searchView.searchTheme = searchTheme
             self.categories?.searchTheme = searchTheme
+            self.categories?.iconColor = pickerChromeColor(usesMenuPanel)
         } else {
             self.searchView.searchTheme = theme.search
             self.categories?.searchTheme = theme.search
