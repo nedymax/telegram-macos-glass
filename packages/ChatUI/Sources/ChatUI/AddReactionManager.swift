@@ -533,7 +533,6 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
 
         showMore.set(handler: { [weak self] control in
             if let view = self {
-                let previousWindow = view.window
                 if view.glassContainer != nil, view.hasBubble {
                     view.collapseTail()
                 } else {
@@ -542,13 +541,6 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
                 }
                 view.showMore.startLoading()
                 revealReactions?(view)
-                if view.glassContainer != nil, view.window !== previousWindow {
-                    if view.tailTimer != nil {
-                        view.handOffAfterTail = true
-                    } else {
-                        view.handOffGlass()
-                    }
-                }
             }
         }, for: .Click)
         
@@ -795,13 +787,6 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
 
     private var appearTimer: Foundation.Timer?
     private var tailTimer: Foundation.Timer?
-    private var glassHandedOff: Bool = false
-    private var handOffAfterTail: Bool = false
-
-    private func handOffGlass() {
-        glassHandedOff = true
-        glassShapes.first?.isHidden = true
-    }
     private var isAppearing: Bool = false
 
     private func collapseTail() {
@@ -837,10 +822,6 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
                 }
                 self.tailTimer = nil
                 self.isAppearing = false
-                if self.handOffAfterTail {
-                    self.handOffAfterTail = false
-                    self.handOffGlass()
-                }
                 self.hasBubble = false
                 self.updateLayout(size: self.frame.size, transition: .immediate)
             }
@@ -1041,7 +1022,7 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
             transition.updateFrame(view: glassContainer, frame: size.bounds)
             let shapes = hasBubble ? glassShapeRects(rect: rect) : [rect]
             for (index, glass) in glassShapes.enumerated() {
-                glass.isHidden = index >= shapes.count || glassHandedOff
+                glass.isHidden = index >= shapes.count
             }
             for (glass, shape) in zip(glassShapes, shapes) {
                 transition.updateFrame(view: glass, frame: shape)

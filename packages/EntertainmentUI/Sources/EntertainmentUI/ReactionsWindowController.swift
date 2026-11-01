@@ -85,6 +85,7 @@ public final class ReactionsWindowController : NSObject {
         
         func appearAnimated(from bar: NSRect) {
             contentView.layer?.opacity = 1
+            tintGlass?.alphaValue = 1
             let target = bounds
             let swell = bar.insetBy(dx: -2, dy: -1.5)
             let start = CACurrentMediaTime()
@@ -95,13 +96,13 @@ public final class ReactionsWindowController : NSObject {
                     return
                 }
                 let seconds = CACurrentMediaTime() - start
-                if seconds >= 0.42 {
+                if seconds >= 0.5 {
                     self.finishMorph()
                     return
                 }
                 let anticipation = CGFloat(sin(min(1, seconds / 0.05) * .pi / 2))
                 let from = NSMakeRect(bar.minX + (swell.minX - bar.minX) * anticipation, bar.minY + (swell.minY - bar.minY) * anticipation, bar.width + (swell.width - bar.width) * anticipation, bar.height + (swell.height - bar.height) * anticipation)
-                let progress = seconds < 0.03 ? 0 : morphSpring(seconds - 0.03, omega: 22, damping: 0.74)
+                let progress = seconds < 0.03 ? 0 : morphSpring(seconds - 0.03, omega: 21, damping: 0.62)
                 let rect = NSMakeRect(from.minX + (target.minX - from.minX) * progress, from.minY + (target.minY - from.minY) * progress, from.width + (target.width - from.width) * progress, from.height + (target.height - from.height) * progress)
                 self.applyMorph(rect)
                 let linear = min(1, seconds / 0.3)
@@ -150,6 +151,7 @@ public final class ReactionsWindowController : NSObject {
                 tint.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
                 container.addSubview(tint, positioned: .above, relativeTo: glassView)
                 tintGlass = tint
+                tint.alphaValue = 0
                 glassView.alphaValue = 0
             }
             applyMorph(bar)
