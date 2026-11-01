@@ -70,6 +70,7 @@ public final class EntertainmentView : View {
     static let glassTintAlpha: CGFloat = 0.55
 
     fileprivate var sectionView: NSView
+    private let contentHost = View()
     private let glassView = LiquidGlassView(frame: NSZeroRect, cornerRadius: 18, hasShadow: false, hasBorder: true, tintAlpha: 0, forceBlur: true)
     private let edgeView = ShadowView()
     private let tabs = GlassSegmentView(frame: NSZeroRect)
@@ -96,6 +97,7 @@ public final class EntertainmentView : View {
             menuRim?.isHidden = !showsGlassBackground
             menuHairline?.isHidden = !showsGlassBackground
             if oldValue != showsGlassBackground {
+                placeContent()
                 didChangeGlassBackground?(showsGlassBackground)
             }
         }
@@ -127,10 +129,10 @@ public final class EntertainmentView : View {
         self.sectionView = sectionView
         super.init(frame: frame)
         self.addSubview(self.glassView)
+        self.contentHost.addSubview(self.sectionView)
+        self.contentHost.addSubview(self.edgeView)
+        self.contentHost.addSubview(self.tabs)
         self.installMenuBackground(retheme: false)
-        self.addSubview(self.sectionView)
-        self.addSubview(self.edgeView)
-        self.addSubview(self.tabs)
 
         self.edgeView.direction = .vertical(true)
         self.edgeView.isEventLess = true
@@ -156,7 +158,28 @@ public final class EntertainmentView : View {
 
     private var currentTheme: PresentationTheme?
 
+    private func placeContent() {
+        if #available(macOS 26.0, *), let glass = menuGlass as? NSGlassEffectView, showsGlassBackground {
+            if glass.contentView !== contentHost {
+                contentHost.removeFromSuperview()
+                glass.contentView = contentHost
+            }
+        } else {
+            if #available(macOS 26.0, *), let glass = menuGlass as? NSGlassEffectView, glass.contentView === contentHost {
+                glass.contentView = nil
+            }
+            if contentHost.superview !== self {
+                contentHost.removeFromSuperview()
+                addSubview(contentHost, positioned: .above, relativeTo: menuGlass ?? glassView)
+            }
+        }
+        needsLayout = true
+    }
+
     private func installMenuBackground(retheme: Bool) {
+        if #available(macOS 26.0, *), let glass = menuGlass as? NSGlassEffectView, glass.contentView === contentHost {
+            glass.contentView = nil
+        }
         menuGlass?.removeFromSuperview()
         menuRim?.removeFromSuperlayer()
         menuHairline?.removeFromSuperlayer()
@@ -200,6 +223,8 @@ public final class EntertainmentView : View {
         if let menuGlass {
             addSubview(menuGlass, positioned: .above, relativeTo: glassView)
         }
+        contentHost.removeFromSuperview()
+        placeContent()
         glassView.isHidden = !showsGlassBackground || menuGlass != nil
         menuGlass?.isHidden = !showsGlassBackground
         menuRim?.isHidden = !showsGlassBackground
@@ -300,6 +325,7 @@ public final class EntertainmentView : View {
         self.menuHairline?.frame = bounds.insetBy(dx: -0.5, dy: -0.5)
         self.menuHairline?.cornerRadius = 18.5
         CATransaction.commit()
+        self.contentHost.frame = bounds
         self.sectionView.frame = bounds
         self.edgeView.frame = NSMakeRect(0, frame.height - tabsAreaHeight, frame.width, tabsAreaHeight)
         let tabsSize = self.tabs.contentSize
