@@ -84,12 +84,16 @@ public final class EntertainmentView : View {
     }
 
     private let menuGlass: NSView?
+    private let menuRim: CALayer?
+    private let menuHairline: CALayer?
     var didChangeGlassBackground: ((Bool) -> Void)?
 
     var showsGlassBackground: Bool = true {
         didSet {
             glassView.isHidden = !showsGlassBackground || menuGlass != nil
             menuGlass?.isHidden = !showsGlassBackground
+            menuRim?.isHidden = !showsGlassBackground
+            menuHairline?.isHidden = !showsGlassBackground
             if oldValue != showsGlassBackground {
                 didChangeGlassBackground?(showsGlassBackground)
             }
@@ -127,14 +131,46 @@ public final class EntertainmentView : View {
             glass.tintColor = nil
             glass.applyNativeMenuMaterial()
             self.menuGlass = glass
+            self.menuRim = nil
+            self.menuHairline = nil
+        } else if System.blurEnabled, !TelegramUtilsHooks.shared.isLite(.blur) {
+            let blur = NSVisualEffectView(frame: .zero)
+            blur.wantsLayer = true
+            blur.material = .menu
+            blur.blendingMode = .withinWindow
+            blur.state = .active
+            blur.layer?.cornerRadius = 18
+            if #available(macOS 10.15, *) {
+                blur.layer?.cornerCurve = .continuous
+            }
+            blur.layer?.masksToBounds = true
+            self.menuGlass = blur
+            let rim = CALayer()
+            rim.borderWidth = 1
+            let hairline = CALayer()
+            hairline.borderWidth = 0.5
+            for layer in [rim, hairline] {
+                layer.cornerRadius = 18
+                if #available(macOS 10.15, *) {
+                    layer.cornerCurve = .continuous
+                }
+                layer.zPosition = 1
+            }
+            self.menuRim = rim
+            self.menuHairline = hairline
         } else {
             self.menuGlass = nil
+            self.menuRim = nil
+            self.menuHairline = nil
         }
         super.init(frame: frame)
         self.addSubview(self.glassView)
         if let menuGlass {
             self.glassView.isHidden = true
             self.addSubview(menuGlass)
+        }
+        for layer in [menuRim, menuHairline].compactMap({ $0 }) {
+            self.layer?.addSublayer(layer)
         }
         self.addSubview(self.sectionView)
         self.addSubview(self.edgeView)
@@ -157,6 +193,8 @@ public final class EntertainmentView : View {
         self.glassView.customTint = theme.colors.background.withAlphaComponent(EntertainmentView.glassTintAlpha)
         self.glassView.updateLocalizationAndTheme(theme: theme)
         self.menuGlass?.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
+        self.menuRim?.borderColor = NSColor.white.withAlphaComponent(theme.colors.isDark ? 0.1 : 0.5).cgColor
+        self.menuHairline?.borderColor = NSColor.black.withAlphaComponent(theme.colors.isDark ? 0.85 : 0.2).cgColor
         self.updateTabs(animated: false)
     }
     
@@ -231,6 +269,12 @@ public final class EntertainmentView : View {
         self.glassView.frame = bounds
         self.glassView.updateLayout(size: bounds.size, transition: .immediate)
         self.menuGlass?.frame = bounds
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.menuRim?.frame = bounds
+        self.menuHairline?.frame = bounds.insetBy(dx: -0.5, dy: -0.5)
+        self.menuHairline?.cornerRadius = 18.5
+        CATransaction.commit()
         self.sectionView.frame = bounds
         self.edgeView.frame = NSMakeRect(0, frame.height - tabsAreaHeight, frame.width, tabsAreaHeight)
         let tabsSize = self.tabs.contentSize
