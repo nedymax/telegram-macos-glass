@@ -127,9 +127,9 @@ final class MenuView: Control, TableViewDelegate {
         self.autoresizesSubviews = false
         
         shadowLayer.shadowColor = NSColor.black.cgColor
-        shadowLayer.shadowOpacity = 0.3
-        shadowLayer.shadowRadius = 12
-        shadowLayer.shadowOffset = NSMakeSize(0, -3)
+        shadowLayer.shadowOpacity = 0.4
+        shadowLayer.shadowRadius = 14
+        shadowLayer.shadowOffset = NSMakeSize(0, -5)
         shadowLayer.mask = shadowMask
         shadowMask.fillRule = .evenOdd
         self.layer?.masksToBounds = false
@@ -145,7 +145,7 @@ final class MenuView: Control, TableViewDelegate {
         }
         
         self.layer?.isOpaque = false
-        self.layer?.shouldRasterize = glassView == nil
+        self.layer?.shouldRasterize = glassView == nil && !System.blurEnabled
         if glassView == nil {
             self.layer?.rasterizationScale = System.backingScale
         }
@@ -293,7 +293,7 @@ final class MenuView: Control, TableViewDelegate {
             backgroundView.backgroundColor = .clear
         } else if System.blurEnabled {
             visualView.appearance = appearance
-            backgroundView.backgroundColor = .clear
+            backgroundView.backgroundColor = presentation.colors.isDark ? .clear : NSColor.white.withAlphaComponent(0.45)
         } else {
             backgroundView.backgroundColor = presentation.colors.background
         }
@@ -704,10 +704,11 @@ final class AppMenuController : NSObject  {
         let duration: Double = 0.2
         if !isClosed {
             for (_, panel) in self.windows {
-                var panel: Window? = panel
-                panel?.view.layer?.animateAlpha(from: 1, to: 0, duration: duration, removeOnCompletion: false, completion: { _ in
-                    panel?.orderOut(nil)
-                    panel = nil
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = duration
+                    panel.animator().alphaValue = 0
+                }, completionHandler: {
+                    panel.orderOut(nil)
                 })
             }
             
@@ -720,10 +721,11 @@ final class AppMenuController : NSObject  {
             self.parent?.copyhandler = self.previousCopyHandler
 
             if let window = self.menu.topWindow, let view = window.contentView {
-                view.layer?.animateAlpha(from: 1, to: 0, duration: duration, removeOnCompletion: false, completion: { [weak view, weak window] completed in
-                    if completed {
-                        view?.removeFromSuperview()
-                    }
+                NSAnimationContext.runAnimationGroup({ context in
+                    context.duration = duration
+                    window.animator().alphaValue = 0
+                }, completionHandler: { [weak view, weak window] in
+                    view?.removeFromSuperview()
                     window?.orderOut(nil)
                 })
             }
@@ -867,10 +869,11 @@ final class AppMenuController : NSObject  {
         
         submenu.view.dismissed = true
         
-        submenu.view.layer?.animateAlpha(from: 1, to: 0, duration: 0.2, removeOnCompletion: false, completion: { [weak submenu] _ in
-            if let submenu = submenu {
-                submenu.orderOut(nil)
-            }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.2
+            submenu.animator().alphaValue = 0
+        }, completionHandler: { [weak submenu] in
+            submenu?.orderOut(nil)
         })
         
         if let childView = submenu.view.childView {

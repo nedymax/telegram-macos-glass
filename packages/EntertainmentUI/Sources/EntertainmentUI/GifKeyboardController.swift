@@ -402,10 +402,24 @@ public final class GifKeyboardView : View {
         searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         if isGlass {
             let searchBackground = searchFrost.isHidden ? theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1) : .clear
-            self.searchView.searchTheme = pickerSearchTheme(searchBackground, theme: theme, black: usesMenuPanel)
+            self.searchView.searchTheme = pickerSearchTheme(searchBackground, theme: theme, black: true)
         } else {
             self.searchView.searchTheme = theme.search
         }
+        applyChromeTint()
+    }
+
+    private func applyChromeTint() {
+        let tint = pickerChromeColor(isGlass)
+        let frosted = isGlass && !TelegramUtilsHooks.shared.isLite(.blur)
+        packsView.enumerateItems(with: { item in
+            if let item = item as? GifKeyboardTabRowItem, item.tint != tint || item.frosted != frosted {
+                item.tint = tint
+                item.frosted = frosted
+                item.redraw()
+            }
+            return true
+        })
     }
     
     public required init?(coder: NSCoder) {
@@ -430,6 +444,7 @@ public final class GifKeyboardView : View {
         searchStatusView.updateSearchStatus(searchStatus, kind: .gifs, query: searchView.query, theme: presentation ?? theme, clearBackground: usesMenuPanel)
         self.tableView.merge(with: sections)
         self.packsView.merge(with: packs)
+        applyChromeTint()
     }
 }
 

@@ -185,9 +185,6 @@ public final class ReactionsWindowController : NSObject {
                 if seconds < 0 {
                     return false
                 }
-                if self.contentView.layer?.opacity != 1 {
-                    self.contentView.layer?.opacity = 1
-                }
                 if seconds >= duration {
                     self.finishMorph()
                     return true
@@ -530,13 +527,12 @@ public final class ReactionsWindowController : NSObject {
         var panel: Window? = self.panel
         if animated {
             if let v = panel?.contentView?.subviews.first(where: { $0 is V }) as? V {
-                if !v.usesGlass {
-                    v.layer?.rasterizationScale = System.backingScale
-                    v.layer?.shouldRasterize = true
-                }
                 v.layer?.animateScaleCenter(from: 1, to: 0.9, duration: 0.2, removeOnCompletion: false, timingFunction: .easeIn)
             }
-            panel?.contentView?.layer?.animateAlpha(from: 1, to: 0, duration: 0.2, removeOnCompletion: false, completion: { _ in
+            NSAnimationContext.runAnimationGroup({ context in
+                context.duration = 0.2
+                panel?.animator().alphaValue = 0
+            }, completionHandler: {
                 panel?.orderOut(nil)
                 panel = nil
             })

@@ -929,7 +929,7 @@ public class NStickersView : View {
                 current = view
             } else {
                 current = AnimatedEmojiesCategories(frame: categoryRect, presentation: presentation)
-                current.iconColor = pickerChromeColor(usesMenuPanel)
+                current.iconColor = pickerChromeColor(isGlass || usesMenuPanel)
                 self.categories = current
                 searchInside.addSubview(current)
                 
@@ -985,7 +985,7 @@ public class NStickersView : View {
         let rect = NSMakeRect(view.frame.origin.y - point.y, 5, item.height, packsView.frame.height)
         
         selectionView.layer?.cornerRadius = item.height == item.width ? .cornerRadius : item.width / 2
-        if usesMenuPanel, !TelegramUtilsHooks.shared.isLite(.blur) {
+        if isGlass || usesMenuPanel, !TelegramUtilsHooks.shared.isLite(.blur) {
             let frost: NSVisualEffectView
             if let current = selectionFrost {
                 frost = current
@@ -1119,15 +1119,27 @@ public class NStickersView : View {
         self.searchFrost.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
         if isGlass {
             let searchBackground = searchFrost.isHidden ? theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1) : .clear
-            let searchTheme = pickerSearchTheme(searchBackground, theme: theme, black: usesMenuPanel)
+            let searchTheme = pickerSearchTheme(searchBackground, theme: theme, black: isGlass || usesMenuPanel)
             self.searchView.searchTheme = searchTheme
             self.categories?.searchTheme = searchTheme
-            self.categories?.iconColor = pickerChromeColor(usesMenuPanel)
+            self.categories?.iconColor = pickerChromeColor(isGlass || usesMenuPanel)
         } else {
             self.searchView.searchTheme = theme.search
             self.categories?.searchTheme = theme.search
         }
         self.searchView.updateLocalizationAndTheme(theme: theme)
+        applyChromeTint()
+    }
+
+    func applyChromeTint() {
+        let tint = pickerChromeColor(isGlass || usesMenuPanel)
+        packsView.enumerateItems(with: { item in
+            if let item = item as? RecentPackRowItem, item.tint != tint {
+                item.tint = tint
+                item.redraw()
+            }
+            return true
+        })
     }
     
     public func updateLayout(size: NSSize, transition: ContainedViewLayoutTransition) {
@@ -1751,6 +1763,7 @@ public class NStickersViewController<Context: AccountContextProtocol>: TelegramG
             self.genericView.tableView.removeScroll(listener: self.listener)
             self.genericView.tableView.merge(with: transition)
             self.genericView.packsView.merge(with: packTransition)
+            self.genericView.applyChromeTint()
             self.genericView.updateSearchStatus(isSearching: data.searchData != nil, isLoading: data.searchData?.loading ?? false)
             self.genericView.tableView.addScroll(listener: self.listener)
             

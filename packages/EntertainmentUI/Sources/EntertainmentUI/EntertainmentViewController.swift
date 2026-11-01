@@ -178,6 +178,7 @@ public final class EntertainmentView : View {
 
         self.edgeView.direction = .vertical(true)
         self.edgeView.isEventLess = true
+        self.tabs.usesMenuMaterial = !TelegramUtilsHooks.shared.isLite(.blur)
 
         self.tabs.didSelect = { [weak self] index in
             guard let self, index < self.tabStates.count else {

@@ -1673,10 +1673,10 @@ public final class AnimatedEmojiesView : Control {
         }
         if isClearBackground || usesPickerStyle {
             let background = theme.colors.vibrant.mixedWith(NSColor(0x000000), alpha: 0.1)
-            let searchTheme = pickerSearchTheme(!searchFrost.isHidden ? .clear : background, theme: theme, black: usesPickerStyle)
+            let searchTheme = pickerSearchTheme(!searchFrost.isHidden ? .clear : background, theme: theme, black: usesPickerStyle || isGlass)
             self.searchView.searchTheme = searchTheme
             self.categories?.searchTheme = searchTheme
-            self.categories?.iconColor = pickerChromeColor(usesPickerStyle)
+            self.categories?.iconColor = pickerChromeColor(usesPickerStyle || isGlass)
         } else {
             self.searchView.searchTheme = theme.search
             self.categories?.searchTheme = theme.search
@@ -1887,7 +1887,7 @@ public final class AnimatedEmojiesView : Control {
                 current = view
             } else {
                 current = AnimatedEmojiesCategories(frame: categoryRect, presentation: presentation)
-                current.iconColor = pickerChromeColor(usesPickerStyle)
+                current.iconColor = pickerChromeColor(usesPickerStyle || isGlass)
                 self.categories = current
                 searchInside.addSubview(current)
                 
@@ -1946,7 +1946,7 @@ public final class AnimatedEmojiesView : Control {
         let rect = NSMakeRect(viewPoint.y - point.y, 5, item.height, packsView.frame.height)
         
         selectionView.layer?.cornerRadius = item.height == item.width && item.index != 1 ? .cornerRadius : item.width / 2
-        if usesPickerStyle, !TelegramUtilsHooks.shared.isLite(.blur) {
+        if usesPickerStyle || isGlass, !TelegramUtilsHooks.shared.isLite(.blur) {
             let frost: NSVisualEffectView
             if let current = selectionFrost {
                 frost = current
@@ -2159,6 +2159,12 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
             if isLoaded() {
                 genericView.isGlass = isGlass
             }
+            let blackChrome = mode.isTransparent || usesMenuPanel || isGlass
+            self.updateState?({ current in
+                var current = current
+                current.blackChrome = blackChrome
+                return current
+            })
         }
     }
 
@@ -2175,7 +2181,7 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
             if isLoaded() {
                 genericView.usesMenuPanel = usesMenuPanel
             }
-            let blackChrome = mode.isTransparent || usesMenuPanel
+            let blackChrome = mode.isTransparent || usesMenuPanel || isGlass
             self.updateState?({ current in
                 var current = current
                 current.blackChrome = blackChrome
@@ -2360,7 +2366,7 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
         let actionsDisposable = DisposableSet()
         
         var initialState = State(sections: [], itemsDict: [:], selectedItems: self.selectedItems, color: self.color)
-        initialState.blackChrome = mode.isTransparent || self.usesMenuPanel
+        initialState.blackChrome = mode.isTransparent || self.usesMenuPanel || self.isGlass
         
         let statePromise = ValuePromise<State>(ignoreRepeated: true)
         let stateValue = Atomic(value: initialState)
