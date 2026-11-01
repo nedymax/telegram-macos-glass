@@ -84,6 +84,8 @@ final class MenuView: Control, TableViewDelegate {
     static let cornerRadius: CGFloat = 12
     private let shadowLayer = CALayer()
     private let shadowMask = CAShapeLayer()
+    private let contactShadowLayer = CALayer()
+    private let contactShadowMask = CAShapeLayer()
     private let rimLayer = CALayer()
     private let hairlineLayer = CALayer()
     required init(frame frameRect: NSRect) {
@@ -132,8 +134,15 @@ final class MenuView: Control, TableViewDelegate {
         shadowLayer.shadowOffset = NSMakeSize(0, -5)
         shadowLayer.mask = shadowMask
         shadowMask.fillRule = .evenOdd
+        contactShadowLayer.shadowColor = NSColor.black.cgColor
+        contactShadowLayer.shadowOpacity = 0.2
+        contactShadowLayer.shadowRadius = 2
+        contactShadowLayer.shadowOffset = .zero
+        contactShadowLayer.mask = contactShadowMask
+        contactShadowMask.fillRule = .evenOdd
         self.layer?.masksToBounds = false
         self.layer?.insertSublayer(shadowLayer, at: 0)
+        self.layer?.insertSublayer(contactShadowLayer, at: 1)
         rimLayer.borderWidth = 1
         hairlineLayer.borderWidth = 0.5
         for layer in [rimLayer, hairlineLayer] {
@@ -184,6 +193,9 @@ final class MenuView: Control, TableViewDelegate {
         cutout.addRect(bounds.insetBy(dx: -40, dy: -40))
         cutout.addPath(outline)
         shadowMask.path = cutout
+        contactShadowLayer.frame = bounds
+        contactShadowLayer.shadowPath = outline
+        contactShadowMask.path = cutout
         rimLayer.frame = bounds
         hairlineLayer.frame = bounds.insetBy(dx: -0.5, dy: -0.5)
         hairlineLayer.cornerRadius = MenuView.cornerRadius + 0.5
@@ -293,7 +305,7 @@ final class MenuView: Control, TableViewDelegate {
             backgroundView.backgroundColor = .clear
         } else if System.blurEnabled {
             visualView.appearance = appearance
-            backgroundView.backgroundColor = presentation.colors.isDark ? .clear : NSColor.white.withAlphaComponent(0.45)
+            backgroundView.backgroundColor = .menuFallbackVeil(isDark: presentation.colors.isDark)
         } else {
             backgroundView.backgroundColor = presentation.colors.background
         }
@@ -1173,6 +1185,12 @@ public let AppMenuCursorAppearanceExtraHeight: CGFloat = 40
 public protocol AppMenuCursorAppearance: AnyObject {
     var canAppearFromCursor: Bool { get }
     func appearFromCursor(_ point: NSPoint)
+}
+
+public extension NSColor {
+    static func menuFallbackVeil(isDark: Bool) -> NSColor {
+        return isDark ? .clear : NSColor.white.withAlphaComponent(0.45)
+    }
 }
 
 public final class MenuPanelWindow: Window {

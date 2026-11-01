@@ -567,7 +567,7 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
             usesMaterial = true
             visualEffect.material = .menu
             visualEffect.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
-            backgroundColorView.backgroundColor = .clear
+            backgroundColorView.backgroundColor = glassContainer == nil ? .menuFallbackVeil(isDark: theme.colors.isDark) : .clear
         } else {
             usesMaterial = false
             backgroundColorView.backgroundColor = theme.colors.background

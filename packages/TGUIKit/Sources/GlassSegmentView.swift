@@ -9,6 +9,7 @@ public final class GlassSegmentView: View {
     private let glass = LiquidGlassView(frame: NSZeroRect, cornerRadius: GlassSegmentView.height / 2, hasShadow: true, hasBorder: true)
     private let selectionView = View()
     private var menuBlur: NSVisualEffectView?
+    private let menuVeil = View()
     private let menuShadow = CALayer()
     private let menuShadowMask = CAShapeLayer()
     private let menuRim = CALayer()
@@ -53,6 +54,9 @@ public final class GlassSegmentView: View {
             blur.layer?.cornerRadius = GlassSegmentView.height / 2
             blur.layer?.masksToBounds = true
             addSubview(blur, positioned: .above, relativeTo: glass)
+            menuVeil.autoresizingMask = [.width, .height]
+            menuVeil.frame = blur.bounds
+            blur.addSubview(menuVeil)
             menuBlur = blur
             menuShadow.shadowColor = NSColor.black.cgColor
             menuShadow.shadowOpacity = 0.2
@@ -129,6 +133,7 @@ public final class GlassSegmentView: View {
         let colors = currentTheme.colors
         selectionView.backgroundColor = colors.text.withAlphaComponent(colors.isDark ? 0.1 : 0.075)
         menuBlur?.appearance = NSAppearance(named: colors.isDark ? .darkAqua : .aqua)
+        menuVeil.backgroundColor = .menuFallbackVeil(isDark: colors.isDark)
         menuRim.borderColor = NSColor.white.withAlphaComponent(colors.isDark ? 0.1 : 0.5).cgColor
         menuHairline.borderColor = NSColor.black.withAlphaComponent(colors.isDark ? 0.85 : 0.2).cgColor
         for (label, title) in zip(labels, titles) {

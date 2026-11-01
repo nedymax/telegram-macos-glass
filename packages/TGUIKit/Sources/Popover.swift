@@ -319,7 +319,7 @@ open class Popover: NSObject {
                             }
                             switch strongSelf.animationMode {
                             case .classic:
-                                strongSelf.background.layer?.animateSettledScale(anchor: anchor, from: 0.1)
+                                strongSelf.background.layer?.animateScaleSpringFrom(anchor: anchor, from: 0.1, to: 1.0, duration: 0.4, bounce: false)
                                 strongSelf.background.layer?.animateAlpha(from: 0, to: 1, duration: 0.2, completion: completion)
                             case .reveal:
                                 
@@ -565,23 +565,6 @@ public func showPopover(for control:Control, with controller:ViewController, edg
         if let popover = controller.popover {
             popover.show(for: control, edge: edge, inset: inset, delayBeforeShown: delayBeforeShown)
         }
-    }
-}
-
-private extension CALayer {
-    func animateSettledScale(anchor: NSPoint, from: CGFloat) {
-        let spring = CASpringAnimation(keyPath: "transform")
-        spring.mass = 1
-        spring.stiffness = 220
-        spring.damping = 2 * sqrt(220)
-        spring.duration = spring.settlingDuration
-        var transform = CATransform3DIdentity
-        transform = CATransform3DTranslate(transform, anchor.x, anchor.y, 0)
-        transform = CATransform3DScale(transform, from, from, 1)
-        transform = CATransform3DTranslate(transform, -anchor.x, -anchor.y, 0)
-        spring.fromValue = NSValue(caTransform3D: transform)
-        spring.toValue = NSValue(caTransform3D: CATransform3DIdentity)
-        add(spring, forKey: "transform")
     }
 }
 

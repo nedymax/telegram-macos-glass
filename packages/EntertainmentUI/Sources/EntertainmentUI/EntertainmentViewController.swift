@@ -87,6 +87,7 @@ public final class EntertainmentView : View {
     private var menuGlass: NSView?
     private var menuRim: CALayer?
     private var menuHairline: CALayer?
+    private var menuVeil: View?
     private var glassSettingObserver: NSObjectProtocol?
     var didChangeGlassBackground: ((Bool) -> Void)?
 
@@ -184,6 +185,7 @@ public final class EntertainmentView : View {
         menuRim?.removeFromSuperlayer()
         menuHairline?.removeFromSuperlayer()
         menuGlass = nil
+        menuVeil = nil
         menuRim = nil
         menuHairline = nil
         if #available(macOS 26.0, *), System.liquidGlass, System.liquidGlassAvailable, !TelegramUtilsHooks.shared.isLite(.blur) {
@@ -204,6 +206,10 @@ public final class EntertainmentView : View {
                 blur.layer?.cornerCurve = .continuous
             }
             blur.layer?.masksToBounds = true
+            let veil = View(frame: blur.bounds)
+            veil.autoresizingMask = [.width, .height]
+            blur.addSubview(veil)
+            menuVeil = veil
             menuGlass = blur
             let rim = CALayer()
             rim.borderWidth = 1
@@ -239,10 +245,14 @@ public final class EntertainmentView : View {
     public override func updateLocalizationAndTheme(theme: PresentationTheme) {
         super.updateLocalizationAndTheme(theme: theme)
         self.currentTheme = theme
+        if contentHost.superview !== self {
+            contentHost.updateLocalizationAndTheme(theme: theme)
+        }
         self.edgeView.shadowBackground = theme.colors.background.withAlphaComponent(0.6)
         self.glassView.customTint = theme.colors.background.withAlphaComponent(EntertainmentView.glassTintAlpha)
         self.glassView.updateLocalizationAndTheme(theme: theme)
         self.menuGlass?.appearance = NSAppearance(named: theme.colors.isDark ? .darkAqua : .aqua)
+        self.menuVeil?.backgroundColor = .menuFallbackVeil(isDark: theme.colors.isDark)
         self.menuRim?.borderColor = NSColor.white.withAlphaComponent(theme.colors.isDark ? 0.1 : 0.5).cgColor
         self.menuHairline?.borderColor = NSColor.black.withAlphaComponent(theme.colors.isDark ? 0.85 : 0.2).cgColor
         self.updateTabs(animated: false)
