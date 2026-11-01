@@ -814,7 +814,7 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
             let now = CACurrentMediaTime()
             let begin = start ?? now
             start = begin
-            let progress = min(1, (now - begin) / 0.12)
+            let progress = min(1, (now - begin) / 0.04)
             let suck = CGFloat(progress * progress)
             let size = from.width - (from.width - 8) * suck
             let centerY = from.midY + (bar.midY - from.midY) * suck

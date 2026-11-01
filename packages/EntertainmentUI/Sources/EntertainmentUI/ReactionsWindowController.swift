@@ -173,7 +173,7 @@ public final class ReactionsWindowController : NSObject {
             let target = bounds
             let swell = bar.insetBy(dx: -2, dy: -1.5)
             let duration: Double = 0.42
-            let absorb: Double = 0.12
+            let absorb: Double = 0.04
             var start: CFTimeInterval?
             startTicking { [weak self] now in
                 guard let self else {
