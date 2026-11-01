@@ -874,6 +874,19 @@ private final class EmojiesSectionRowView : TableRowView, ModalPreviewRowViewPro
                         view?.removeFromSuperview()
                     }
                 }, {})
+            } else if let view = initialPlayers[key.index], value.playerState != .playing {
+                view.frame = value.frame
+                value.superview?.addSubview(view)
+                value.opacity = 0
+                appearanceViews.append(.init(value: view))
+                let handOver: () -> Void = { [weak view, weak value] in
+                    view?.removeFromSuperview()
+                    value?.opacity = 1
+                }
+                value.triggerOnState = (.playing, { _ in
+                    handOver()
+                })
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: handOver)
             }
         }
     }
