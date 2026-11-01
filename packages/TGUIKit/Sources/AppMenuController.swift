@@ -129,9 +129,9 @@ final class MenuView: Control, TableViewDelegate {
         self.autoresizesSubviews = false
         
         shadowLayer.shadowColor = NSColor.black.cgColor
-        shadowLayer.shadowOpacity = 0.4
-        shadowLayer.shadowRadius = 14
-        shadowLayer.shadowOffset = NSMakeSize(0, -5)
+        shadowLayer.shadowOpacity = 0.35
+        shadowLayer.shadowRadius = 10
+        shadowLayer.shadowOffset = NSMakeSize(0, -4)
         shadowLayer.mask = shadowMask
         shadowMask.fillRule = .evenOdd
         contactShadowLayer.shadowColor = NSColor.black.cgColor
@@ -141,6 +141,9 @@ final class MenuView: Control, TableViewDelegate {
         contactShadowLayer.mask = contactShadowMask
         contactShadowMask.fillRule = .evenOdd
         self.layer?.masksToBounds = false
+        if #available(macOS 14.0, *) {
+            self.clipsToBounds = false
+        }
         self.layer?.insertSublayer(shadowLayer, at: 0)
         self.layer?.insertSublayer(contactShadowLayer, at: 1)
         rimLayer.borderWidth = 1
@@ -189,12 +192,15 @@ final class MenuView: Control, TableViewDelegate {
         CATransaction.setDisableActions(true)
         shadowLayer.frame = bounds
         shadowLayer.shadowPath = outline
+        let maskFrame = bounds.insetBy(dx: -40, dy: -40)
         let cutout = CGMutablePath()
-        cutout.addRect(bounds.insetBy(dx: -40, dy: -40))
-        cutout.addPath(outline)
+        cutout.addRect(maskFrame.size.bounds)
+        cutout.addPath(outline, transform: CGAffineTransform(translationX: 40, y: 40))
+        shadowMask.frame = maskFrame
         shadowMask.path = cutout
         contactShadowLayer.frame = bounds
         contactShadowLayer.shadowPath = outline
+        contactShadowMask.frame = maskFrame
         contactShadowMask.path = cutout
         rimLayer.frame = bounds
         hairlineLayer.frame = bounds.insetBy(dx: -0.5, dy: -0.5)

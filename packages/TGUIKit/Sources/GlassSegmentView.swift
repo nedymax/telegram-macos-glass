@@ -25,6 +25,9 @@ public final class GlassSegmentView: View {
     public required init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         self.layer?.masksToBounds = false
+        if #available(macOS 14.0, *) {
+            self.clipsToBounds = false
+        }
         self.addSubview(self.glass)
         self.selectionView.isHidden = true
         self.selectionView.layer?.cornerRadius = (GlassSegmentView.height - GlassSegmentView.selectionInset * 2) / 2
@@ -227,9 +230,11 @@ public final class GlassSegmentView: View {
             menuShadow.frame = size.bounds
             let outline = CGPath(roundedRect: size.bounds, cornerWidth: size.height / 2, cornerHeight: size.height / 2, transform: nil)
             menuShadow.shadowPath = outline
+            let maskFrame = size.bounds.insetBy(dx: -30, dy: -30)
             let cutout = CGMutablePath()
-            cutout.addRect(size.bounds.insetBy(dx: -30, dy: -30))
-            cutout.addPath(outline)
+            cutout.addRect(maskFrame.size.bounds)
+            cutout.addPath(outline, transform: CGAffineTransform(translationX: 30, y: 30))
+            menuShadowMask.frame = maskFrame
             menuShadowMask.path = cutout
             menuRim.frame = size.bounds
             menuHairline.frame = size.bounds.insetBy(dx: -0.5, dy: -0.5)

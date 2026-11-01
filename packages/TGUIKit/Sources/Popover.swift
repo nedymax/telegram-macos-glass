@@ -175,6 +175,9 @@ open class Popover: NSObject {
                 background.shadow = nil
             }
             layer.shadowPath = nil
+            if #available(macOS 14.0, *) {
+                background.clipsToBounds = false
+            }
             if glassShadow.superlayer == nil {
                 glassShadowMask.fillRule = .evenOdd
                 glassShadow.mask = glassShadowMask
@@ -184,9 +187,11 @@ open class Popover: NSObject {
             CATransaction.setDisableActions(true)
             glassShadow.frame = layer.bounds
             glassShadow.shadowPath = outline
+            let maskFrame = layer.bounds.insetBy(dx: -40, dy: -40)
             let cutout = CGMutablePath()
-            cutout.addRect(layer.bounds.insetBy(dx: -40, dy: -40))
-            cutout.addPath(outline)
+            cutout.addRect(maskFrame.size.bounds)
+            cutout.addPath(outline, transform: CGAffineTransform(translationX: 40, y: 40))
+            glassShadowMask.frame = maskFrame
             glassShadowMask.path = cutout
             CATransaction.commit()
         } else {
