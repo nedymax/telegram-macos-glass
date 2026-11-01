@@ -1377,7 +1377,7 @@ public final class AnimatedEmojiesView : Control {
     public let searchView = SearchView(frame: .zero)
     fileprivate let searchContainer = View()
     private let visualEffect = NSVisualEffectView()
-    private let searchFrost = NSVisualEffectView()
+    private let searchFrost = PickerFrostView()
     private let searchInside = View()
     private let searchBackdrop = View()
     
@@ -1905,7 +1905,7 @@ public final class AnimatedEmojiesView : Control {
             if let current = selectionFrost {
                 frost = current
             } else {
-                frost = NSVisualEffectView(frame: selectionView.bounds)
+                frost = PickerFrostView(frame: selectionView.bounds)
                 frost.wantsLayer = true
                 frost.material = .selection
                 frost.blendingMode = .withinWindow
@@ -3122,6 +3122,13 @@ public extension MessageReaction.Reaction {
 private final class PassthroughVisualEffectView: NSVisualEffectView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         return nil
+    }
+}
+
+final class PickerFrostView: NSVisualEffectView {
+    override var isEmphasized: Bool {
+        get { false }
+        set {}
     }
 }
 

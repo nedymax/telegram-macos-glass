@@ -754,7 +754,7 @@ public class NStickersView : View {
 
     private let searchInside = View()
     private let searchBackdrop = View()
-    private let searchFrost = NSVisualEffectView()
+    private let searchFrost = PickerFrostView()
     private var selectionFrost: NSVisualEffectView?
     private let headerBlurFilter = PickerHeaderBlur()
 
@@ -989,7 +989,7 @@ public class NStickersView : View {
             if let current = selectionFrost {
                 frost = current
             } else {
-                frost = NSVisualEffectView(frame: selectionView.bounds)
+                frost = PickerFrostView(frame: selectionView.bounds)
                 frost.wantsLayer = true
                 frost.material = .selection
                 frost.blendingMode = .withinWindow

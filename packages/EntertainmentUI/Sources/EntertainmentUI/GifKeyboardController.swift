@@ -242,7 +242,7 @@ public final class GifKeyboardView : View {
     private let searchContainer = View()
     private let searchBorder = View()
     private let searchBackdrop = View()
-    private let searchFrost = NSVisualEffectView()
+    private let searchFrost = PickerFrostView()
     private let searchStatusView = PanelSearchStatusView(frame: .zero)
     private var searchStatus: PanelSearchPresentation = .hidden
 

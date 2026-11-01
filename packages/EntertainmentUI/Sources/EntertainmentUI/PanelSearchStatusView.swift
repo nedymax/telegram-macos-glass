@@ -6,7 +6,7 @@ final class PanelSearchStatusView: View {
     private let detailView = TextView()
     private let shimmer = CAGradientLayer()
     private let shimmerMask = CAShapeLayer()
-    private let frost = NSVisualEffectView()
+    private let frost = PickerFrostView()
     private let frostMask = CAShapeLayer()
     private var animationView: View?
     private var makeAnimation: (() -> View?)?
