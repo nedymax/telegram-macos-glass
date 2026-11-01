@@ -728,7 +728,7 @@ final class AppMenuController : NSObject  {
 
     
     private func getView(for menu: ContextMenu, screen: NSScreen, parentView: Window?, submenuId: Int64?) -> Window {
-        let panel = Window(contentRect: .zero, styleMask: [.fullSizeContentView], backing: .buffered, defer: false)
+        let panel = MenuPanelWindow(contentRect: .zero, styleMask: [.fullSizeContentView], backing: .buffered, defer: false)
         panel._canBecomeMain = false
         panel._canBecomeKey = false
         panel.level = .screenSaver
@@ -1166,5 +1166,12 @@ public protocol AppMenuCursorAppearance: AnyObject {
 public extension NSColor {
     static func menuFallbackVeil(isDark: Bool) -> NSColor {
         return isDark ? .clear : NSColor.white.withAlphaComponent(0.45)
+    }
+}
+
+public final class MenuPanelWindow: Window {
+    @objc(_hasActiveAppearanceIgnoringKeyFocus)
+    func hasActiveAppearanceIgnoringKeyFocus() -> Bool {
+        return true
     }
 }
