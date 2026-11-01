@@ -855,6 +855,26 @@ private final class EmojiesSectionRowView : TableRowView, ModalPreviewRowViewPro
             } else if let selected = selectedLayers[key] {
                 selected.animate(from: NSNumber(value: selected.frame.height / 2), to: NSNumber(value: 10), keyPath: "cornerRadius", timingFunction: .easeOut, duration: 0.2, forKey: "cornerRadius")
             }
+            if let view = initialPlayers[key.index], view.currentState == .playing {
+                view.frame = value.frame
+                value.superview?.addSubview(view)
+                value.stopped = true
+                value.reset()
+                value.opacity = 0
+                appearanceViews.append(.init(value: view))
+                view.contextAnimation?.triggerOn = (.last, { [weak view, weak value] in
+                    if let value = value {
+                        value.triggerNextState = { [weak value] _ in
+                            view?.removeFromSuperview()
+                            value?.opacity = 1
+                        }
+                        value.stopped = false
+                        value.apply()
+                    } else {
+                        view?.removeFromSuperview()
+                    }
+                }, {})
+            }
         }
     }
 
