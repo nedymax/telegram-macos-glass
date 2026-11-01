@@ -86,6 +86,7 @@ public final class ReactionsWindowController : NSObject {
         func appearAnimated(from bar: NSRect) {
             contentView.layer?.opacity = 1
             let target = bounds
+            let swell = bar.insetBy(dx: -2, dy: -1.5)
             let start = CACurrentMediaTime()
             morphTimer?.invalidate()
             let timer = Foundation.Timer(timeInterval: 1.0 / 120.0, repeats: true) { [weak self] timer in
@@ -94,14 +95,16 @@ public final class ReactionsWindowController : NSObject {
                     return
                 }
                 let seconds = CACurrentMediaTime() - start
-                if seconds >= 0.45 {
+                if seconds >= 0.42 {
                     self.finishMorph()
                     return
                 }
-                let progress = morphSpring(seconds, omega: 24, damping: 0.88)
-                let rect = NSMakeRect(bar.minX + (target.minX - bar.minX) * progress, bar.minY + (target.minY - bar.minY) * progress, bar.width + (target.width - bar.width) * progress, bar.height + (target.height - bar.height) * progress)
+                let anticipation = CGFloat(sin(min(1, seconds / 0.05) * .pi / 2))
+                let from = NSMakeRect(bar.minX + (swell.minX - bar.minX) * anticipation, bar.minY + (swell.minY - bar.minY) * anticipation, bar.width + (swell.width - bar.width) * anticipation, bar.height + (swell.height - bar.height) * anticipation)
+                let progress = seconds < 0.03 ? 0 : morphSpring(seconds - 0.03, omega: 22, damping: 0.74)
+                let rect = NSMakeRect(from.minX + (target.minX - from.minX) * progress, from.minY + (target.minY - from.minY) * progress, from.width + (target.width - from.width) * progress, from.height + (target.height - from.height) * progress)
                 self.applyMorph(rect)
-                let linear = min(1, seconds / 0.45)
+                let linear = min(1, seconds / 0.3)
                 let material = linear * linear * (3 - 2 * linear)
                 self.glassView?.alphaValue = min(1, material / 0.4)
                 self.tintGlass?.alphaValue = 1 - max(0, (material - 0.25) / 0.75)
