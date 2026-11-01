@@ -527,6 +527,10 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
         
         showMore.isHidden = revealReactions == nil
         
+        showMore.set(handler: { _ in
+            AppMenu.keepsOpenOnNextMouseUp = true
+        }, for: .Down)
+
         showMore.set(handler: { [weak self] control in
             if let view = self {
                 let previousWindow = view.window

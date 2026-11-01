@@ -1031,6 +1031,10 @@ final class AppMenuController : NSObject  {
             }
             
             window.set(mouseHandler: { [weak self] event in
+                if AppMenu.keepsOpenOnNextMouseUp {
+                    AppMenu.keepsOpenOnNextMouseUp = false
+                    return .rejected
+                }
                 if self?.menu.closeOutside == true {
                     self?.closeAll()
                 }
