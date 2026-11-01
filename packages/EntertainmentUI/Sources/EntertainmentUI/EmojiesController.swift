@@ -1543,12 +1543,13 @@ public final class AnimatedEmojiesView : Control {
         transition.updateFrame(view: borderView, frame: NSMakeRect(0, tabs.frame.maxY, size.width, .borderSize))
         let blursUnderHeader = usesPickerStyle && !TelegramUtilsHooks.shared.isLite(.blur)
         let headerInset: CGFloat = blursUnderHeader ? 46 : 0
-        if tableView.contentInsets.top != headerInset {
+        let tableY = headerInset > 0 ? max(0, tabs.frame.maxY - headerInset) : tabs.frame.maxY
+        let topInset = headerInset > 0 ? tabs.frame.maxY - tableY : 0
+        if tableView.contentInsets.top != topInset {
             var insets = tableView.contentInsets
-            insets.top = headerInset
+            insets.top = topInset
             tableView.contentInsets = insets
         }
-        let tableY = headerInset > 0 ? max(0, tabs.frame.maxY - headerInset) : tabs.frame.maxY
         transition.updateFrame(view: tableView, frame: NSMakeRect(0, tableY, size.width, headerInset > 0 ? size.height - tableY : size.height - initial))
         
         transition.updateAlpha(view: borderView, alpha: inSearch || usesPickerStyle ? 0 : 1)

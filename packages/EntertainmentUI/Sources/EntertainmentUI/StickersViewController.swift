@@ -1140,14 +1140,16 @@ public class NStickersView : View {
 
         
         let headerInset: CGFloat = usesMenuPanel && !TelegramUtilsHooks.shared.isLite(.blur) ? 46 : 0
-        if tableView.contentInsets.top != headerInset {
+        let tableY = headerInset > 0 ? max(0, tabsContainer.frame.maxY - headerInset) : tabsContainer.frame.maxY
+        let topInset = headerInset > 0 ? tabsContainer.frame.maxY - tableY : 0
+        if tableView.contentInsets.top != topInset {
             var insets = tableView.contentInsets
-            insets.top = headerInset
+            insets.top = topInset
             tableView.contentInsets = insets
         }
         separator.isHidden = usesMenuPanel
 
-        let dest = max(0, min(tableView.rectOf(index: 0).minY + (tableView.clipView.destination?.y ?? tableView.documentOffset.y) + headerInset, 46))
+        let dest = max(0, min(tableView.rectOf(index: 0).minY + (tableView.clipView.destination?.y ?? tableView.documentOffset.y) + topInset, 46))
 
         let searchDest = inSearch ? 0 : dest
                 
@@ -1162,7 +1164,7 @@ public class NStickersView : View {
         transition.updateFrame(view: searchView, frame: searchInside.focus(NSMakeSize(size.width - 16, 30)))
         transition.updateFrame(view: searchFrost, frame: searchView.frame)
         transition.updateFrame(view: searchBorder, frame: NSMakeRect(0, searchContainer.frame.height - .borderSize, size.width, .borderSize))
-        let alpha: CGFloat = inSearch && tableView.documentOffset.y > -headerInset ? 1 : 0
+        let alpha: CGFloat = inSearch && tableView.documentOffset.y > -topInset ? 1 : 0
         transition.updateAlpha(view: searchBorder, alpha: alpha)
         if isGlass {
             transition.updateAlpha(view: searchBackdrop, alpha: alpha)
@@ -1179,7 +1181,6 @@ public class NStickersView : View {
         if let restrictedView = restrictedView {
             transition.updateFrame(view: restrictedView, frame: size.bounds)
         }
-        let tableY = headerInset > 0 ? max(0, tabsContainer.frame.maxY - headerInset) : tabsContainer.frame.maxY
         transition.updateFrame(view: tableView, frame: NSMakeRect(0, tableY, size.width, headerInset > 0 ? size.height - tableY : size.height))
         _ = headerBlurFilter.update(tableView, enabled: headerInset > 0, height: 46 - tableView.frame.minY)
 
