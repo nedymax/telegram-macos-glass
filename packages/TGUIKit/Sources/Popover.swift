@@ -53,6 +53,8 @@ open class Popover: NSObject {
     
     var readyDisposable:MetaDisposable = MetaDisposable()
     private let `static`: Bool
+    private let glassShadow = CALayer()
+    private let glassShadowMask = CAShapeLayer()
     required public init(controller:ViewController, static: Bool, animationMode: AnimationMode) {
         self.controller = controller
         self.animationMode = animationMode
@@ -155,7 +157,7 @@ open class Popover: NSObject {
     }
 
     private func updateShadowPath(force: Bool = false) {
-        guard let layer = background.layer, force || layer.shadowPath != nil else {
+        guard let layer = background.layer, force || layer.shadowPath != nil || glassShadow.superlayer != nil else {
             return
         }
         guard let overlay = overlay else {
@@ -163,7 +165,33 @@ open class Popover: NSObject {
             return
         }
         let radius = Popover.clampedRadius(for: overlay.frame.size)
-        layer.shadowPath = CGPath(roundedRect: overlay.frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        let outline = CGPath(roundedRect: overlay.frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
+        if background.containsGlass {
+            if let shadow = background.shadow {
+                glassShadow.shadowColor = shadow.shadowColor?.cgColor
+                glassShadow.shadowOpacity = 1
+                glassShadow.shadowRadius = shadow.shadowBlurRadius / 2
+                glassShadow.shadowOffset = shadow.shadowOffset
+                background.shadow = nil
+            }
+            layer.shadowPath = nil
+            if glassShadow.superlayer == nil {
+                glassShadowMask.fillRule = .evenOdd
+                glassShadow.mask = glassShadowMask
+                layer.insertSublayer(glassShadow, at: 0)
+            }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            glassShadow.frame = layer.bounds
+            glassShadow.shadowPath = outline
+            let cutout = CGMutablePath()
+            cutout.addRect(layer.bounds.insetBy(dx: -40, dy: -40))
+            cutout.addPath(outline)
+            glassShadowMask.path = cutout
+            CATransaction.commit()
+        } else {
+            layer.shadowPath = outline
+        }
     }
     
     
@@ -286,6 +314,9 @@ open class Popover: NSObject {
                                 }
                             }
                             strongSelf.background.layer?.shouldRasterize = !strongSelf.background.containsGlass
+                            if strongSelf.background.containsGlass {
+                                strongSelf.updateShadowPath(force: true)
+                            }
                             switch strongSelf.animationMode {
                             case .classic:
                                 strongSelf.background.layer?.animateSettledScale(anchor: anchor, from: 0.1)
