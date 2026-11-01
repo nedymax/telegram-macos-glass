@@ -53,9 +53,7 @@ open class Popover: NSObject {
     
     var readyDisposable:MetaDisposable = MetaDisposable()
     private let `static`: Bool
-    private let glassShadowContainer = CALayer()
-    private let glassShadow = CALayer()
-    private let glassShadowMask = CAShapeLayer()
+    private let glassShadow = MenuShadowLayer()
     required public init(controller:ViewController, static: Bool, animationMode: AnimationMode) {
         self.controller = controller
         self.animationMode = animationMode
@@ -158,7 +156,7 @@ open class Popover: NSObject {
     }
 
     private func updateShadowPath(force: Bool = false) {
-        guard let layer = background.layer, force || layer.shadowPath != nil || glassShadowContainer.superlayer != nil else {
+        guard let layer = background.layer, force || layer.shadowPath != nil || glassShadow.superlayer != nil else {
             return
         }
         guard let overlay = overlay else {
@@ -168,35 +166,15 @@ open class Popover: NSObject {
         let radius = Popover.clampedRadius(for: overlay.frame.size)
         let outline = CGPath(roundedRect: overlay.frame, cornerWidth: radius, cornerHeight: radius, transform: nil)
         if background.containsGlass {
-            if let shadow = background.shadow {
-                glassShadow.shadowColor = shadow.shadowColor?.cgColor
-                glassShadow.shadowOpacity = 1
-                glassShadow.shadowRadius = shadow.shadowBlurRadius / 2
-                glassShadow.shadowOffset = shadow.shadowOffset
-                background.shadow = nil
-            }
+            background.shadow = nil
             layer.shadowPath = nil
             if #available(macOS 14.0, *) {
                 background.clipsToBounds = false
             }
-            if glassShadowContainer.superlayer == nil {
-                glassShadowMask.fillRule = .evenOdd
-                glassShadowContainer.mask = glassShadowMask
-                glassShadowContainer.addSublayer(glassShadow)
-                layer.insertSublayer(glassShadowContainer, at: 0)
+            if glassShadow.superlayer == nil {
+                layer.insertSublayer(glassShadow, at: 0)
             }
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            let containerFrame = layer.bounds.insetBy(dx: -40, dy: -40)
-            let cutout = CGMutablePath()
-            cutout.addRect(containerFrame.size.bounds)
-            cutout.addPath(outline, transform: CGAffineTransform(translationX: 40, y: 40))
-            glassShadowContainer.frame = containerFrame
-            glassShadowMask.frame = containerFrame.size.bounds
-            glassShadowMask.path = cutout
-            glassShadow.frame = NSMakeRect(40, 40, layer.bounds.width, layer.bounds.height)
-            glassShadow.shadowPath = outline
-            CATransaction.commit()
+            glassShadow.update(shape: outline, in: layer.bounds)
         } else {
             layer.shadowPath = outline
         }

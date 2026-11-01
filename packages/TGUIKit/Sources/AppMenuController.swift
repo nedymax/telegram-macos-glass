@@ -82,10 +82,7 @@ final class MenuView: Control, TableViewDelegate {
     private let visualView: NSVisualEffectView
     private let glassView: NSView?
     static let cornerRadius: CGFloat = 12
-    private let shadowContainer = CALayer()
-    private let shadowLayer = CALayer()
-    private let shadowMask = CAShapeLayer()
-    private let contactShadowLayer = CALayer()
+    private let shadowLayer = MenuShadowLayer()
     private let rimLayer = CALayer()
     private let hairlineLayer = CALayer()
     required init(frame frameRect: NSRect) {
@@ -128,23 +125,11 @@ final class MenuView: Control, TableViewDelegate {
         self.visualView.autoresizingMask = []
         self.autoresizesSubviews = false
         
-        shadowLayer.shadowColor = NSColor.black.cgColor
-        shadowLayer.shadowOpacity = 0.35
-        shadowLayer.shadowRadius = 10
-        shadowLayer.shadowOffset = NSMakeSize(0, -4)
-        contactShadowLayer.shadowColor = NSColor.black.cgColor
-        contactShadowLayer.shadowOpacity = 0.2
-        contactShadowLayer.shadowRadius = 2
-        contactShadowLayer.shadowOffset = .zero
-        shadowMask.fillRule = .evenOdd
-        shadowContainer.mask = shadowMask
-        shadowContainer.addSublayer(shadowLayer)
-        shadowContainer.addSublayer(contactShadowLayer)
         self.layer?.masksToBounds = false
         if #available(macOS 14.0, *) {
             self.clipsToBounds = false
         }
-        self.layer?.insertSublayer(shadowContainer, at: 0)
+        self.layer?.insertSublayer(shadowLayer, at: 0)
         rimLayer.borderWidth = 1
         hairlineLayer.borderWidth = 0.5
         for layer in [rimLayer, hairlineLayer] {
@@ -189,18 +174,7 @@ final class MenuView: Control, TableViewDelegate {
         let outline = CGPath(roundedRect: bounds, cornerWidth: MenuView.cornerRadius, cornerHeight: MenuView.cornerRadius, transform: nil)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let containerFrame = bounds.insetBy(dx: -40, dy: -40)
-        let inner = NSMakeRect(40, 40, bounds.width, bounds.height)
-        let cutout = CGMutablePath()
-        cutout.addRect(containerFrame.size.bounds)
-        cutout.addPath(outline, transform: CGAffineTransform(translationX: 40, y: 40))
-        shadowContainer.frame = containerFrame
-        shadowMask.frame = containerFrame.size.bounds
-        shadowMask.path = cutout
-        shadowLayer.frame = inner
-        shadowLayer.shadowPath = outline
-        contactShadowLayer.frame = inner
-        contactShadowLayer.shadowPath = outline
+        shadowLayer.update(shape: outline, in: bounds)
         rimLayer.frame = bounds
         hairlineLayer.frame = bounds.insetBy(dx: -0.5, dy: -0.5)
         hairlineLayer.cornerRadius = MenuView.cornerRadius + 0.5

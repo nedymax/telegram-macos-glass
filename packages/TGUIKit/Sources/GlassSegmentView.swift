@@ -10,9 +10,7 @@ public final class GlassSegmentView: View {
     private let selectionView = View()
     private var menuBlur: NSVisualEffectView?
     private let menuVeil = View()
-    private let menuShadowContainer = CALayer()
-    private let menuShadow = CALayer()
-    private let menuShadowMask = CAShapeLayer()
+    private let menuShadow = MenuShadowLayer()
     private let menuRim = CALayer()
     private let menuHairline = CALayer()
     private var labels: [TextView] = []
@@ -62,16 +60,8 @@ public final class GlassSegmentView: View {
             menuVeil.frame = blur.bounds
             blur.addSubview(menuVeil)
             menuBlur = blur
-            menuShadow.shadowColor = NSColor.black.cgColor
-            menuShadow.shadowOpacity = 0.2
-            menuShadow.shadowRadius = 8
-            menuShadow.shadowOffset = NSMakeSize(0, -2)
-            menuShadowMask.fillRule = .evenOdd
-            menuShadowContainer.mask = menuShadowMask
-            menuShadowContainer.addSublayer(menuShadow)
             menuRim.borderWidth = 1
             menuHairline.borderWidth = 0.5
-            layer?.insertSublayer(menuShadowContainer, at: 0)
             for layer in [menuRim, menuHairline] {
                 layer.cornerRadius = GlassSegmentView.height / 2
                 layer.zPosition = 1
@@ -80,11 +70,16 @@ public final class GlassSegmentView: View {
         } else if !fallback, let blur = menuBlur {
             blur.removeFromSuperview()
             menuBlur = nil
-            for layer in [menuShadowContainer, menuRim, menuHairline] {
+            for layer in [menuRim, menuHairline] {
                 layer.removeFromSuperlayer()
             }
         }
         glass.isHidden = menuBlur != nil
+        if usesMenuMaterial, menuShadow.superlayer == nil {
+            layer?.insertSublayer(menuShadow, at: 0)
+        } else if !usesMenuMaterial {
+            menuShadow.removeFromSuperlayer()
+        }
         applyTheme()
         needsLayout = true
     }
@@ -225,20 +220,13 @@ public final class GlassSegmentView: View {
     private func updateLayout(size: NSSize, transition: ContainedViewLayoutTransition) {
         transition.updateFrame(view: glass, frame: size.bounds)
         glass.updateLayout(size: size, transition: transition)
+        if menuShadow.superlayer != nil {
+            menuShadow.update(shape: CGPath(roundedRect: size.bounds, cornerWidth: size.height / 2, cornerHeight: size.height / 2, transform: nil), in: size.bounds)
+        }
         if let menuBlur {
             transition.updateFrame(view: menuBlur, frame: size.bounds)
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            let outline = CGPath(roundedRect: size.bounds, cornerWidth: size.height / 2, cornerHeight: size.height / 2, transform: nil)
-            let containerFrame = size.bounds.insetBy(dx: -30, dy: -30)
-            let cutout = CGMutablePath()
-            cutout.addRect(containerFrame.size.bounds)
-            cutout.addPath(outline, transform: CGAffineTransform(translationX: 30, y: 30))
-            menuShadowContainer.frame = containerFrame
-            menuShadowMask.frame = containerFrame.size.bounds
-            menuShadowMask.path = cutout
-            menuShadow.frame = NSMakeRect(30, 30, size.width, size.height)
-            menuShadow.shadowPath = outline
             menuRim.frame = size.bounds
             menuHairline.frame = size.bounds.insetBy(dx: -0.5, dy: -0.5)
             menuHairline.cornerRadius = GlassSegmentView.height / 2 + 0.5
