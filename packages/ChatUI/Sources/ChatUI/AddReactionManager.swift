@@ -381,6 +381,11 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
         private let imageView = ImageView()
         private var loadingViews: [ImageView] = []
         private let frost = NSVisualEffectView()
+        var onEnter: (() -> Void)?
+        public override func mouseEntered(with event: NSEvent) {
+            super.mouseEntered(with: event)
+            onEnter?()
+        }
         public required init(frame frameRect: NSRect, theme: TelegramPresentationTheme) {
             super.init(frame: frameRect)
             self.scaleOnClick = true
@@ -479,6 +484,7 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
     
     private let showMore: ShowMore
     private let revealReactions:((ContextAddReactionsListView & StickerFramesCollector)->Void)?
+    public var prepareReveal: (() -> Void)?
     
     private let maskLayer = SimpleShapeLayer()
     private let backgroundColorView = View()
@@ -527,8 +533,13 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
         
         showMore.isHidden = revealReactions == nil
         
-        showMore.set(handler: { _ in
+        showMore.onEnter = { [weak self] in
+            self?.prepareReveal?()
+        }
+
+        showMore.set(handler: { [weak self] _ in
             AppMenu.keepsOpenOnNextMouseUp = true
+            self?.prepareReveal?()
         }, for: .Down)
 
         showMore.set(handler: { [weak self] control in

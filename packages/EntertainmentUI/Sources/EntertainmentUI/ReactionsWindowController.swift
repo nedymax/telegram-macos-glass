@@ -96,13 +96,14 @@ public final class ReactionsWindowController : NSObject {
                     return
                 }
                 let seconds = CACurrentMediaTime() - start
-                if seconds >= 0.5 {
+                if seconds >= 0.3 {
                     self.finishMorph()
                     return
                 }
                 let anticipation = CGFloat(sin(min(1, seconds / 0.05) * .pi / 2))
                 let from = NSMakeRect(bar.minX + (swell.minX - bar.minX) * anticipation, bar.minY + (swell.minY - bar.minY) * anticipation, bar.width + (swell.width - bar.width) * anticipation, bar.height + (swell.height - bar.height) * anticipation)
-                let progress = seconds < 0.03 ? 0 : morphSpring(seconds - 0.03, omega: 21, damping: 0.62)
+                let eased = min(1, max(0, (seconds - 0.03) / 0.25))
+                let progress = CGFloat(1 - pow(1 - eased, 3))
                 let rect = NSMakeRect(from.minX + (target.minX - from.minX) * progress, from.minY + (target.minY - from.minY) * progress, from.width + (target.width - from.width) * progress, from.height + (target.height - from.height) * progress)
                 self.applyMorph(rect)
                 let linear = min(1, seconds / 0.3)
@@ -198,6 +199,8 @@ public final class ReactionsWindowController : NSObject {
     private let overlay = OverlayControl()
     
     private var initialPlayers:[Int: LottiePlayerView] = [:]
+    private var isRevealed: Bool = false
+    private var pendingAppearance: [TableRowItem]?
 
     
     private var keyDisposable: Disposable?
@@ -287,7 +290,14 @@ public final class ReactionsWindowController : NSObject {
             self?.close(animated: true)
         }
         emojies.animateAppearance = { [weak self] items in
-            self?.animateAppearanceItems(items, initialPlayers: self?.initialPlayers ?? [:])
+            guard let self else {
+                return
+            }
+            if self.isRevealed {
+                self.animateAppearanceItems(items, initialPlayers: self.initialPlayers)
+            } else {
+                self.pendingAppearance = items
+            }
         }
     }
     
@@ -447,9 +457,14 @@ public final class ReactionsWindowController : NSObject {
             CATransaction.commit()
 
             self.initialPlayers = initialView.collect()
+            self.isRevealed = true
             CATransaction.begin()
             view.appearAnimated(from: barRect)
             CATransaction.commit()
+            if let pending = self.pendingAppearance {
+                self.pendingAppearance = nil
+                self.animateAppearanceItems(pending, initialPlayers: self.initialPlayers)
+            }
             
             if initialScreenRect.origin.y - 200 < 0, let panel = self.panel {
                 self.skipAppearAnimation = true
@@ -498,7 +513,3 @@ public final class ReactionsWindowController : NSObject {
     }
 }
 
-private func morphSpring(_ seconds: Double, omega: Double, damping: Double) -> CGFloat {
-    let dampedOmega = omega * (1 - damping * damping).squareRoot()
-    return CGFloat(1 - exp(-damping * omega * seconds) * (cos(dampedOmega * seconds) + damping * omega / dampedOmega * sin(dampedOmega * seconds)))
-}
