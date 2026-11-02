@@ -47,6 +47,10 @@ final class ChatBubbleWallpaperMaterial {
         return result
     }
 
+    static func frostedFill(_ color: NSColor) -> NSColor {
+        return (color.blended(withFraction: 0.45, of: .white) ?? color).withAlphaComponent(0.22)
+    }
+
     private static let contentThemeLock = NSLock()
     private static var lastContentTheme: (source: TelegramPresentationTheme, theme: TelegramPresentationTheme)?
 
