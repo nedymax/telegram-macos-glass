@@ -29,6 +29,61 @@ final class ChatBubbleWallpaperMaterial {
         return isNonStockWallpaper(selected: presentation.wallpaper.wallpaper, themeDefault: themeDefaultWallpaper(presentation))
     }
 
+    static let incomingGlassReference = NSColor(0x3B3B3D)
+    static let incomingOutlineColor = NSColor.white.withAlphaComponent(0.18)
+
+    static func isActive(_ presentation: TelegramPresentationTheme, hasBubble: Bool, liteBlur: Bool) -> Bool {
+        return hasBubble && presentation.bubbled && presentation.liquidGlass && !liteBlur && isNonStockWallpaper(presentation)
+    }
+
+    static func incomingTint(_ colors: ColorPalette) -> NSColor? {
+        guard colors.tinted || colors.parent == .nightAccent else {
+            return nil
+        }
+        return colors.bubbleBackground_outgoing.first
+    }
+
+    static func outgoingTint(_ colors: ColorPalette) -> NSColor {
+        var tint = colors.blendedOutgoingColors
+        var step = 0
+        while contrastRatio(.white, tint) < 3.0, step < 10 {
+            tint = tint.blended(withFraction: 0.12, of: .black) ?? tint
+            step += 1
+        }
+        return tint
+    }
+
+    static func legible(_ color: NSColor, on background: NSColor, minimum: CGFloat = 4.5) -> NSColor {
+        var result = color
+        var fraction: CGFloat = 0
+        while contrastRatio(result, background) < minimum, fraction < 1 {
+            fraction = min(1, fraction + 0.1)
+            result = color.blended(withFraction: fraction, of: .white) ?? result
+        }
+        return result
+    }
+
+    private static let contentThemeLock = NSLock()
+    private static var lastContentTheme: (source: TelegramPresentationTheme, theme: TelegramPresentationTheme)?
+
+    static func contentTheme(for presentation: TelegramPresentationTheme, liteBlur: Bool) -> TelegramPresentationTheme {
+        guard !presentation.colors.isDark, isActive(presentation, hasBubble: true, liteBlur: liteBlur) else {
+            return presentation
+        }
+        contentThemeLock.lock()
+        defer {
+            contentThemeLock.unlock()
+        }
+        if let cached = lastContentTheme, cached.source === presentation {
+            return cached.theme
+        }
+        let source = presentation.colors
+        let palette = darkPalette.withAccentColor(PaletteAccentColor(source.accent, source.bubbleBackground_outgoing), disableTint: true)
+        let theme = generateTheme(palette: palette, cloudTheme: nil, bubbled: presentation.bubbled, fontSize: presentation.fontSize, wallpaper: presentation.wallpaper, backgroundSize: presentation.backgroundSize, liquidGlass: presentation.liquidGlass)
+        lastContentTheme = (presentation, theme)
+        return theme
+    }
+
     static func matrix(outgoing: Bool, tint: NSColor, luminance: CGFloat) -> [CGFloat] {
         let light = min(1, max(0, luminance))
         if outgoing {
@@ -176,18 +231,15 @@ final class ChatBubbleWallpaperMaterialRenderer {
         rect: NSRect,
         style: ChatBubbleWallpaperMaterial.Style,
         luminance: Float
-    ) -> CGImage? {
+    ) -> (image: CGImage, frame: NSRect)? {
         guard rect.width > 0, rect.height > 0 else {
             return nil
         }
         guard let snapshot = snapshot(for: backgroundView) else {
             return nil
         }
-        let clamped = CGPoint(x: min(max(rect.minX, 0), snapshot.canvasSize.width),
-                              y: min(max(rect.minY, 0), snapshot.canvasSize.height))
-        let clipped = NSRect(origin: clamped, size: NSSize(width: min(rect.width, snapshot.canvasSize.width - clamped.x),
-                                                         height: min(rect.height, snapshot.canvasSize.height - clamped.y)))
-        guard clipped.width > 0, clipped.height > 0 else {
+        let clipped = rect.intersection(CGRect(origin: .zero, size: snapshot.canvasSize))
+        guard !clipped.isNull, clipped.width > 0, clipped.height > 0 else {
             return nil
         }
         let key = CanvasKey(
@@ -213,16 +265,19 @@ final class ChatBubbleWallpaperMaterialRenderer {
             }
         }
         let scale = snapshot.pixelScale * ChatBubbleWallpaperMaterial.blurDownsample
+        let minX = (clipped.minX * scale).rounded(.down)
+        let minY = (clipped.minY * scale).rounded(.down)
         let pixelRect = CGRect(
-            x: (clipped.minX * scale).rounded(.down),
-            y: (clipped.minY * scale).rounded(.down),
-            width: max(1, (clipped.width * scale).rounded(.up)),
-            height: max(1, (clipped.height * scale).rounded(.up))
+            x: minX,
+            y: minY,
+            width: max(1, (clipped.maxX * scale).rounded(.up) - minX),
+            height: max(1, (clipped.maxY * scale).rounded(.up) - minY)
         ).intersection(CGRect(x: 0, y: 0, width: canvas.width, height: canvas.height))
-        guard pixelRect.width >= 1, pixelRect.height >= 1 else {
+        guard pixelRect.width >= 1, pixelRect.height >= 1, let image = canvas.cropping(to: pixelRect) else {
             return nil
         }
-        return canvas.cropping(to: pixelRect)
+        let covered = NSRect(x: pixelRect.minX / scale, y: pixelRect.minY / scale, width: pixelRect.width / scale, height: pixelRect.height / scale)
+        return (image, covered.offsetBy(dx: -rect.minX, dy: -rect.minY))
     }
 
     func averageColor(of image: CGImage) -> NSColor? {

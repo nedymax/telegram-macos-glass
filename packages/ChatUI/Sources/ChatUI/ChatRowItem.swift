@@ -180,9 +180,9 @@ public class ChatRowItem: TableRowItem {
             if message.adAttribute != nil, let author = message.author {
                 nameColor = context.peerNameColors.get(author.namePeerColor ?? .blue).main
             }
-            return nameColor
+            return wallpaperGlassLegible(nameColor)
         }
-        return presentation.chat.linkColor(isIncoming, entry.renderType == .bubble)
+        return wallpaperGlassLegible(presentation.chat.linkColor(isIncoming, entry.renderType == .bubble))
     }
     
     public var forwardNameColor: NSColor {
@@ -200,9 +200,9 @@ public class ChatRowItem: TableRowItem {
             if message.adAttribute != nil, let author = message.author {
                 nameColor = context.peerNameColors.get(author.namePeerColor ?? .blue).main
             }
-            return nameColor
+            return wallpaperGlassLegible(nameColor)
         }
-        return presentation.chat.linkColor(isIncoming, entry.renderType == .bubble)
+        return wallpaperGlassLegible(presentation.chat.linkColor(isIncoming, entry.renderType == .bubble))
     }
 
 
@@ -1505,6 +1505,32 @@ public class ChatRowItem: TableRowItem {
         return messageBubbleImageModern(incoming: isIncoming, fillColor: .black, strokeColor: .clear, neighbors: neighbors)
     }
 
+    var isWallpaperGlass: Bool {
+        return isBubbled && ChatBubbleWallpaperMaterial.isActive(presentation, hasBubble: hasBubble, liteBlur: context.isLite(.blur))
+    }
+
+    var wallpaperGlassBorder: (CGImage, NSEdgeInsets)? {
+        guard isIncoming, isWallpaperGlass, let neighbors = bubbleNeighbors else {
+            return nil
+        }
+        return messageBubbleImageModern(incoming: true, fillColor: .clear, strokeColor: ChatBubbleWallpaperMaterial.incomingOutlineColor, neighbors: neighbors)
+    }
+
+    func wallpaperGlassReplyColors(_ colors: PeerNameColors.Colors) -> PeerNameColors.Colors {
+        guard isWallpaperGlass else {
+            return colors
+        }
+        return PeerNameColors.Colors(main: wallpaperGlassLegible(colors.main), secondary: colors.secondary, tertiary: colors.tertiary)
+    }
+
+    func wallpaperGlassLegible(_ color: NSColor) -> NSColor {
+        guard isWallpaperGlass else {
+            return color
+        }
+        let background = isIncoming ? ChatBubbleWallpaperMaterial.incomingGlassReference : ChatBubbleWallpaperMaterial.outgoingTint(presentation.colors)
+        return ChatBubbleWallpaperMaterial.legible(color, on: background)
+    }
+
     public let downloadSettings: AutomaticMediaDownloadSettings
     
     public let presentation: TelegramPresentationTheme
@@ -2672,7 +2698,7 @@ public class ChatRowItem: TableRowItem {
                 let formatterEdited = DateSelectorUtil.chatFullDateFormatter
                 fullDate = "\(fullDate) (\(formatterEdited.string(from: Date(timeIntervalSince1970: TimeInterval(forwardInfo.date)))))"
             }
-            let replyPresentation = { [self] in ChatAccessoryPresentation(background: hasBubble ? theme.chat.backgroundColor(isIncoming, object.renderType == .bubble) : isBubbled ?  theme.colors.grayForeground : theme.colors.background, colors: theme.chat.replyTitle(self), enabledText: theme.chat.replyText(self), disabledText: theme.chat.replyDisabledText(self), quoteIcon: theme.chat.replyQuote(self), pattern: theme.chat.replyPattern(self), giftEmojiFileId: theme.chat.replyGiftEmojiId(self), app: theme) }
+            let replyPresentation = { [self] in ChatAccessoryPresentation(background: hasBubble ? theme.chat.backgroundColor(isIncoming, object.renderType == .bubble) : isBubbled ?  theme.colors.grayForeground : theme.colors.background, colors: self.wallpaperGlassReplyColors(theme.chat.replyTitle(self)), enabledText: theme.chat.replyText(self), disabledText: theme.chat.replyDisabledText(self), quoteIcon: theme.chat.replyQuote(self), pattern: theme.chat.replyPattern(self), giftEmojiFileId: theme.chat.replyGiftEmojiId(self), app: theme, frosted: self.isWallpaperGlass) }
 
             for attribute in message.attributes {
                 if let attribute = attribute as? ReplyMessageAttribute, let replyMessage = message.associatedMessages[attribute.messageId] {
@@ -2808,7 +2834,7 @@ public class ChatRowItem: TableRowItem {
     }
     
     public static func item(_ initialSize:NSSize, from entry:ChatHistoryEntry, interaction:ChatInteraction, theme: TelegramPresentationTheme) -> TableRowItem {
-        
+        let theme = ChatBubbleWallpaperMaterial.contentTheme(for: theme, liteBlur: interaction.interactionContext.isLite(.blur))
         switch entry {
         case .UnreadEntry:
             return ChatUnreadRowItem(initialSize, interaction, interaction.interactionContext, entry, theme: theme)
