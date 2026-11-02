@@ -2167,7 +2167,7 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
                     }
                 }
                 if usesAdminBadgeNode(item) {
-                    (rowView as? ChatLayerRowView)?.updateAdminBadge(item.adminBadge, origin: adminBadgePoint(item), background: item.adminBadgeIsRank ? item.adminBadgeColor : nil, backgroundFrame: adminBadgeBgRect(item), interactive: item.adminBadgeAuthorId != nil, animated: animated, action: { [weak item, weak self] in
+                    (rowView as? ChatLayerRowView)?.updateAdminBadge(item.adminBadge, origin: adminBadgePoint(item), background: item.adminBadgeIsRank ? item.adminBadgeColor.map { item.isWallpaperGlass && item.isIncoming ? ChatBubbleWallpaperMaterial.frostedFill($0) : $0.withAlphaComponent(0.2) } : nil, backgroundFrame: adminBadgeBgRect(item), interactive: item.adminBadgeAuthorId != nil, animated: animated, action: { [weak item, weak self] in
                         guard let self else { return }
                         item?.adminBadgeInteraction(self.rowView)
                     })
