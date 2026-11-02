@@ -373,6 +373,11 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
     
     public let bubbleView = ChatMessageBubbleBackdrop()
 
+    private weak var wallpaperMaterialBackground: BackgroundView?
+    private var wallpaperMaterialMode: TableBackgroundMode?
+    private var wallpaperMaterialLuminance: (rect: NSRect, value: Float)?
+    private var wallpaperMaterialAverage: NSColor?
+
     private var cutBandViews: [NSView] = []
     
     private var statusControl: PremiumStatusControl? = nil
@@ -502,6 +507,82 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
         let transition: ContainedViewLayoutTransition = animated ? .animated(duration: 0.2, curve: .easeOut) : .immediate
 
         bubbleView.update(rect: rect.offsetBy(dx: self.bubbleView.frame.minX, dy: inset), within: size, transition: transition, rotated: rotated)
+        if let item = self.item as? ChatRowItem {
+            updateWallpaperMaterial(item)
+        }
+    }
+
+    private func enclosingWallpaperView() -> BackgroundView? {
+        var current: NSView? = self
+        while let view = current {
+            if let chat = view as? ChatControllerView {
+                return chat.backgroundView
+            }
+            current = view.superview
+        }
+        return nil
+    }
+
+    private func updateWallpaperMaterial(_ item: ChatRowItem) {
+        guard item.isBubbled, item.hasBubble, item.presentation.liquidGlass, !item.context.isLite(.blur), ChatBubbleWallpaperMaterial.isNonStockWallpaper(item.presentation) else {
+            clearWallpaperMaterial()
+            return
+        }
+        guard let background = enclosingWallpaperView() else {
+            clearWallpaperMaterial()
+            return
+        }
+        let rect = bubbleView.convert(bubbleView.bounds, to: background)
+        guard rect.width > 0, rect.height > 0, background.bounds.width > 0, background.bounds.height > 0 else {
+            clearWallpaperMaterial()
+            return
+        }
+        if wallpaperMaterialBackground !== background || wallpaperMaterialMode != background.backgroundMode {
+            wallpaperMaterialBackground = background
+            wallpaperMaterialMode = background.backgroundMode
+            wallpaperMaterialLuminance = nil
+            wallpaperMaterialAverage = nil
+        }
+        let luminance: Float
+        var refreshedLuminance = false
+        if let cached = wallpaperMaterialLuminance, abs(cached.rect.minX - rect.minX) < 4, abs(cached.rect.minY - rect.minY) < 4, abs(cached.rect.width - rect.width) < 0.5, abs(cached.rect.height - rect.height) < 0.5 {
+            luminance = cached.value
+        } else {
+            luminance = ChatBubbleWallpaperMaterialRenderer.shared.luminance(for: background, rect: rect)
+            wallpaperMaterialLuminance = (rect, luminance)
+            wallpaperMaterialAverage = nil
+            refreshedLuminance = true
+        }
+        let colors = item.presentation.colors
+        let style: ChatBubbleWallpaperMaterial.Style
+        if item.isIncoming {
+            style = .incoming(tint: colors.tinted ? colors.bubbleBackground_outgoing.first : nil, tintOpacity: 0.14)
+        } else {
+            style = .outgoing(tint: colors.blendedOutgoingColors)
+        }
+        guard let image = ChatBubbleWallpaperMaterialRenderer.shared.materialImage(for: background, rect: rect, style: style, luminance: luminance) else {
+            clearWallpaperMaterial()
+            return
+        }
+        if refreshedLuminance || wallpaperMaterialAverage == nil {
+            wallpaperMaterialAverage = ChatBubbleWallpaperMaterialRenderer.shared.averageColor(of: image)
+        }
+        if let average = wallpaperMaterialAverage {
+            let textColor = item.presentation.chat.textColor(item.isIncoming, item.renderType == .bubble)
+            if ChatBubbleWallpaperMaterial.contrastRatio(textColor, average) < 3.0 {
+                bubbleView.setWallpaperMaterial(nil)
+                return
+            }
+        }
+        bubbleView.setWallpaperMaterial(image)
+    }
+
+    private func clearWallpaperMaterial() {
+        bubbleView.setWallpaperMaterial(nil)
+        wallpaperMaterialBackground = nil
+        wallpaperMaterialMode = nil
+        wallpaperMaterialLuminance = nil
+        wallpaperMaterialAverage = nil
     }
       
     var textSelectionSources: ChatTextSelectionSources {
@@ -677,6 +758,7 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
         }
         replyMarkupView?.backgroundColor = backdorColor
         bubbleView.background = item.presentation.chat.bubbleBackgroundColor(item.isIncoming, item.hasBubble)
+        updateWallpaperMaterial(item)
 
         if let control = channelCommentsBubbleControl {
             control.set(background: .clear, for: .Normal)
