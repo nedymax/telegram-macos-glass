@@ -556,9 +556,9 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
         let colors = item.presentation.colors
         let style: ChatBubbleWallpaperMaterial.Style
         if item.isIncoming {
-            style = .incoming(tint: ChatBubbleWallpaperMaterial.incomingTint(colors), tintOpacity: 0.14)
+            style = .incoming(tint: colors.tinted ? colors.bubbleBackground_outgoing.first : nil, tintOpacity: 0.14)
         } else {
-            style = .outgoing(tint: ChatBubbleWallpaperMaterial.outgoingTint(colors))
+            style = .outgoing(tint: colors.blendedOutgoingColors)
         }
         guard let material = ChatBubbleWallpaperMaterialRenderer.shared.materialImage(for: background, rect: rect, style: style, luminance: luminance) else {
             clearWallpaperMaterial()
