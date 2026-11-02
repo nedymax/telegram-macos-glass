@@ -36,22 +36,6 @@ final class ChatBubbleWallpaperMaterial {
         return hasBubble && presentation.bubbled && presentation.liquidGlass && !liteBlur && isNonStockWallpaper(presentation)
     }
 
-    static func incomingTint(_ colors: ColorPalette) -> NSColor? {
-        guard colors.tinted || colors.parent == .nightAccent else {
-            return nil
-        }
-        return colors.bubbleBackground_outgoing.first
-    }
-
-    static func outgoingTint(_ colors: ColorPalette) -> NSColor {
-        var tint = colors.blendedOutgoingColors
-        var step = 0
-        while contrastRatio(.white, tint) < 3.0, step < 10 {
-            tint = tint.blended(withFraction: 0.12, of: .black) ?? tint
-            step += 1
-        }
-        return tint
-    }
 
     static func legible(_ color: NSColor, on background: NSColor, minimum: CGFloat = 4.5) -> NSColor {
         var result = color

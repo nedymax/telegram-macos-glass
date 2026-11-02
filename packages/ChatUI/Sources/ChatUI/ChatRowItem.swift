@@ -1529,11 +1529,10 @@ public class ChatRowItem: TableRowItem {
     }
 
     func wallpaperGlassLegible(_ color: NSColor) -> NSColor {
-        guard isWallpaperGlass else {
+        guard isIncoming, isWallpaperGlass else {
             return color
         }
-        let background = isIncoming ? ChatBubbleWallpaperMaterial.incomingGlassReference : ChatBubbleWallpaperMaterial.outgoingTint(presentation.colors)
-        return ChatBubbleWallpaperMaterial.legible(color, on: background)
+        return ChatBubbleWallpaperMaterial.legible(color, on: ChatBubbleWallpaperMaterial.incomingGlassReference)
     }
 
     public let downloadSettings: AutomaticMediaDownloadSettings
@@ -2848,8 +2847,14 @@ public class ChatRowItem: TableRowItem {
         super.init(initialSize)
     }
     
-    public static func item(_ initialSize:NSSize, from entry:ChatHistoryEntry, interaction:ChatInteraction, theme: TelegramPresentationTheme) -> TableRowItem {
-        let theme = ChatBubbleWallpaperMaterial.contentTheme(for: theme, liteBlur: interaction.interactionContext.isLite(.blur))
+    public static func item(_ initialSize:NSSize, from entry:ChatHistoryEntry, interaction:ChatInteraction, theme originalTheme: TelegramPresentationTheme) -> TableRowItem {
+        let context = interaction.interactionContext
+        let theme: TelegramPresentationTheme
+        if let message = entry.message, !(message.media.first is TelegramMediaAction), message.isIncoming(context.account, entry.renderType == .bubble) {
+            theme = ChatBubbleWallpaperMaterial.contentTheme(for: originalTheme, liteBlur: context.isLite(.blur))
+        } else {
+            theme = originalTheme
+        }
         switch entry {
         case .UnreadEntry:
             return ChatUnreadRowItem(initialSize, interaction, interaction.interactionContext, entry, theme: theme)
