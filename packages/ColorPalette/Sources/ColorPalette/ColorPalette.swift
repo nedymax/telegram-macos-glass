@@ -2562,7 +2562,7 @@ private final class MojavePalette : ColorPalette {
         return controlAccentColor.darker(amount: 0.2)
     }
     override var bubbleBackground_incoming: NSColor {
-        return windowBackgroundColor
+        return NSColor(0x3B3B3D)
     }
     override var bubbleBackgroundHighlight_incoming: NSColor {
         return windowBackgroundColor.lighter(amount: 0.2)

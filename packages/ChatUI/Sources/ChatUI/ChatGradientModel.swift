@@ -58,6 +58,8 @@ final class ChatBubbleSliceLayer: SimpleLayer {
 public final class ChatMessageBubbleBackdrop: NSView {
     private var backgroundContent: SimpleLayer?
     private let borderLayer = ChatBubbleSliceLayer()
+    private let materialLayer = ChatBubbleSliceLayer()
+    private var materialImage: CGImage?
     private var maskLayer: ChatBubbleSliceLayer?
 
     private var lastUpdate: (rect: CGRect, containerSize: CGSize, rotated: Bool)?
@@ -100,8 +102,28 @@ public final class ChatMessageBubbleBackdrop: NSView {
             transition.updateFrame(layer: layer, frame: size.bounds)
         }
         transition.updateFrame(layer: borderLayer, frame: size.bounds)
+        if materialImage != nil {
+            transition.updateFrame(layer: materialLayer, frame: size.bounds)
+        }
         self.currentSize = size
         self.applyImages()
+    }
+
+    public func setWallpaperMaterial(_ image: CGImage?) {
+        if self.materialImage === image {
+            return
+        }
+        self.materialImage = image
+        if let image {
+            if materialLayer.superlayer == nil {
+                self.layer?.insertSublayer(materialLayer, below: borderLayer)
+            }
+            materialLayer.data = (image, NSEdgeInsets())
+            materialLayer.frame = self.bounds
+        } else {
+            materialLayer.removeFromSuperlayer()
+            materialLayer.data = nil
+        }
     }
 
     /// Bands of the bubble to erase, in this view's coordinates. Empty — the overwhelmingly common case
@@ -145,6 +167,9 @@ public final class ChatMessageBubbleBackdrop: NSView {
         self.maskData = image
         self.borderData = border
         self.appliedCut = nil
+        if image == nil {
+            self.setWallpaperMaterial(nil)
+        }
         if image == nil {
             if let layer = self.backgroundContent {
                 performSublayerRemoval(layer, animated: false)
