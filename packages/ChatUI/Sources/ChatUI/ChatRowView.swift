@@ -524,7 +524,7 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
     }
 
     private func updateWallpaperMaterial(_ item: ChatRowItem) {
-        guard item.isBubbled, item.hasBubble, item.presentation.liquidGlass, !item.context.isLite(.blur), ChatBubbleWallpaperMaterial.isNonStockWallpaper(item.presentation) else {
+        guard item.isWallpaperGlass else {
             clearWallpaperMaterial()
             return
         }
@@ -556,16 +556,16 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
         let colors = item.presentation.colors
         let style: ChatBubbleWallpaperMaterial.Style
         if item.isIncoming {
-            style = .incoming(tint: colors.tinted ? colors.bubbleBackground_outgoing.first : nil, tintOpacity: 0.14)
+            style = .incoming(tint: ChatBubbleWallpaperMaterial.incomingTint(colors), tintOpacity: 0.14)
         } else {
-            style = .outgoing(tint: colors.blendedOutgoingColors)
+            style = .outgoing(tint: ChatBubbleWallpaperMaterial.outgoingTint(colors))
         }
-        guard let image = ChatBubbleWallpaperMaterialRenderer.shared.materialImage(for: background, rect: rect, style: style, luminance: luminance) else {
+        guard let material = ChatBubbleWallpaperMaterialRenderer.shared.materialImage(for: background, rect: rect, style: style, luminance: luminance) else {
             clearWallpaperMaterial()
             return
         }
         if refreshedLuminance || wallpaperMaterialAverage == nil {
-            wallpaperMaterialAverage = ChatBubbleWallpaperMaterialRenderer.shared.averageColor(of: image)
+            wallpaperMaterialAverage = ChatBubbleWallpaperMaterialRenderer.shared.averageColor(of: material.image)
         }
         if let average = wallpaperMaterialAverage {
             let textColor = item.presentation.chat.textColor(item.isIncoming, item.renderType == .bubble)
@@ -574,7 +574,7 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
                 return
             }
         }
-        bubbleView.setWallpaperMaterial(image)
+        bubbleView.setWallpaperMaterial(material.image, frame: material.frame)
     }
 
     private func clearWallpaperMaterial() {
@@ -2309,7 +2309,7 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
     
     private func renderLayoutType(_ item: ChatRowItem, animated: Bool) {
         if item.isBubbled, item.hasBubble {
-            bubbleView.setType(image: item.bubbleImage, border: nil, background: item.isIncoming ? item.presentation.icons.chatGradientBubble_incoming : item.presentation.icons.chatGradientBubble_outgoing)
+            bubbleView.setType(image: item.bubbleImage, border: item.wallpaperGlassBorder, background: item.isIncoming ? item.presentation.icons.chatGradientBubble_incoming : item.presentation.icons.chatGradientBubble_outgoing)
         } else {
             bubbleView.setType(image: nil, border: nil, background: item.isIncoming ? item.presentation.icons.chatGradientBubble_incoming : item.presentation.icons.chatGradientBubble_outgoing)
         }

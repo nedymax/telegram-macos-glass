@@ -60,6 +60,7 @@ public final class ChatMessageBubbleBackdrop: NSView {
     private let borderLayer = ChatBubbleSliceLayer()
     private let materialLayer = ChatBubbleSliceLayer()
     private var materialImage: CGImage?
+    private var materialFrame: NSRect = .zero
     private var maskLayer: ChatBubbleSliceLayer?
 
     private var lastUpdate: (rect: CGRect, containerSize: CGSize, rotated: Bool)?
@@ -103,23 +104,31 @@ public final class ChatMessageBubbleBackdrop: NSView {
         }
         transition.updateFrame(layer: borderLayer, frame: size.bounds)
         if materialImage != nil {
-            transition.updateFrame(layer: materialLayer, frame: size.bounds)
+            transition.updateFrame(layer: materialLayer, frame: materialLayerFrame(in: size))
         }
         self.currentSize = size
         self.applyImages()
     }
 
-    public func setWallpaperMaterial(_ image: CGImage?) {
-        if self.materialImage === image {
+    private func materialLayerFrame(in size: NSSize) -> NSRect {
+        if isFlipped {
+            return materialFrame
+        }
+        return NSRect(x: materialFrame.minX, y: size.height - materialFrame.maxY, width: materialFrame.width, height: materialFrame.height)
+    }
+
+    public func setWallpaperMaterial(_ image: CGImage?, frame: NSRect = .zero) {
+        if self.materialImage === image, self.materialFrame == frame {
             return
         }
         self.materialImage = image
+        self.materialFrame = frame
         if let image {
             if materialLayer.superlayer == nil {
                 self.layer?.insertSublayer(materialLayer, below: borderLayer)
             }
             materialLayer.data = (image, NSEdgeInsets())
-            materialLayer.frame = self.bounds
+            materialLayer.frame = materialLayerFrame(in: self.bounds.size)
         } else {
             materialLayer.removeFromSuperlayer()
             materialLayer.data = nil
