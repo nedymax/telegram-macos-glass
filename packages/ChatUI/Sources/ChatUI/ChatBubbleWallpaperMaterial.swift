@@ -295,15 +295,14 @@ final class ChatBubbleWallpaperMaterialRenderer {
         guard clipped.width > 0, clipped.height > 0 else {
             return 0.2
         }
-        let mapSize = CGFloat(snapshot.luminance.pixelsWide)
         var total: CGFloat = 0
         var samples: CGFloat = 0
         for row in 0 ..< 4 {
             for column in 0 ..< 8 {
                 let x = clipped.minX + (CGFloat(column) + 0.5) * clipped.width / 8
                 let y = clipped.minY + (CGFloat(row) + 0.5) * clipped.height / 4
-                let px = min(snapshot.luminance.pixelsWide - 1, max(0, Int(x / snapshot.canvasSize.width * mapSize)))
-                let py = min(snapshot.luminance.pixelsHigh - 1, max(0, Int(y / snapshot.canvasSize.height * mapSize)))
+                let px = min(snapshot.luminance.pixelsWide - 1, max(0, Int(x / snapshot.canvasSize.width * CGFloat(snapshot.luminance.pixelsWide))))
+                let py = min(snapshot.luminance.pixelsHigh - 1, max(0, Int(y / snapshot.canvasSize.height * CGFloat(snapshot.luminance.pixelsHigh))))
                 guard let color = snapshot.luminance.colorAt(x: px, y: py)?.usingColorSpace(.sRGB) else {
                     continue
                 }
@@ -341,9 +340,7 @@ final class ChatBubbleWallpaperMaterialRenderer {
             .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: ChatBubbleWallpaperMaterial.blurRadius * key.scale * ChatBubbleWallpaperMaterial.blurDownsample])
             .cropped(to: CGRect(x: 0, y: 0, width: CGFloat(source.width) * ChatBubbleWallpaperMaterial.blurDownsample, height: CGFloat(source.height) * ChatBubbleWallpaperMaterial.blurDownsample))
         let pixelScale = CGFloat(source.width) / key.width
-        guard let luminance = makeLuminanceMap(source: source) else {
-            return nil
-        }
+        let luminance = NSBitmapImageRep(cgImage: source)
         let snapshot = Snapshot(
             view: view,
             key: key,
@@ -363,27 +360,6 @@ final class ChatBubbleWallpaperMaterialRenderer {
             snapshots.removeValue(forKey: snapshotOrder.removeFirst())
         }
         return snapshot
-    }
-
-    private func makeLuminanceMap(source: CGImage) -> NSBitmapImageRep? {
-        let size = 64
-        guard let context = CGContext(
-            data: nil,
-            width: size,
-            height: size,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else {
-            return nil
-        }
-        context.interpolationQuality = .medium
-        context.draw(source, in: CGRect(x: 0, y: 0, width: size, height: size))
-        guard let image = context.makeImage() else {
-            return nil
-        }
-        return NSBitmapImageRep(cgImage: image)
     }
 
     private func renderCanvas(snapshot: Snapshot, style: ChatBubbleWallpaperMaterial.Style, luminance: CGFloat) -> CGImage? {
