@@ -187,7 +187,7 @@ jobs:
           grep -q 'BUILD SUCCEEDED' xcodebuild.log
 
       - name: Save compilation cache
-        if: always() && steps.build-app.conclusion != 'skipped' && steps.restore-cas.outputs.cache-hit != 'true'
+        if: steps.build-app.conclusion == 'success' && steps.restore-cas.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: build/DerivedData/CompilationCache.noindex
