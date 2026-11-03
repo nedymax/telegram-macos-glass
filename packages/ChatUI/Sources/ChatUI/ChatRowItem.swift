@@ -1518,7 +1518,7 @@ public class ChatRowItem: TableRowItem {
     }
 
     var isWallpaperGlass: Bool {
-        return isBubbled && ChatBubbleWallpaperMaterial.isActive(presentation, hasBubble: hasBubble, liteBlur: context.isLite(.blur))
+        return isBubbled && ChatBubbleWallpaperMaterial.isActive(presentation, hasBubble: hasBubble, liteBlur: context.isLite(.blur) || context.isLite(.glassBubbles))
     }
 
     var wallpaperGlassBorder: (CGImage, NSEdgeInsets)? {
@@ -2462,7 +2462,7 @@ public class ChatRowItem: TableRowItem {
                             case .none:
                                 badgeColor = !hasBubble ? theme.colors.grayText : theme.chat.grayText(isIncoming, object.renderType == .bubble)
                             }
-                            badge = .initialize(string: " " + rank, color: isIncoming && ChatBubbleWallpaperMaterial.isActive(theme, hasBubble: isBubbled && hasBubble, liteBlur: context.isLite(.blur)) ? ChatBubbleWallpaperMaterial.legible(badgeColor, on: ChatBubbleWallpaperMaterial.incomingGlassReference) : badgeColor, font: .normal(.short))
+                            badge = .initialize(string: " " + rank, color: isIncoming && ChatBubbleWallpaperMaterial.isActive(theme, hasBubble: isBubbled && hasBubble, liteBlur: context.isLite(.blur) || context.isLite(.glassBubbles)) ? ChatBubbleWallpaperMaterial.legible(badgeColor, on: ChatBubbleWallpaperMaterial.incomingGlassReference) : badgeColor, font: .normal(.short))
                             self.adminBadgeIsRank = rankType != .none
                             self.adminBadgeRankType = rankType
                             self.adminBadgeColor = rankType != .none ? badgeColor : nil
@@ -2858,7 +2858,7 @@ public class ChatRowItem: TableRowItem {
         let context = interaction.interactionContext
         let theme: TelegramPresentationTheme
         if let message = entry.message, !(message.media.first is TelegramMediaAction), message.isIncoming(context.account, entry.renderType == .bubble) {
-            theme = ChatBubbleWallpaperMaterial.contentTheme(for: originalTheme, liteBlur: context.isLite(.blur))
+            theme = ChatBubbleWallpaperMaterial.contentTheme(for: originalTheme, liteBlur: context.isLite(.blur) || context.isLite(.glassBubbles))
         } else {
             theme = originalTheme
         }
