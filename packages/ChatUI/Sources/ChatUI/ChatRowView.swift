@@ -2062,7 +2062,7 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
         CATransaction.commit()
         ChatBubbleWallpaperMaterial.applyGlassMatrix(matrix, to: glass)
         let icon = item.hasSource ? item.presentation.chat.chat_goto_message_bubble(theme: item.presentation) : item.presentation.chat.chat_share_bubble(theme: item.presentation)
-        control.set(image: icon.precomposed(ChatBubbleWallpaperMaterial.glassGlyphColor), for: .Normal)
+        control.set(image: ChatBubbleWallpaperMaterial.tinted(icon, ChatBubbleWallpaperMaterial.glassGlyphColor), for: .Normal)
     }
 
     public func fillReactions(_ item: ChatRowItem, animated: Bool) {
