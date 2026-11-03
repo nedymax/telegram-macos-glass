@@ -58,9 +58,9 @@ final class ChatBubbleSliceLayer: SimpleLayer {
 public final class ChatMessageBubbleBackdrop: NSView {
     private var backgroundContent: SimpleLayer?
     private let borderLayer = ChatBubbleSliceLayer()
-    private let materialLayer = ChatBubbleSliceLayer()
-    private var materialImage: CGImage?
-    private var materialFrame: NSRect = .zero
+    private var glassLayer: CALayer?
+    private var glassMatrix: [CGFloat]?
+    private var glassHiddenFill: CGColor?
     private var maskLayer: ChatBubbleSliceLayer?
 
     private var lastUpdate: (rect: CGRect, containerSize: CGSize, rotated: Bool)?
@@ -103,35 +103,47 @@ public final class ChatMessageBubbleBackdrop: NSView {
             transition.updateFrame(layer: layer, frame: size.bounds)
         }
         transition.updateFrame(layer: borderLayer, frame: size.bounds)
-        if materialImage != nil {
-            transition.updateFrame(layer: materialLayer, frame: materialLayerFrame(in: size))
+        if let glassLayer {
+            transition.updateFrame(layer: glassLayer, frame: size.bounds)
         }
         self.currentSize = size
         self.applyImages()
     }
 
-    private func materialLayerFrame(in size: NSSize) -> NSRect {
-        if isFlipped {
-            return materialFrame
-        }
-        return NSRect(x: materialFrame.minX, y: size.height - materialFrame.maxY, width: materialFrame.width, height: materialFrame.height)
-    }
-
-    public func setWallpaperMaterial(_ image: CGImage?, frame: NSRect = .zero) {
-        if self.materialImage === image, self.materialFrame == frame {
+    public func setWallpaperGlass(_ matrix: [CGFloat]?) {
+        guard let matrix else {
+            if let glassLayer {
+                glassLayer.removeFromSuperlayer()
+                self.glassLayer = nil
+                self.glassMatrix = nil
+                if let fill = self.glassHiddenFill {
+                    self.layer?.backgroundColor = fill
+                }
+                self.glassHiddenFill = nil
+            }
+            self.backgroundContent?.isHidden = false
             return
         }
-        self.materialImage = image
-        self.materialFrame = frame
-        if let image {
-            if materialLayer.superlayer == nil {
-                self.layer?.insertSublayer(materialLayer, below: borderLayer)
-            }
-            materialLayer.data = (image, NSEdgeInsets())
-            materialLayer.frame = materialLayerFrame(in: self.bounds.size)
+        let glass: CALayer
+        if let current = self.glassLayer {
+            glass = current
         } else {
-            materialLayer.removeFromSuperlayer()
-            materialLayer.data = nil
+            guard let created = ChatBubbleWallpaperMaterial.makeGlassLayer() else {
+                return
+            }
+            created.frame = self.bounds
+            self.layer?.insertSublayer(created, at: 0)
+            self.glassLayer = created
+            glass = created
+        }
+        if self.glassMatrix != matrix {
+            self.glassMatrix = matrix
+            ChatBubbleWallpaperMaterial.applyGlassMatrix(matrix, to: glass)
+        }
+        self.backgroundContent?.isHidden = true
+        if let fill = self.layer?.backgroundColor, fill.alpha > 0 {
+            self.glassHiddenFill = fill
+            self.layer?.backgroundColor = .clear
         }
     }
 
@@ -177,7 +189,7 @@ public final class ChatMessageBubbleBackdrop: NSView {
         self.borderData = border
         self.appliedCut = nil
         if image == nil {
-            self.setWallpaperMaterial(nil)
+            self.setWallpaperGlass(nil)
         }
         if image == nil {
             if let layer = self.backgroundContent {
@@ -192,7 +204,8 @@ public final class ChatMessageBubbleBackdrop: NSView {
                 current = SimpleLayer()
                 current.anchorPoint = .zero
                 self.backgroundContent = current
-                self.layer?.insertSublayer(current, below: self.materialLayer.superlayer != nil ? self.materialLayer : self.borderLayer)
+                current.isHidden = self.glassLayer != nil
+                self.layer?.insertSublayer(current, below: self.borderLayer)
             }
             current.contents = background
         }
