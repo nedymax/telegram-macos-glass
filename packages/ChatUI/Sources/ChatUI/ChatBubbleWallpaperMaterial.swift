@@ -1,5 +1,6 @@
 import AppKit
 import CoreImage
+import Accelerate
 import ColorPalette
 import TGUIKit
 import TelegramTheme
@@ -14,26 +15,11 @@ final class ChatBubbleWallpaperMaterial {
     static let blurDownsample: CGFloat = 0.25
     static let blurRadius: CGFloat = 12
 
-    static func isNonStockWallpaper(selected: Wallpaper, themeDefault: Wallpaper) -> Bool {
-        guard selected != .none else {
-            return false
-        }
-        return selected != themeDefault
-    }
-
-    static func themeDefaultWallpaper(_ presentation: TelegramPresentationTheme) -> Wallpaper {
-        return presentation.wallpaper.associated?.wallpaper ?? presentation.colors.wallpaper.wallpaper
-    }
-
-    static func isNonStockWallpaper(_ presentation: TelegramPresentationTheme) -> Bool {
-        return isNonStockWallpaper(selected: presentation.wallpaper.wallpaper, themeDefault: themeDefaultWallpaper(presentation))
-    }
-
     static let incomingGlassReference = NSColor(0x3B3B3D)
     static let incomingOutlineColor = NSColor.white.withAlphaComponent(0.18)
 
     static func isActive(_ presentation: TelegramPresentationTheme, hasBubble: Bool, liteBlur: Bool) -> Bool {
-        return hasBubble && presentation.bubbled && presentation.liquidGlass && !liteBlur && isNonStockWallpaper(presentation)
+        return hasBubble && presentation.bubbled && presentation.liquidGlass && !liteBlur && presentation.hasWallpaper
     }
 
 
@@ -172,45 +158,53 @@ final class ChatBubbleWallpaperMaterialRenderer {
         let scale: CGFloat
     }
 
-    private struct CanvasKey: Hashable {
-        let snapshot: Int
-        let style: Int
-        let tint: UInt32
-        let tintAlpha: UInt16
-        let luminance: Int
+    private struct Raster {
+        let pixels: UnsafeMutableRawPointer
+        let width: Int
+        let height: Int
+        let rowBytes: Int
+
+        func deallocate() {
+            pixels.deallocate()
+        }
     }
 
     private final class Snapshot {
         weak var view: BackgroundView?
         let key: SnapshotKey
-        let identity: Int
         let canvasSize: NSSize
-        let pixelScale: CGFloat
-        let blurred: CIImage
-        let context: CIContext
+        let materialScale: CGFloat
+        let padding: Int
+        let blurred: Raster
+        let luminance: Raster
         let colorSpace: CGColorSpace
-        let luminance: NSBitmapImageRep
 
-        init(view: BackgroundView, key: SnapshotKey, identity: Int, canvasSize: NSSize, pixelScale: CGFloat, blurred: CIImage, context: CIContext, colorSpace: CGColorSpace, luminance: NSBitmapImageRep) {
+        init(view: BackgroundView, key: SnapshotKey, canvasSize: NSSize, materialScale: CGFloat, padding: Int, blurred: Raster, luminance: Raster, colorSpace: CGColorSpace) {
             self.view = view
             self.key = key
-            self.identity = identity
             self.canvasSize = canvasSize
-            self.pixelScale = pixelScale
+            self.materialScale = materialScale
+            self.padding = padding
             self.blurred = blurred
-            self.context = context
-            self.colorSpace = colorSpace
             self.luminance = luminance
+            self.colorSpace = colorSpace
+        }
+
+        deinit {
+            blurred.deallocate()
+            luminance.deallocate()
         }
     }
 
     private var snapshots: [ObjectIdentifier: Snapshot] = [:]
     private var snapshotOrder: [ObjectIdentifier] = []
-    private var canvases: [CanvasKey: CGImage] = [:]
-    private var canvasOrder: [CanvasKey] = []
-    private var nextSnapshotIdentity: Int = 0
     private let snapshotLimit = 4
-    private let canvasLimit = 24
+    private let luminanceScale: CGFloat = 0.5
+    private let matrixDivisor: Int32 = 4096
+    private let linearTable: [CGFloat] = (0 ..< 256).map {
+        let value = CGFloat($0) / 255
+        return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+    }
 
     private init() {}
 
@@ -218,53 +212,62 @@ final class ChatBubbleWallpaperMaterialRenderer {
         for backgroundView: BackgroundView,
         rect: NSRect,
         style: ChatBubbleWallpaperMaterial.Style,
-        luminance: Float
+        luminance: Float,
+        bleed: CGFloat = 0
     ) -> (image: CGImage, frame: NSRect)? {
-        guard rect.width > 0, rect.height > 0 else {
+        guard rect.width > 0, rect.height > 0, let snapshot = snapshot(for: backgroundView) else {
             return nil
         }
-        guard let snapshot = snapshot(for: backgroundView) else {
+        let scale = snapshot.materialScale
+        let raster = snapshot.blurred
+        let padding = CGFloat(snapshot.padding)
+        let source = rect.insetBy(dx: -bleed, dy: -bleed)
+        let minX = max(0, (source.minX * scale).rounded(.down))
+        let minY = max(-padding, (source.minY * scale).rounded(.down))
+        let maxX = min(CGFloat(raster.width), (source.maxX * scale).rounded(.up))
+        let maxY = min(CGFloat(raster.height) - padding, (source.maxY * scale).rounded(.up))
+        guard maxX - minX >= 1, maxY - minY >= 1 else {
             return nil
         }
-        let clipped = rect.intersection(CGRect(origin: .zero, size: snapshot.canvasSize))
-        guard !clipped.isNull, clipped.width > 0, clipped.height > 0 else {
+        let width = Int(maxX - minX)
+        let height = Int(maxY - minY)
+        guard let output = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: snapshot.colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let outputPixels = output.data else {
             return nil
         }
-        let key = CanvasKey(
-            snapshot: snapshot.identity,
-            style: style.isOutgoing ? 0 : 1,
-            tint: style.tintKey,
-            tintAlpha: style.tintAlphaKey,
-            luminance: Int((min(1, max(0, CGFloat(luminance))) * 31).rounded())
+        let values = ChatBubbleWallpaperMaterial.matrix(style: style, luminance: CGFloat(luminance))
+        let divisor = CGFloat(matrixDivisor)
+        var matrix = [Int16](repeating: 0, count: 16)
+        for channel in 0 ..< 4 {
+            for source in 0 ..< 4 {
+                matrix[source * 4 + channel] = Int16(max(-32768, min(32767, (values[channel * 5 + source] * divisor).rounded())))
+            }
+        }
+        let bias: [Int32] = (0 ..< 4).map { Int32((values[$0 * 5 + 4] * 255 * divisor).rounded()) }
+        let sourceRow = Int(minY + padding)
+        var sourceBuffer = vImage_Buffer(
+            data: raster.pixels + sourceRow * raster.rowBytes + Int(minX) * 4,
+            height: vImagePixelCount(height),
+            width: vImagePixelCount(width),
+            rowBytes: raster.rowBytes
         )
-        let canvas: CGImage
-        if let cached = canvases[key] {
-            canvas = cached
-        } else {
-            guard let rendered = renderCanvas(snapshot: snapshot, style: style, luminance: CGFloat(key.luminance) / 31) else {
-                return nil
-            }
-            canvas = rendered
-            canvases[key] = rendered
-            canvasOrder.append(key)
-            while canvasOrder.count > canvasLimit {
-                let removed = canvasOrder.removeFirst()
-                canvases.removeValue(forKey: removed)
-            }
-        }
-        let scale = snapshot.pixelScale * ChatBubbleWallpaperMaterial.blurDownsample
-        let minX = (clipped.minX * scale).rounded(.down)
-        let minY = (clipped.minY * scale).rounded(.down)
-        let pixelRect = CGRect(
-            x: minX,
-            y: minY,
-            width: max(1, (clipped.maxX * scale).rounded(.up) - minX),
-            height: max(1, (clipped.maxY * scale).rounded(.up) - minY)
-        ).intersection(CGRect(x: 0, y: 0, width: canvas.width, height: canvas.height))
-        guard pixelRect.width >= 1, pixelRect.height >= 1, let image = canvas.cropping(to: pixelRect) else {
+        var outputBuffer = vImage_Buffer(
+            data: outputPixels,
+            height: vImagePixelCount(height),
+            width: vImagePixelCount(width),
+            rowBytes: output.bytesPerRow
+        )
+        guard vImageMatrixMultiply_ARGB8888(&sourceBuffer, &outputBuffer, matrix, matrixDivisor, nil, bias, vImage_Flags(kvImageNoFlags)) == kvImageNoError, let image = output.makeImage() else {
             return nil
         }
-        let covered = NSRect(x: pixelRect.minX / scale, y: pixelRect.minY / scale, width: pixelRect.width / scale, height: pixelRect.height / scale)
+        let covered = NSRect(x: minX / scale, y: minY / scale, width: CGFloat(width) / scale, height: CGFloat(height) / scale)
         return (image, covered.offsetBy(dx: -rect.minX, dy: -rect.minY))
     }
 
@@ -296,28 +299,23 @@ final class ChatBubbleWallpaperMaterialRenderer {
             return 0.2
         }
         let clipped = rect.intersection(CGRect(origin: .zero, size: snapshot.canvasSize))
-        guard clipped.width > 0, clipped.height > 0 else {
+        guard !clipped.isNull, clipped.width > 0, clipped.height > 0 else {
             return 0.2
         }
+        let raster = snapshot.luminance
+        let pixels = raster.pixels.assumingMemoryBound(to: UInt8.self)
         var total: CGFloat = 0
-        var samples: CGFloat = 0
         for row in 0 ..< 4 {
             for column in 0 ..< 8 {
                 let x = clipped.minX + (CGFloat(column) + 0.5) * clipped.width / 8
                 let y = clipped.minY + (CGFloat(row) + 0.5) * clipped.height / 4
-                let px = min(snapshot.luminance.pixelsWide - 1, max(0, Int(x / snapshot.canvasSize.width * CGFloat(snapshot.luminance.pixelsWide))))
-                let py = min(snapshot.luminance.pixelsHigh - 1, max(0, Int(y / snapshot.canvasSize.height * CGFloat(snapshot.luminance.pixelsHigh))))
-                guard let color = snapshot.luminance.colorAt(x: px, y: py)?.usingColorSpace(.sRGB) else {
-                    continue
-                }
-                let linear = [color.redComponent, color.greenComponent, color.blueComponent].map {
-                    $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4)
-                }
-                total += linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722
-                samples += 1
+                let px = min(raster.width - 1, max(0, Int(x / snapshot.canvasSize.width * CGFloat(raster.width))))
+                let py = min(raster.height - 1, max(0, Int(y / snapshot.canvasSize.height * CGFloat(raster.height))))
+                let offset = py * raster.rowBytes + px * 4
+                total += linearTable[Int(pixels[offset])] * 0.2126 + linearTable[Int(pixels[offset + 1])] * 0.7152 + linearTable[Int(pixels[offset + 2])] * 0.0722
             }
         }
-        return samples > 0 ? Float(total / samples) : 0.2
+        return Float(total / 32)
     }
 
     private func snapshot(for view: BackgroundView) -> Snapshot? {
@@ -337,26 +335,62 @@ final class ChatBubbleWallpaperMaterialRenderer {
             return nil
         }
         let colorSpace = source.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
-        let context = CIContext(options: [.workingColorSpace: colorSpace, .outputColorSpace: colorSpace])
-        let image = CIImage(cgImage: source)
-            .transformed(by: CGAffineTransform(scaleX: ChatBubbleWallpaperMaterial.blurDownsample, y: ChatBubbleWallpaperMaterial.blurDownsample))
+        let downsample = ChatBubbleWallpaperMaterial.blurDownsample
+        let blurredWidth = max(1, Int((CGFloat(source.width) * downsample).rounded(.down)))
+        let blurredHeight = max(1, Int((CGFloat(source.height) * downsample).rounded(.down)))
+        let padding = blurredHeight
+        let blurred = CIImage(cgImage: source)
+            .transformed(by: CGAffineTransform(scaleX: downsample, y: downsample))
             .clampedToExtent()
-            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: ChatBubbleWallpaperMaterial.blurRadius * key.scale * ChatBubbleWallpaperMaterial.blurDownsample])
-            .cropped(to: CGRect(x: 0, y: 0, width: CGFloat(source.width) * ChatBubbleWallpaperMaterial.blurDownsample, height: CGFloat(source.height) * ChatBubbleWallpaperMaterial.blurDownsample))
-        let pixelScale = CGFloat(source.width) / key.width
-        let luminance = NSBitmapImageRep(cgImage: source)
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: ChatBubbleWallpaperMaterial.blurRadius * key.scale * downsample])
+        let blurredRaster = Raster(
+            pixels: UnsafeMutableRawPointer.allocate(byteCount: blurredWidth * 4 * (blurredHeight + padding * 2), alignment: 16),
+            width: blurredWidth,
+            height: blurredHeight + padding * 2,
+            rowBytes: blurredWidth * 4
+        )
+        let context = CIContext(options: [.workingColorSpace: colorSpace, .outputColorSpace: colorSpace])
+        context.render(
+            blurred,
+            toBitmap: blurredRaster.pixels,
+            rowBytes: blurredRaster.rowBytes,
+            bounds: CGRect(x: 0, y: -CGFloat(padding), width: CGFloat(blurredWidth), height: CGFloat(blurredHeight + padding * 2)),
+            format: .RGBA8,
+            colorSpace: colorSpace
+        )
+        let luminanceWidth = max(1, Int((CGFloat(source.width) * luminanceScale).rounded()))
+        let luminanceHeight = max(1, Int((CGFloat(source.height) * luminanceScale).rounded()))
+        let luminanceRaster = Raster(
+            pixels: UnsafeMutableRawPointer.allocate(byteCount: luminanceWidth * 4 * luminanceHeight, alignment: 16),
+            width: luminanceWidth,
+            height: luminanceHeight,
+            rowBytes: luminanceWidth * 4
+        )
+        guard let luminanceContext = CGContext(
+            data: luminanceRaster.pixels,
+            width: luminanceWidth,
+            height: luminanceHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: luminanceRaster.rowBytes,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            blurredRaster.deallocate()
+            luminanceRaster.deallocate()
+            return nil
+        }
+        luminanceContext.interpolationQuality = .high
+        luminanceContext.draw(source, in: CGRect(x: 0, y: 0, width: luminanceWidth, height: luminanceHeight))
         let snapshot = Snapshot(
             view: view,
             key: key,
-            identity: nextSnapshotIdentity,
             canvasSize: NSSize(width: key.width, height: key.height),
-            pixelScale: pixelScale,
-            blurred: image,
-            context: context,
-            colorSpace: colorSpace,
-            luminance: luminance
+            materialScale: CGFloat(blurredWidth) / key.width,
+            padding: padding,
+            blurred: blurredRaster,
+            luminance: luminanceRaster,
+            colorSpace: colorSpace
         )
-        nextSnapshotIdentity += 1
         snapshots[identifier] = snapshot
         snapshotOrder.removeAll(where: { $0 == identifier })
         snapshotOrder.append(identifier)
@@ -364,38 +398,5 @@ final class ChatBubbleWallpaperMaterialRenderer {
             snapshots.removeValue(forKey: snapshotOrder.removeFirst())
         }
         return snapshot
-    }
-
-    private func renderCanvas(snapshot: Snapshot, style: ChatBubbleWallpaperMaterial.Style, luminance: CGFloat) -> CGImage? {
-        let values = ChatBubbleWallpaperMaterial.matrix(style: style, luminance: luminance)
-        let filtered = snapshot.blurred.applyingFilter("CIColorMatrix", parameters: ChatBubbleWallpaperMaterial.colorMatrixParameters(values))
-        return snapshot.context.createCGImage(filtered, from: snapshot.blurred.extent)
-    }
-}
-
-private extension ChatBubbleWallpaperMaterial.Style {
-    var isOutgoing: Bool {
-        if case .outgoing = self {
-            return true
-        }
-        return false
-    }
-
-    var tintKey: UInt32 {
-        switch self {
-        case let .outgoing(tint), let .incoming(tint?, _):
-            return (tint.usingColorSpace(.sRGB) ?? tint).argb
-        case .incoming(nil, _):
-            return 0
-        }
-    }
-
-    var tintAlphaKey: UInt16 {
-        switch self {
-        case .outgoing, .incoming(nil, _):
-            return 0
-        case let .incoming(_, opacity):
-            return UInt16((min(1, max(0, opacity)) * 1000).rounded())
-        }
     }
 }

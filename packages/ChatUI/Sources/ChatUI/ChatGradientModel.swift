@@ -192,7 +192,7 @@ public final class ChatMessageBubbleBackdrop: NSView {
                 current = SimpleLayer()
                 current.anchorPoint = .zero
                 self.backgroundContent = current
-                self.layer?.insertSublayer(current, below: self.borderLayer)
+                self.layer?.insertSublayer(current, below: self.materialLayer.superlayer != nil ? self.materialLayer : self.borderLayer)
             }
             current.contents = background
         }

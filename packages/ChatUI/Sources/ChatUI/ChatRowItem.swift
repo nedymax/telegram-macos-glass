@@ -1503,11 +1503,18 @@ public class ChatRowItem: TableRowItem {
         return messageBubbleCorners(incoming: isIncoming, neighbors: neighbors, inset: inset)
     }
 
+    private var bubbleShapeSize: CGSize? {
+        guard !isBubbleFullFilled else {
+            return nil
+        }
+        return bubbleFrame.size
+    }
+
     public var bubbleImage:(CGImage, NSEdgeInsets)? {
         guard let neighbors = bubbleNeighbors else {
             return nil
         }
-        return messageBubbleImageModern(incoming: isIncoming, fillColor: .black, strokeColor: .clear, neighbors: neighbors)
+        return messageBubbleImageModern(incoming: isIncoming, fillColor: .black, strokeColor: .clear, neighbors: neighbors, fitting: bubbleShapeSize)
     }
 
     var isWallpaperGlass: Bool {
@@ -1518,7 +1525,7 @@ public class ChatRowItem: TableRowItem {
         guard isIncoming, isWallpaperGlass, let neighbors = bubbleNeighbors else {
             return nil
         }
-        return messageBubbleImageModern(incoming: true, fillColor: .clear, strokeColor: ChatBubbleWallpaperMaterial.incomingOutlineColor, neighbors: neighbors)
+        return messageBubbleImageModern(incoming: true, fillColor: .clear, strokeColor: ChatBubbleWallpaperMaterial.incomingOutlineColor, neighbors: neighbors, fitting: bubbleShapeSize)
     }
 
     func wallpaperGlassReplyColors(_ colors: PeerNameColors.Colors) -> PeerNameColors.Colors {
