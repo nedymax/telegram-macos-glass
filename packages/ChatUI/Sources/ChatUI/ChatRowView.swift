@@ -441,7 +441,7 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
         let oldOrigin = self.frame.origin
         super.setFrameOrigin(newOrigin)
         
-        if oldOrigin != newOrigin, oldOrigin == .zero {
+        if oldOrigin != newOrigin, oldOrigin == .zero || (self.item as? ChatRowItem)?.isWallpaperGlass == true {
             updateBackground(animated: false, item: self.item)
         }
     }
@@ -556,11 +556,11 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
         let colors = item.presentation.colors
         let style: ChatBubbleWallpaperMaterial.Style
         if item.isIncoming {
-            style = .incoming(tint: colors.tinted ? colors.bubbleBackground_outgoing.first : nil, tintOpacity: 0.14)
+            style = .incoming(tint: colors.tinted ? colors.bubbleBackground_outgoing.first : nil, tintOpacity: 0.24)
         } else {
             style = .outgoing(tint: colors.blendedOutgoingColors)
         }
-        guard let material = ChatBubbleWallpaperMaterialRenderer.shared.materialImage(for: background, rect: rect, style: style, luminance: luminance) else {
+        guard let material = ChatBubbleWallpaperMaterialRenderer.shared.materialImage(for: background, rect: rect, style: style, luminance: luminance, bleed: 64) else {
             clearWallpaperMaterial()
             return
         }
@@ -2852,6 +2852,9 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
         updateInteractionObserver(window == nil ? nil : (item as? ChatRowItem)?.chatInteraction)
         if window != nil {
             replyHost?.imageLayer?.hostDidMoveToWindow()
+            if let item = item as? ChatRowItem, item.isWallpaperGlass {
+                updateBackground(animated: false, item: item)
+            }
         }
 
     }
