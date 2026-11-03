@@ -66,6 +66,17 @@ final class ChatBubbleWallpaperMaterial {
     static let incomingOutlineColor = NSColor.white.withAlphaComponent(0.18)
     static let glassGlyphColor = NSColor.white.withAlphaComponent(0.55)
 
+    static func tinted(_ image: CGImage, _ color: NSColor) -> CGImage {
+        let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        guard let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            return image
+        }
+        context.clip(to: bounds, mask: image)
+        context.setFillColor(color.cgColor)
+        context.fill(bounds)
+        return context.makeImage() ?? image
+    }
+
     static func isActive(_ presentation: TelegramPresentationTheme, hasBubble: Bool, liteBlur: Bool) -> Bool {
         return hasBubble && presentation.bubbled && presentation.liquidGlass && !liteBlur && presentation.hasWallpaper
     }
