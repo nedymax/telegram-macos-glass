@@ -60,7 +60,11 @@ public final class ChatMessageBubbleBackdrop: NSView {
     private let borderLayer = ChatBubbleSliceLayer()
     private var glassLayer: CALayer?
     private var glassMatrix: [CGFloat]?
-    private var glassHiddenFill: CGColor?
+    public var fill: NSColor = .clear {
+        didSet {
+            self.applyFill()
+        }
+    }
     private var maskLayer: ChatBubbleSliceLayer?
 
     private var lastUpdate: (rect: CGRect, containerSize: CGSize, rotated: Bool)?
@@ -116,12 +120,9 @@ public final class ChatMessageBubbleBackdrop: NSView {
                 glassLayer.removeFromSuperlayer()
                 self.glassLayer = nil
                 self.glassMatrix = nil
-                if let fill = self.glassHiddenFill {
-                    self.layer?.backgroundColor = fill
-                }
-                self.glassHiddenFill = nil
             }
             self.backgroundContent?.isHidden = false
+            self.applyFill()
             return
         }
         let glass: CALayer
@@ -141,10 +142,11 @@ public final class ChatMessageBubbleBackdrop: NSView {
             ChatBubbleWallpaperMaterial.applyGlassMatrix(matrix, to: glass)
         }
         self.backgroundContent?.isHidden = true
-        if let fill = self.layer?.backgroundColor, fill.alpha > 0 {
-            self.glassHiddenFill = fill
-            self.layer?.backgroundColor = .clear
-        }
+        self.applyFill()
+    }
+
+    private func applyFill() {
+        self.layer?.backgroundColor = self.glassLayer == nil ? self.fill.cgColor : .clear
     }
 
     /// Bands of the bubble to erase, in this view's coordinates. Empty — the overwhelmingly common case
