@@ -741,7 +741,7 @@ public class ChatRowView: TableRowView, Notifable, MultipleSelectable, ChatTextS
             captionView.view.backgroundColor = contentColor
         }
         replyMarkupView?.backgroundColor = backdorColor
-        bubbleView.background = item.presentation.chat.bubbleBackgroundColor(item.isIncoming, item.hasBubble)
+        bubbleView.fill = item.presentation.chat.bubbleBackgroundColor(item.isIncoming, item.hasBubble)
         updateWallpaperMaterial(item)
 
         if let control = channelCommentsBubbleControl {
