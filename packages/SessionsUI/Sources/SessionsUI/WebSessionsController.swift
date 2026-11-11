@@ -198,7 +198,7 @@ private struct WebSessionsControllerState: Equatable {
 
 private func prepareSessions(left:[AppearanceWrapperEntry<WebSessionEntry>], right: [AppearanceWrapperEntry<WebSessionEntry>], arguments: WebSessionArguments, initialSize: NSSize) -> TableUpdateTransition {
     let (removed, inserted, updated) = proccessEntriesWithoutReverse(left, right: right) { entry -> TableRowItem in
-        return entry.entry.item(arguments, initialSize: initialSize)
+        return entry.entry.item(arguments, initialSize: initialSize).settingsRow()
     }
     
     return TableUpdateTransition(deleted: removed, inserted: inserted, updated: updated, animated: true)
@@ -256,6 +256,7 @@ open class WebSessionsController<Context: AccountContextProtocol>: TableViewCont
     private let disposable = MetaDisposable()
     
     public override func viewDidLoad() {
+        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         
         let actionsDisposable = MetaDisposable()

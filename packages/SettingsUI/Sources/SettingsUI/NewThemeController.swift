@@ -133,7 +133,7 @@ public func NewThemeController(context: any AccountContextProtocol, palette: Col
         }))
     }
     
-    let controller = InputDataController(dataSignal: signal, title: strings().newThemeTitle, validateData: { data in
+    let controller = InputDataController(settingsLayout: true, dataSignal: signal, title: strings().newThemeTitle, validateData: { data in
         
         let name = stateValue.with { $0.name }
         

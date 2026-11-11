@@ -268,7 +268,7 @@ func DataStorageExceptions(context: any AccountContextProtocol, category: CacheS
         return InputDataSignalValue(entries: entries(state, arguments: arguments))
     }
     
-    let controller = InputDataController(dataSignal: signal, title: category.titleString, hasDone: true)
+    let controller = InputDataController(settingsLayout: true, dataSignal: signal, title: category.titleString, hasDone: true)
     controller.updateDoneValue = { data in
         return { f in
             if !stateValue.with({ $0.editing }) {

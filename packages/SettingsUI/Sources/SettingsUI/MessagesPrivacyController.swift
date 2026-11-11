@@ -209,7 +209,7 @@ public func MessagesPrivacyController<Context: AccountContextProtocol>(context: 
         return InputDataSignalValue(entries: entries(state, arguments: arguments))
     }
     
-    let controller = InputDataController(dataSignal: signal, title: strings().privacySettingsMessages, removeAfterDisappear: false, hasDone: false)
+    let controller = InputDataController(settingsLayout: true, dataSignal: signal, title: strings().privacySettingsMessages, removeAfterDisappear: false, hasDone: false)
     
     
     controller.onDeinit = {

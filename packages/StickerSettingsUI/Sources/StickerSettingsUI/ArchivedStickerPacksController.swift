@@ -195,7 +195,7 @@ private func archivedStickerPacksControllerEntries(state: ArchivedStickerPacksCo
 
 private func prepareTransition(left:[AppearanceWrapperEntry<ArchivedStickerPacksEntry>], right: [AppearanceWrapperEntry<ArchivedStickerPacksEntry>], initialSize: NSSize, arguments: ArchivedStickerPacksControllerArguments) -> TableUpdateTransition {
     let (removed, inserted, updated) = proccessEntriesWithoutReverse(left, right: right) { entry -> TableRowItem in
-        return entry.entry.item(arguments, initialSize: initialSize)
+        return entry.entry.item(arguments, initialSize: initialSize).settingsRow()
     }
     return TableUpdateTransition(deleted: removed, inserted: inserted, updated: updated, animated: true)
 }
@@ -221,6 +221,7 @@ open class ArchivedStickerPacksController<Context: AccountContextProtocol>: Tabl
     }
     
     public override func viewDidLoad() {
+        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         
         let context = self.context

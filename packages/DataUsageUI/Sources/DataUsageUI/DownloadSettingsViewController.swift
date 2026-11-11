@@ -157,7 +157,7 @@ private func downloadSettingsEntries(state: AutomaticMediaDownloadCategoryPeers,
 fileprivate func prepareTransition(left:[AppearanceWrapperEntry<DownloadSettingsEntry>], right: [AppearanceWrapperEntry<DownloadSettingsEntry>], initialSize:NSSize, arguments:DownloadSettingsArguments) -> TableUpdateTransition {
     
     let (removed, inserted, updated) = proccessEntriesWithoutReverse(left, right: right) { entry -> TableRowItem in
-        return entry.entry.item(arguments, initialSize: initialSize)
+        return entry.entry.item(arguments, initialSize: initialSize).settingsRow()
     }
     
     return TableUpdateTransition(deleted: removed, inserted: inserted, updated: updated, animated: true)
@@ -184,6 +184,7 @@ open class DownloadSettingsViewController<Context: AccountContextProtocol>: Tabl
     }
     
     open override func viewDidLoad() {
+        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         let context = self.context
         

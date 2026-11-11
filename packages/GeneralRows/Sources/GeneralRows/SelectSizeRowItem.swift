@@ -28,6 +28,15 @@ public class SelectSizeRowItem: GeneralRowItem {
         super.init(initialSize, height: titles != nil ? 70 : 40, stableId: stableId, viewType: viewType, inset: NSEdgeInsets(left: 20, right: 20))
     }
     
+    @discardableResult
+    public override func withSettingsLayout(_ presentation: SettingsRowPresentation = .content) -> Self {
+        super.withSettingsLayout(presentation)
+        if settingsPresentation != nil, titles == nil {
+            _height = SettingsRowMetrics.height(presentation: .content, hasIcon: false, titleHeight: 16)
+        }
+        return self
+    }
+
     public override func viewClass() -> AnyClass {
         return SelectSizeRowView.self
     }
@@ -429,6 +438,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         guard let item = item as? SelectSizeRowItem else {
             return
         }
+        containerView.settingsCornerRadius = item.settingsPresentation != nil ? 10 : nil
         switch item.viewType {
         case .legacy:
             self.containerView.setCorners([])

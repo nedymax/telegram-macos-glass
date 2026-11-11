@@ -374,7 +374,7 @@ private func installedStickerPacksControllerEntries(state: InstalledStickerPacks
 
 private func prepareTransition(left:[AppearanceWrapperEntry<InstalledStickerPacksEntry>], right: [AppearanceWrapperEntry<InstalledStickerPacksEntry>], initialSize: NSSize, arguments: InstalledStickerPacksControllerArguments) -> TableUpdateTransition {
     let (removed, inserted, updated) = proccessEntriesWithoutReverse(left, right: right) { entry -> TableRowItem in
-        return entry.entry.item(arguments, initialSize: initialSize)
+        return entry.entry.item(arguments, initialSize: initialSize).settingsRow()
     }
     return TableUpdateTransition(deleted: removed, inserted: inserted, updated: updated, animated: true)
 }
@@ -425,6 +425,7 @@ open class InstalledStickerPacksController<Context: AccountContextProtocol>: Tab
     }
 
     public override func viewDidLoad() {
+        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         
         let context = self.context

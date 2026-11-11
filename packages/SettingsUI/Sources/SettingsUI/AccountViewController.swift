@@ -34,6 +34,12 @@ struct SetupPasswordConfiguration {
     }
 }
 
+private final class SettingsAccountRowItem: ShortPeerRowItem {
+    override func textInset(_ status: Bool) -> CGFloat {
+        return super.textInset(status) - min(10, viewType.innerInset.left) + SettingsRowMetrics.sidebarIconGap
+    }
+}
+
 private final class AccountSearchBarView: View {
     fileprivate let searchView = SearchView(frame: NSMakeRect(0, 0, 100, 30))
     
@@ -336,7 +342,7 @@ private enum AccountInfoEntry<Context: AccountContextProtocol> : TableItemListNo
                 arguments.set2Fa(privacy)
             }, thumb: GeneralThumbAdditional(thumb: icon, textInset: 35, thumbInset: 0), inset:NSEdgeInsets(left: 12, right: 12), customTheme: .initialize(theme, background: .clear))
         case let .accountRecord(_, viewType, info):
-            return ShortPeerRowItem(initialSize, peer: info.peer, account: info.account, context: nil, height: 42, photoSize: NSMakeSize(28, 28), titleStyle: ControlStyle(font: .normal(.title), foregroundColor: theme.colors.text, highlightColor: theme.colors.underSelectedColor), inset: NSEdgeInsets(left: 12, right: 12), viewType: viewType, action: {
+            return SettingsAccountRowItem(initialSize, peer: info.peer, account: info.account, context: nil, height: SettingsRowMetrics.sidebarHeight, photoSize: NSMakeSize(20, 20), titleStyle: ControlStyle(font: .normal(SettingsRowMetrics.titleSize), foregroundColor: theme.colors.text, highlightColor: theme.colors.underSelectedColor), inset: NSEdgeInsets(left: SettingsRowMetrics.sidebarInset, right: SettingsRowMetrics.sidebarInset), viewType: viewType.withUpdatedInsets(NSEdgeInsets(left: SettingsRowMetrics.sidebarContentInset, right: SettingsRowMetrics.sidebarContentInset)), action: {
                 arguments.context.sharedContext.switchToAccount(id: info.account.id, action: nil)
             }, contextMenuItems: {
                 
@@ -355,7 +361,7 @@ private enum AccountInfoEntry<Context: AccountContextProtocol> : TableItemListNo
                 }, itemMode: .destruct, itemImage: MenuAnimation.menu_delete.value))
                 
                 return .single(items)
-            }, alwaysHighlight: true, badgeNode: SettingsHooks.shared.makeAccountBadgeNode(info.account, arguments.context), compactText: true, highlightVerified: true)
+            }, alwaysHighlight: true, badgeNode: SettingsHooks.shared.makeAccountBadgeNode(info.account, arguments.context), compactText: true, highlightVerified: true, customTheme: .initialize(theme, background: .clear))
         case let .addAccount(_, accounts, viewType):
             return GeneralInteractedRowItem(initialSize, stableId: stableId, name: strings().accountSettingsAddAccount, nameStyle: ControlStyle(font: .normal(.title), foregroundColor: theme.colors.accentIcon), type: .none, viewType: viewType, action: {
                 arguments.addAccount(accounts)
@@ -678,14 +684,14 @@ private func accountInfoEntries<Context: AccountContextProtocol>(peerView:PeerVi
     }
    
 
-    entries.append(.whiteSpace(index: index, height: 20))
+    entries.append(.whiteSpace(index: index, height: SettingsRowMetrics.cardGap))
     index += 1
     
     if let peer = peerViewMainPeer(peerView) as? TelegramUser, passportVisible {
         entries.append(.passport(index: index, viewType: .singleItem, peer: PeerEquatable(peer)))
         index += 1
         
-        entries.append(.whiteSpace(index: index, height: 20))
+        entries.append(.whiteSpace(index: index, height: SettingsRowMetrics.cardGap))
         index += 1
     }
     
@@ -712,7 +718,7 @@ private func accountInfoEntries<Context: AccountContextProtocol>(peerView:PeerVi
         entries.append(.giftPremium(index: index, viewType: .singleItem))
         index += 1
         
-        entries.append(.whiteSpace(index: index, height: 20))
+        entries.append(.whiteSpace(index: index, height: SettingsRowMetrics.cardGap))
         index += 1
     }
    
@@ -722,13 +728,13 @@ private func accountInfoEntries<Context: AccountContextProtocol>(peerView:PeerVi
     entries.append(.ask(index: index, viewType: .singleItem))
     index += 1
     
-    entries.append(.whiteSpace(index: index, height: 20))
+    entries.append(.whiteSpace(index: index, height: SettingsRowMetrics.cardGap))
     index += 1
     
     entries.append(.about(index: index, viewType: .singleItem))
     index += 1
     
-    entries.append(.whiteSpace(index: index, height: 20))
+    entries.append(.whiteSpace(index: index, height: SettingsRowMetrics.cardGap))
     index += 1
     
     return entries
@@ -736,7 +742,11 @@ private func accountInfoEntries<Context: AccountContextProtocol>(peerView:PeerVi
 
 private func prepareEntries<Context: AccountContextProtocol>(left: [AppearanceWrapperEntry<AccountInfoEntry<Context>>], right: [AppearanceWrapperEntry<AccountInfoEntry<Context>>], arguments: AccountInfoArguments<Context>, initialSize: NSSize) -> TableUpdateTransition {
     let (removed, inserted, updated)  = proccessEntriesWithoutReverse(left, right: right) { entry -> TableRowItem in
-        return entry.entry.item(arguments, initialSize: initialSize)
+        let item = entry.entry.item(arguments, initialSize: initialSize)
+        if item is GeneralInteractedRowItem || item is SettingsAccountRowItem {
+            return item.settingsRow(.sidebar)
+        }
+        return item
     }
     return TableUpdateTransition(deleted: removed, inserted: inserted, updated: updated, animated: true)
 }

@@ -155,7 +155,7 @@ func StorageUsage_Block_Chats<Context: AccountContextProtocol>(context: Context,
         return InputDataSignalValue(entries: entries(state, arguments: arguments), grouping: false, animateEverything: true)
     }
     
-    let controller = InputDataController(dataSignal: signal, title: "")
+    let controller = InputDataController(settingsLayout: true, dataSignal: signal, title: "")
     controller.bar = .init(height: 0)
     
     controller.onDeinit = {

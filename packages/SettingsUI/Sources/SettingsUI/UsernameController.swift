@@ -210,7 +210,7 @@ public func UsernameController(_ context: (any AccountContextProtocol)) -> Input
         return InputDataSignalValue(entries: entries(state, arguments: arguments), animated: !nextTransactionNonAnimated.swap(false))
     }
     
-    let controller = InputDataController(dataSignal: signal, title: strings().telegramUsernameSettingsViewController)
+    let controller = InputDataController(settingsLayout: true, dataSignal: signal, title: strings().telegramUsernameSettingsViewController)
     
     controller.updateDatas = { data in
         let username = data[_id_username]?.stringValue ?? ""

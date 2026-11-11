@@ -229,7 +229,7 @@ public func LiteModeController(context: any AccountContextProtocol) -> InputData
         }
     }))
     
-    let controller = InputDataController(dataSignal: signal, title: strings().liteModeTitle, hasDone: false)
+    let controller = InputDataController(settingsLayout: true, dataSignal: signal, title: strings().liteModeTitle, hasDone: false)
     
     controller.onDeinit = {
         actionsDisposable.dispose()

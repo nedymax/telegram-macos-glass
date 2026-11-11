@@ -1459,7 +1459,7 @@ open class StorageUsageController<Context: AccountContextProtocol>: EditableView
             let entries = storageUsageControllerEntries(state: state, arguments: arguments).map {
                 AppearanceWrapperEntry(entry: $0, appearance: state.appearance)
             }
-            return prepareInputDataTransition(left: previous.swap(entries), right: entries, animated: true, searchState: nil, initialSize: initialSize.with { $0 }, arguments: inputArguments, onMainQueue: false)
+            return prepareInputDataTransition(left: previous.swap(entries), right: entries, animated: true, searchState: nil, initialSize: initialSize.with { $0 }, arguments: inputArguments, onMainQueue: false, settingsLayout: true)
         } |> deliverOnMainQueue
         
         let first = Atomic(value: true)

@@ -60,6 +60,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                     switchView = SwitchView(frame: NSMakeRect(0, 0, 32, 20))
                     containerView.addSubview(switchView!)
                 }
+                switchView?.setFrameSize(item.settingsPresentation != nil ? NSMakeSize(36, 18) : NSMakeSize(32, 20))
                 switchView?.autoswitch = item.autoswitch
                 switchView?.presentation = item.switchAppearance
                 switchView?.setIsOn(stateback,animated:animated)
@@ -139,7 +140,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                 }
                 let underselect = item.customTheme?.underSelectedColor ?? theme.colors.underSelectedColor
 
-                let layout = item.isSelected ? nil : TextViewLayout(.initialize(string: value, color: isSelect ? underselect : textColor, font: .normal(.title)), maximumNumberOfLines: 1)
+                let layout = item.isSelected ? nil : TextViewLayout(.initialize(string: value, color: isSelect ? underselect : textColor, font: .normal(item.settingsPresentation != nil ? SettingsRowMetrics.titleSize : .title)), maximumNumberOfLines: 1)
 
                 textView?.set(layout: layout)
                 secondaryTextView?.removeFromSuperview()
@@ -174,7 +175,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                 let grayText = item.customTheme?.grayTextColor ?? theme.colors.grayText
                 let underselect = item.customTheme?.underSelectedColor ?? theme.colors.underSelectedColor
 
-                let primaryLayout = item.isSelected ? nil : TextViewLayout(.initialize(string: primary, color: isSelect ? underselect : textColor, font: .normal(.title)), maximumNumberOfLines: 1, alignment: .right)
+                let primaryLayout = item.isSelected ? nil : TextViewLayout(.initialize(string: primary, color: isSelect ? underselect : textColor, font: .normal(item.settingsPresentation != nil ? SettingsRowMetrics.titleSize : .title)), maximumNumberOfLines: 1, alignment: .right)
                 let secondaryLayout = item.isSelected ? nil : TextViewLayout(.initialize(string: secondary, color: isSelect ? underselect : grayText, font: .normal(.text)), maximumNumberOfLines: 1, alignment: .right)
 
                 textView?.set(layout: primaryLayout)
@@ -279,6 +280,9 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                 self.rightIconView = nil
             }
         }
+        if let item = item as? GeneralInteractedRowItem, item.settingsPresentation == .sidebar {
+            nextView.isHidden = true
+        }
         super.set(item: item, animated: animated)
         
         needsLayout = true
@@ -348,6 +352,9 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
     private var textXAdditional: CGFloat {
         var textXAdditional:CGFloat = 0
         guard let item = item as? GeneralInteractedRowItem else {return 0}
+        if let inset = item.settingsTextInset {
+            return inset + (selectLeftControl != nil ? 38 : 0)
+        }
         let t = item.isSelected ? item.activeThumb : item.thumb
         if let thumb = t {
             if let textInset = thumb.textInset {
@@ -390,13 +397,13 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                     ctx.setFillColor(stateback.cgColor)
                     ctx.fillEllipse(in: NSMakeRect(containerView.frame.width - 14 - item.inset.right - 16, floorToScreenPixels(backingScaleFactor, (frame.height - 14) / 2), 14, 14))
                 }
-            case let .modern(position, insets):
+            case let .modern(_, insets):
                 let t = item.isSelected ? item.activeThumb : item.thumb
                 if let thumb = t {
-                    let f = focus(thumb.thumb.systemSize)
+                    let f = focus(item.settingsIconSize ?? thumb.thumb.systemSize)
                     
                     let icon = thumb.thumb
-                    var x: CGFloat = insets.left + (thumb.thumbInset ?? 0)
+                    var x: CGFloat = insets.left + (item.settingsPresentation != nil ? 0 : (thumb.thumbInset ?? 0))
                     if case .selectableLeft = item.type {
                         x += 35
                     } else {
@@ -406,9 +413,11 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                     ctx.draw(icon, in: NSMakeRect(x, f.minY, f.width, f.height))
                 }
                 
-                if position.border, !isSelect && !self.isResorting  {
+                let hasBorder = item.settingsPresentation != nil ? item.hasBorder : item.viewType.position.border
+                if hasBorder, item.settingsPresentation != .sidebar, !isSelect && !self.isResorting {
                     ctx.setFillColor(borderColor.cgColor)
-                    ctx.fill(NSMakeRect(textXAdditional + insets.left, containerView.frame.height - .borderSize, containerView.frame.width - (insets.left + insets.right + textXAdditional), .borderSize))
+                    let separatorInset = item.settingsPresentation != nil ? 0 : textXAdditional
+                    ctx.fill(NSMakeRect(separatorInset + insets.left, containerView.frame.height - .borderSize, containerView.frame.width - (insets.left + insets.right + separatorInset), .borderSize))
                 }
                 
                 let nameLayout = (item.isSelected ? item.nameLayoutSelected : item.nameLayout)
@@ -421,6 +430,9 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                     textRect.origin.y = 5
                 }
                                 
+                if item.settingsPresentation != nil {
+                    textRect.origin.y = item.settingsTitleY
+                }
                 if let afterNameImage = item.afterNameImage {
                     ctx.draw(afterNameImage, in: CGRect(x: textRect.maxX + 8, y: textRect.minY, width: afterNameImage.systemSize.width, height: afterNameImage.systemSize.height))
                 }
@@ -650,11 +662,17 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                     textRect.origin.y = 5
                 }
                 
+                if item.settingsPresentation != nil {
+                    textRect.origin.y = item.settingsTitleY
+                    descriptionView?.setFrameOrigin(innerInsets.left + textXAdditional, textRect.maxY + SettingsRowMetrics.subtitleGap)
+                }
                 nameView.setFrameOrigin(textRect.origin)
 
                 
                 if let textView = textView {
-                    let width:CGFloat = containerView.frame.width - item.nameLayout.layoutSize.width - innerInsets.right - insets.left - 10
+                    let width:CGFloat = item.settingsPresentation != nil
+                        ? max(0, containerView.frame.width - item.nameLayout.layoutSize.width - innerInsets.right - innerInsets.left - textXAdditional - nextInset - 10)
+                        : containerView.frame.width - item.nameLayout.layoutSize.width - innerInsets.right - insets.left - 10
                     textView.textLayout?.measure(width: width)
                     textView.update(textView.textLayout)
                     if let secondaryTextView = secondaryTextView {
@@ -692,6 +710,16 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                 
                 if let imageView = self.rightIconView {
                     imageView.centerY(x: containerView.frame.width - imageView.frame.width - nextInset - 10)
+                }
+                if item.settingsPresentation != nil {
+                    switchView?.centerY(x: containerView.frame.width - innerInsets.right - (switchView?.frame.width ?? 0))
+                    if secondaryTextView == nil, let textView = textView {
+                        textView.centerY(x: textView.frame.minX)
+                    }
+                    nextView.frame.origin.y = round((containerView.frame.height - nextView.frame.height) / 2)
+                    if item.settingsPresentation == .sidebar {
+                        nextView.isHidden = true
+                    }
                 }
             }
         }

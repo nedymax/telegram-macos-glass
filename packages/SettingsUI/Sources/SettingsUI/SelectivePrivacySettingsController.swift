@@ -654,7 +654,7 @@ private func selectivePrivacySettingsControllerEntries(context: any AccountConte
 fileprivate func prepareTransition(left:[SelectivePrivacySettingsEntry], right: [SelectivePrivacySettingsEntry], initialSize:NSSize, arguments:SelectivePrivacySettingsControllerArguments) -> TableUpdateTransition {
 
     let (removed, inserted, updated) = proccessEntriesWithoutReverse(left, right: right) { entry -> TableRowItem in
-        return entry.item(arguments, initialSize: initialSize)
+        return entry.item(arguments, initialSize: initialSize).settingsRow()
     }
 
     return TableUpdateTransition(deleted: removed, inserted: inserted, updated: updated, animated: true)

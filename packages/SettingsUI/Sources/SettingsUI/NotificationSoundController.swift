@@ -232,7 +232,7 @@ public func NotificationSoundController(context: any AccountContextProtocol) -> 
         }
     }))
     
-    let controller = InputDataController(dataSignal: signal, title: strings().notificationSoundTitle, removeAfterDisappear: false, hasDone: false)
+    let controller = InputDataController(settingsLayout: true, dataSignal: signal, title: strings().notificationSoundTitle, removeAfterDisappear: false, hasDone: false)
     controller.onDeinit = {
         actionsDisposable.dispose()
     }

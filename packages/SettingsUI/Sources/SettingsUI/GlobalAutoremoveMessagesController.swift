@@ -187,7 +187,7 @@ public func GlobalAutoremoveMessagesController(context: any AccountContextProtoc
         return InputDataSignalValue(entries: entries(state, arguments: arguments))
     }
     
-    let controller = InputDataController(dataSignal: signal, title: strings().globalTimerTitle, hasDone: false)
+    let controller = InputDataController(settingsLayout: true, dataSignal: signal, title: strings().globalTimerTitle, hasDone: false)
     
     let updateValue:(Bool)->Void = { save in
         let value = stateValue.with { $0.current }

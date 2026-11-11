@@ -159,7 +159,7 @@ public func SearchSettingsController<Context: AccountContextProtocol>(context: C
         return InputDataSignalValue(entries: $0, animated: false)
     }
     
-    let controller = InputDataController(dataSignal: entries, title: "")
+    let controller = InputDataController(settingsLayout: true, dataSignal: entries, title: "")
     
     
     controller.didLoad = { controller, _ in

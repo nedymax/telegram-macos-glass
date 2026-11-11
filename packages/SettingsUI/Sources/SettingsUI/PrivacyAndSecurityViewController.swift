@@ -587,7 +587,7 @@ private struct PrivacyAndSecurityControllerState: Equatable {
 fileprivate func prepareTransition(left:[AppearanceWrapperEntry<PrivacyAndSecurityEntry>], right: [AppearanceWrapperEntry<PrivacyAndSecurityEntry>], initialSize:NSSize, arguments:PrivacyAndSecurityControllerArguments) -> TableUpdateTransition {
 
     let (removed, inserted, updated) = proccessEntriesWithoutReverse(left, right: right) { entry -> TableRowItem in
-        return entry.entry.item(arguments, initialSize: initialSize)
+        return entry.entry.item(arguments, initialSize: initialSize).settingsRow()
     }
 
     return TableUpdateTransition(deleted: removed, inserted: inserted, updated: updated, animated: true)
@@ -828,6 +828,7 @@ open class PrivacyAndSecurityViewController<Context: AccountContextProtocol>: Ta
         twoStepAccessConfiguration.set(context.engine.auth.twoStepVerificationConfiguration() |> map { .init(configuration: $0, password: nil) })
     }
     open override func viewDidLoad() {
+        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
 
         
