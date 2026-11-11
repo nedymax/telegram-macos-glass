@@ -780,9 +780,6 @@ public class InputDataController: GenericViewController<InputDataView> {
         self.getBackgroundColor = getBackgroundColor
         self.isFlipped = isFlipped
         super.init()
-        if settingsLayout {
-            bar = .init(height: SettingsRowMetrics.navigationBarHeight)
-        }
         values.set(dataSignal)
     }
     

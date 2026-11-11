@@ -16,9 +16,9 @@ final class SettingsRowLayoutTests: XCTestCase {
                 let text = GeneralInteractedRowItem(NSMakeSize(400, 50), name: "Notifications", type: type, viewType: position).withSettingsLayout()
                 XCTAssertEqual(text.height, 38)
                 let icon = GeneralInteractedRowItem(NSMakeSize(400, 50), name: "Private Chats", icon: theme.icons.settingsGeneral, type: type, viewType: position).withSettingsLayout()
-                XCTAssertEqual(icon.height, 41)
+                XCTAssertEqual(icon.height, 43)
                 let subtitle = GeneralInteractedRowItem(NSMakeSize(400, 50), name: "Private Chats", icon: theme.icons.settingsGeneral, description: "On", type: type, viewType: position).withSettingsLayout()
-                XCTAssertEqual(subtitle.height, 54)
+                XCTAssertEqual(subtitle.height, 53)
             }
         }
     }
@@ -52,7 +52,7 @@ final class SettingsRowLayoutTests: XCTestCase {
 
     func testLongSubtitlesGrowAndNarrowRowsReserveAccessorySpace() {
         let item = GeneralInteractedRowItem(NSMakeSize(280, 50), name: "A long notification setting", icon: theme.icons.settingsGeneral, description: String(repeating: "A long explanation. ", count: 15), type: .nextContext("A long trailing value"), viewType: .singleItem).withSettingsLayout()
-        XCTAssertGreaterThan(item.height, 54)
+        XCTAssertGreaterThan(item.height, 53)
         XCTAssertGreaterThan(item.nameWidth, 0)
         XCTAssertLessThan(item.nameWidth, item.blockWidth - 50)
         let row = GeneralInteractedRowView(frame: NSMakeRect(0, 0, 280, item.height))

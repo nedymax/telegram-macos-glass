@@ -466,7 +466,6 @@ open class GeneralSettingsViewController<Context: AccountContextProtocol>: Table
     }
     
     open override func viewDidLoad() {
-        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         
        

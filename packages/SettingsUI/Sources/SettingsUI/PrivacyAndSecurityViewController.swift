@@ -828,7 +828,6 @@ open class PrivacyAndSecurityViewController<Context: AccountContextProtocol>: Ta
         twoStepAccessConfiguration.set(context.engine.auth.twoStepVerificationConfiguration() |> map { .init(configuration: $0, password: nil) })
     }
     open override func viewDidLoad() {
-        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
 
         

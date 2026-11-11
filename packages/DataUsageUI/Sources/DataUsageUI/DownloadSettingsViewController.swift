@@ -184,7 +184,6 @@ open class DownloadSettingsViewController<Context: AccountContextProtocol>: Tabl
     }
     
     open override func viewDidLoad() {
-        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         let context = self.context
         

@@ -4,7 +4,7 @@ Goal: apply the approved native settings prototype to Telegram settings, preserv
 
 Architecture: opt settings tables into one shared layout in GeneralRows. Content determines row size independently of card position. Non-settings tables retain their current presentation. InputDataController carries the opt-in through its existing transition factory; direct entry tables apply it at their item factory.
 
-Values: text 38pt, standard icon 41pt, two-line 54pt, hub 45pt; 13pt titles, 11pt subtitles, 10pt inner insets and icon gap. Devices use 26pt icons. Sidebar uses 32pt pitch, 20pt icons, 8pt icon gap, 9pt left content inset inside a 3pt selection inset, based on the supplied 2x reference.
+Values: text 38pt, standard icon 43pt, two-line 53pt (System Settings Apple Account page), hub 45pt; 13pt titles, 11pt subtitles, 10pt inner insets and icon gap. Devices use 26pt icons. Sidebar uses 32pt pitch, 20pt icons, 8pt icon gap, 9pt left content inset inside a 3pt selection inset, based on the supplied 2x reference.
 
 - [x] Add metrics and layout regression checks for card positions, accessories, long subtitles, narrow widths and sidebar selection.
 - [x] Implement opt-in content geometry, fonts, scaled existing icons, centered accessories and inset separators.

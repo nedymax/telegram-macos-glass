@@ -103,7 +103,7 @@ open class GeneralContainableRowView : TableRowView {
             return
         }
         
-        containerView.settingsCornerRadius = item.settingsPresentation == .sidebar ? 8 : (item.settingsPresentation != nil ? 10 : nil)
+        containerView.settingsCornerRadius = item.settingsPresentation == .sidebar ? SettingsRowMetrics.sidebarCornerRadius : (item.settingsPresentation != nil ? SettingsRowMetrics.cardCornerRadius : nil)
         borderView.isHidden = !item.hasBorder || item.settingsPresentation == .sidebar
     }
     
@@ -184,6 +184,16 @@ open class GeneralRowContainerView : Control, MorphCornerProviding {
         self.corners = corners
     }
     private func createMask(for corners: GeneralViewItemCorners, frame: NSRect) -> CGPath {
+
+        if let settingsCornerRadius {
+            let radius = min(frame.height / 2, settingsCornerRadius)
+            let topLeft = corners.contains(.topLeft) ? radius : 0
+            let topRight = corners.contains(.topRight) ? radius : 0
+            let bottomLeft = corners.contains(.bottomLeft) ? radius : 0
+            let bottomRight = corners.contains(.bottomRight) ? radius : 0
+            let smoothing = continuousCornerSmoothing(size: frame.size, topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight, limit: SettingsRowMetrics.cornerSmoothing)
+            return CGPath.continuousRoundedRect(CGRect(origin: .zero, size: frame.size), topLeft: topLeft, topRight: topRight, bottomLeft: bottomLeft, bottomRight: bottomRight, smoothing: smoothing)
+        }
 
         if corners.contains(.topLeft) && corners.contains(.topRight) && corners.contains(.bottomLeft) && corners.contains(.bottomRight) {
             let radius = min(frame.height / 2, settingsCornerRadius ?? 20)

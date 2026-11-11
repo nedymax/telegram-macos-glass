@@ -256,7 +256,6 @@ open class WebSessionsController<Context: AccountContextProtocol>: TableViewCont
     private let disposable = MetaDisposable()
     
     public override func viewDidLoad() {
-        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         
         let actionsDisposable = MetaDisposable()

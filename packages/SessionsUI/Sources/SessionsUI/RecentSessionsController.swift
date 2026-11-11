@@ -454,7 +454,6 @@ open class RecentSessionsController<Context: AccountContextProtocol>: TableViewC
     }
 
     public override func viewDidLoad() {
-        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         
         

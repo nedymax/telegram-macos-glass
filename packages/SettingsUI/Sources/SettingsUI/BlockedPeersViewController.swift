@@ -228,7 +228,6 @@ open class BlockedPeersViewController<Context: AccountContextProtocol>: Editable
     private let disposable:MetaDisposable = MetaDisposable()
     
     open override func viewDidLoad() {
-        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         genericView.contentInsets = NavigationBarView.contentTopInset
 

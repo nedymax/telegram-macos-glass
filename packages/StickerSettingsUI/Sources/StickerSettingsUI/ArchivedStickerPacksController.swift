@@ -221,7 +221,6 @@ open class ArchivedStickerPacksController<Context: AccountContextProtocol>: Tabl
     }
     
     public override func viewDidLoad() {
-        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         
         let context = self.context

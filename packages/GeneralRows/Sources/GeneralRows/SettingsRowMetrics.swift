@@ -7,7 +7,6 @@ public enum SettingsRowPresentation: Equatable {
 }
 
 public enum SettingsRowMetrics {
-    public static let navigationBarHeight: CGFloat = 44
     public static let contentInset: CGFloat = 10
     public static let cardGap: CGFloat = 10
     public static let iconGap: CGFloat = 10
@@ -21,6 +20,9 @@ public enum SettingsRowMetrics {
     public static let sidebarInset: CGFloat = 3
     public static let sidebarContentInset: CGFloat = 9
     public static let sidebarIconGap: CGFloat = 8
+    public static let cardCornerRadius: CGFloat = 12
+    public static let sidebarCornerRadius: CGFloat = 8
+    public static let cornerSmoothing: CGFloat = 0.6
 
     public static func height(presentation: SettingsRowPresentation, hasIcon: Bool, titleHeight: CGFloat, subtitleHeight: CGFloat = 0) -> CGFloat {
         switch presentation {
@@ -30,9 +32,9 @@ public enum SettingsRowMetrics {
             return max(45, titleHeight + 2 * verticalInset)
         case .content:
             if subtitleHeight > 0 {
-                return max(54, titleHeight + subtitleGap + subtitleHeight + 2 * verticalInset)
+                return max(53, titleHeight + subtitleGap + subtitleHeight + 2 * verticalInset)
             }
-            return max(hasIcon ? 41 : 38, titleHeight + 2 * verticalInset)
+            return max(hasIcon ? 43 : 38, titleHeight + 2 * verticalInset)
         }
     }
 

@@ -156,7 +156,6 @@ open class FeaturedStickerPacksController<Context: AccountContextProtocol>: Tabl
     }
     
     public override func viewDidLoad() {
-        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         
         let statePromise = ValuePromise(FeaturedStickerPacksControllerState(), ignoreRepeated: true)

@@ -65,7 +65,7 @@ open class GeneralInteractedRowItem: GeneralRowItem {
         let titleFont: NSFont = descLayout != nil ? .medium(SettingsRowMetrics.titleSize) : .normal(SettingsRowMetrics.titleSize)
         if nameAttributed == nil {
             nameLayout = TextViewLayout(.initialize(string: name, color: enabled ? nameStyle.foregroundColor : theme.colors.grayText, font: titleFont), maximumNumberOfLines: 1)
-            nameLayoutSelected = TextViewLayout(.initialize(string: name, color: theme.colors.underSelectedColor, font: presentation == .sidebar ? .medium(SettingsRowMetrics.titleSize) : titleFont), maximumNumberOfLines: 1)
+            nameLayoutSelected = TextViewLayout(.initialize(string: name, color: theme.colors.underSelectedColor, font: presentation == .sidebar ? .semibold(SettingsRowMetrics.titleSize) : titleFont), maximumNumberOfLines: 1)
         }
         if let description = descLayout {
             let text = NSMutableAttributedString(attributedString: description.attributedString)

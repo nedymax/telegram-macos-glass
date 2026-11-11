@@ -558,7 +558,6 @@ open class DataAndStorageViewController<Context: AccountContextProtocol>: TableV
     
     
     open override func viewDidLoad() {
-        bar = .init(height: SettingsRowMetrics.navigationBarHeight)
         super.viewDidLoad()
         
         

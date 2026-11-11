@@ -355,7 +355,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
         if let inset = item.settingsTextInset {
             return inset + (selectLeftControl != nil ? 38 : 0)
         }
-        let t = item.isSelected ? item.activeThumb : item.thumb
+        let t = item.isSelected && item.settingsPresentation == nil ? item.activeThumb : item.thumb
         if let thumb = t {
             if let textInset = thumb.textInset {
                 textXAdditional = textInset
@@ -376,7 +376,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
             switch item.viewType {
             case .legacy:
                 super.draw(layer, in: ctx)
-                let t = item.isSelected ? item.activeThumb : item.thumb
+                let t = item.isSelected && item.settingsPresentation == nil ? item.activeThumb : item.thumb
                 if let thumb = t {
                     var f = focus(thumb.thumb.systemSize)
                     if item.descLayout != nil {
@@ -398,7 +398,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                     ctx.fillEllipse(in: NSMakeRect(containerView.frame.width - 14 - item.inset.right - 16, floorToScreenPixels(backingScaleFactor, (frame.height - 14) / 2), 14, 14))
                 }
             case let .modern(_, insets):
-                let t = item.isSelected ? item.activeThumb : item.thumb
+                let t = item.isSelected && item.settingsPresentation == nil ? item.activeThumb : item.thumb
                 if let thumb = t {
                     let f = focus(item.settingsIconSize ?? thumb.thumb.systemSize)
                     

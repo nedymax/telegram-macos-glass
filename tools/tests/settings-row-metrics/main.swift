@@ -2,8 +2,8 @@ import Foundation
 
 let titleHeight: CGFloat = 16
 assert(SettingsRowMetrics.height(presentation: .content, hasIcon: false, titleHeight: titleHeight) == 38)
-assert(SettingsRowMetrics.height(presentation: .content, hasIcon: true, titleHeight: titleHeight) == 41)
-assert(SettingsRowMetrics.height(presentation: .content, hasIcon: true, titleHeight: titleHeight, subtitleHeight: 14) == 54)
+assert(SettingsRowMetrics.height(presentation: .content, hasIcon: true, titleHeight: titleHeight) == 43)
+assert(SettingsRowMetrics.height(presentation: .content, hasIcon: true, titleHeight: titleHeight, subtitleHeight: 14) == 53)
 assert(SettingsRowMetrics.height(presentation: .content, hasIcon: true, titleHeight: titleHeight, subtitleHeight: 70) == 109)
 assert(SettingsRowMetrics.height(presentation: .hub, hasIcon: true, titleHeight: titleHeight) == 45)
 assert(SettingsRowMetrics.height(presentation: .sidebar, hasIcon: true, titleHeight: titleHeight) == 32)
