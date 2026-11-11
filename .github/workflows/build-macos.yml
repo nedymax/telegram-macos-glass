@@ -56,8 +56,6 @@ jobs:
           git config --global url."https://github.com/".insteadOf "git@github.com:"
           git config --global url."https://gitlab.com/".insteadOf "git@gitlab.com:"
           git submodule sync --recursive
-          git config submodule.third-party/twidget.update none
-          git config submodule.third-party/widget-sandbox.update none
           git submodule update --init --recursive --depth 1 --jobs 8 \
             || git submodule update --init --recursive --jobs 8
 
