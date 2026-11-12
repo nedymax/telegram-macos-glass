@@ -9,8 +9,11 @@ import TelegramContext
 
 public final class PeerInfoMusicView : View {
     public static func height(colorful: Bool) -> CGFloat {
-        return colorful ? 24 : 20
+        return colorful ? capsuleHeight + 10 : 20
     }
+    public static let capsuleHeight: CGFloat = 28
+    private static let capsulePadding: CGFloat = 12
+    private var capsule = false
     private let textView: TextView = TextView()
     private var titleFont: NSFont = .semibold(.short)
     private let chevron = ImageView()
@@ -48,7 +51,10 @@ public final class PeerInfoMusicView : View {
         
 
         
-        self.backgroundColor = colorfull ? backgroundColor : .clear
+        self.capsule = colorfull
+        self.backgroundColor = .clear
+        container.backgroundColor = colorfull ? backgroundColor : .clear
+        container.layer?.cornerRadius = colorfull ? PeerInfoMusicView.capsuleHeight / 2 : 0
         
         for attribute in file.attributes {
             if case let .Audio(_, _, title, performer, _) = attribute {
@@ -88,18 +94,25 @@ public final class PeerInfoMusicView : View {
         super.layout()
         
         control.frame = bounds
-        textView.resize(frame.width - 60)
-        
-        container.setFrameSize(NSMakeSize(container.subviewsWidthSize.width + 6, frame.height))
-        
-        imageView.centerY(x: 0)
+        let padding: CGFloat = capsule ? PeerInfoMusicView.capsulePadding : 0
+        let height: CGFloat = capsule ? PeerInfoMusicView.capsuleHeight : frame.height
+        textView.resize(frame.width - 60 - padding * 2)
+
+        let contentWidth = imageView.frame.width + 3 + textView.frame.width + 3 + chevron.frame.width
+        container.setFrameSize(NSMakeSize(contentWidth + (capsule ? padding * 2 : 6), height))
+
+        imageView.centerY(x: padding)
         textView.centerY(x: imageView.frame.maxX + 3)
         if let line = textView.textLayout?.lines.first {
             let glyphCenter = line.frame.minY - (titleFont.ascender + titleFont.descender) / 2
-            textView.setFrameOrigin(NSMakePoint(textView.frame.minX, floorToScreenPixels(backingScaleFactor, frame.height / 2 - glyphCenter)))
+            textView.setFrameOrigin(NSMakePoint(textView.frame.minX, floorToScreenPixels(backingScaleFactor, height / 2 - glyphCenter)))
         }
         chevron.centerY(x: textView.frame.maxX + 3)
-        
-        container.center()
+
+        if capsule {
+            container.centerX(y: 0)
+        } else {
+            container.center()
+        }
     }
 }
