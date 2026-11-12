@@ -98,25 +98,18 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
     entries.append(.sectionId(sectionId, type: .normal))
     sectionId += 1
     
-    entries.append(.desc(sectionId: sectionId, index: index, text: .plain(strings().liteModeLowPower), data: .init(color: theme.colors.listGrayText, viewType: .textTopItem)))
-    index += 1
-
-    
     entries.append(InputDataEntry.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_low_power, equatable: InputDataEquatable(state.liteMode), comparable: nil, item: { initialSize, stableId in
         let sizes:[Int32] = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-        return SelectSizeRowItem(initialSize, stableId: stableId, current: state.liteMode.lowBatteryPercent, sizes: sizes, hasMarkers: false, viewType: .singleItem, selectAction: { index in
+        let offTitle = "Off" //TODOLANG
+        let titles = sizes.map { $0 == 100 ? offTitle : "\($0)%" }
+        let header = strings().liteModeLowPower.lowercased()
+        let title = header.prefix(1).uppercased() + header.dropFirst()
+        let percent = state.liteMode.lowBatteryPercent
+        let subtitle = percent == 100 ? offTitle : "Turns on below \(percent)%" //TODOLANG
+        return SelectSizeRowItem(initialSize, stableId: stableId, current: percent, sizes: sizes, hasMarkers: false, titles: titles, title: title, subtitle: subtitle, viewType: .singleItem, selectAction: { index in
             arguments.toggleLowPower(sizes[index])
         })
     }))
-    index += 1
-    
-    let lowPowerText: String
-    if state.liteMode.lowBatteryPercent == 100 {
-        lowPowerText = strings().liteModeLowPowerInfoFull
-    } else {
-        lowPowerText = strings().liteModeLowPowerInfo("\(state.liteMode.lowBatteryPercent)")
-    }
-    entries.append(.desc(sectionId: sectionId, index: index, text: .plain(lowPowerText), data: .init(color: theme.colors.listGrayText, viewType: .textBottomItem)))
     index += 1
     
     // Standalone "Enable Liquid Glass" toggle — own section + .desc so the

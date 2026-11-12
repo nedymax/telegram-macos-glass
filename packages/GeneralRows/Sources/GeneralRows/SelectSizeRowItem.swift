@@ -6,6 +6,38 @@ import Localization
 
 
 
+struct NativeSliderLabel {
+    let index: Int
+    let rect: NSRect
+}
+
+struct NativeSliderGeometry {
+    let height: CGFloat
+    let controlY: CGFloat
+    let trackRect: NSRect
+    let centers: [CGFloat]
+    let titleOrigin: NSPoint?
+    let subtitleOrigin: NSPoint?
+    let smallMarkerRect: NSRect?
+    let largeMarkerRect: NSRect?
+    let labelHeight: CGFloat
+
+    static let knobSize = NSMakeSize(20, 16)
+    static let liftedKnobSize = NSMakeSize(30, 22)
+    static let trackHeight: CGFloat = 6
+    static let tickSize: CGFloat = 2
+    static let tickOffset: CGFloat = 14
+    static let labelOffset: CGFloat = 20
+    static let labelSize: CGFloat = 11
+    static let labelSpacing: CGFloat = 8
+    static let snapDistance: CGFloat = 6
+    static let inlineMinWidth: CGFloat = 360
+    static let inlineTextMinWidth: CGFloat = 120
+    static let inlineSliderMin: CGFloat = 140
+    static let inlineSliderMax: CGFloat = 240
+    static let columnGap: CGFloat = 16
+}
+
 public class SelectSizeRowItem: GeneralRowItem {
 
     fileprivate let titles:[String]?
@@ -16,7 +48,13 @@ public class SelectSizeRowItem: GeneralRowItem {
     fileprivate let selectAction:(Int)->Void
     fileprivate let hasMarkers: Bool
     fileprivate let dottedIndexes: [Int]
-    public init(_ initialSize: NSSize, stableId: AnyHashable, current: Int32, sizes: [Int32], hasMarkers: Bool, titles:[String]? = nil, titlesImages: [CGImage]? = nil, dottedIndexes:[Int] = [], viewType: GeneralViewType = .legacy, selectAction: @escaping(Int)->Void) {
+    fileprivate let rowTitle: String?
+    fileprivate let rowSubtitle: String?
+    fileprivate private(set) var titleLayout: TextViewLayout?
+    fileprivate private(set) var subtitleLayout: TextViewLayout?
+    public init(_ initialSize: NSSize, stableId: AnyHashable, current: Int32, sizes: [Int32], hasMarkers: Bool, titles:[String]? = nil, titlesImages: [CGImage]? = nil, dottedIndexes:[Int] = [], title: String? = nil, subtitle: String? = nil, viewType: GeneralViewType = .legacy, selectAction: @escaping(Int)->Void) {
+        self.rowTitle = title ?? (titles?.count == 1 ? titles?.first : nil)
+        self.rowSubtitle = subtitle
         self.sizes = sizes
         self.titles = titles
         self.titlesImages = titlesImages
@@ -28,13 +66,154 @@ public class SelectSizeRowItem: GeneralRowItem {
         super.init(initialSize, height: titles != nil ? 70 : 40, stableId: stableId, viewType: viewType, inset: NSEdgeInsets(left: 20, right: 20))
     }
     
-    @discardableResult
-    public override func withSettingsLayout(_ presentation: SettingsRowPresentation = .content) -> Self {
-        super.withSettingsLayout(presentation)
-        if settingsPresentation != nil, titles == nil {
-            _height = SettingsRowMetrics.height(presentation: .content, hasIcon: false, titleHeight: 16)
+    fileprivate var hasStopLabels: Bool {
+        if let titles = titles {
+            return titles.count == sizes.count && titles.count > 1
         }
-        return self
+        return false
+    }
+
+    fileprivate var isNative: Bool {
+        if case .modern = viewType {
+            return true
+        }
+        return false
+    }
+
+    public override var height: CGFloat {
+        if isNative {
+            return nativeGeometry(width: blockWidth).height
+        }
+        return super.height
+    }
+
+    public override func makeSize(_ width: CGFloat, oldWidth: CGFloat) -> Bool {
+        let result = super.makeSize(width, oldWidth: oldWidth)
+        if isNative {
+            _ = nativeGeometry(width: blockWidth)
+        }
+        return result
+    }
+
+    fileprivate func labelLayout(_ index: Int, selected: Bool) -> TextViewLayout? {
+        guard let titles = titles, index < titles.count else {
+            return nil
+        }
+        let font: NSFont = selected ? .semibold(NativeSliderGeometry.labelSize) : .normal(NativeSliderGeometry.labelSize)
+        let layout = TextViewLayout(.initialize(string: titles[index], color: selected ? theme.colors.text : theme.colors.grayText, font: font), maximumNumberOfLines: 1)
+        layout.measure(width: .greatestFiniteMagnitude)
+        return layout
+    }
+
+    fileprivate func nativeGeometry(width: CGFloat) -> NativeSliderGeometry {
+        let insets = viewType.innerInset
+        let vertical = SettingsRowMetrics.verticalInset
+        let contentLeft = insets.left
+        let contentRight = width - insets.right
+        let contentWidth = max(0, contentRight - contentLeft)
+        let labelHeight = ceil(NSAttributedString.initialize(string: "0", font: .semibold(NativeSliderGeometry.labelSize)).size().height)
+        let blockHeight = hasStopLabels ? NativeSliderGeometry.labelOffset + labelHeight : NativeSliderGeometry.tickOffset + NativeSliderGeometry.tickSize
+        let inline = rowTitle != nil && rowSubtitle != nil && contentWidth >= NativeSliderGeometry.inlineMinWidth
+
+        var sliderLeft = contentLeft
+        let sliderRight = contentRight
+        var textWidth = contentWidth
+        if inline {
+            let sliderWidth = min(NativeSliderGeometry.inlineSliderMax, max(NativeSliderGeometry.inlineSliderMin, contentWidth - NativeSliderGeometry.inlineTextMinWidth - NativeSliderGeometry.columnGap))
+            sliderLeft = contentRight - sliderWidth
+            textWidth = sliderLeft - NativeSliderGeometry.columnGap - contentLeft
+        }
+
+        if let rowTitle {
+            let layout = TextViewLayout(.initialize(string: rowTitle, color: theme.colors.text, font: .normal(SettingsRowMetrics.titleSize)), maximumNumberOfLines: 1, truncationType: .end)
+            layout.measure(width: textWidth)
+            titleLayout = layout
+        } else {
+            titleLayout = nil
+        }
+        if let rowSubtitle {
+            let layout = TextViewLayout(.initialize(string: rowSubtitle, color: theme.colors.grayText, font: .normal(SettingsRowMetrics.subtitleSize)), maximumNumberOfLines: 2, truncationType: .end)
+            layout.measure(width: textWidth)
+            subtitleLayout = layout
+        } else {
+            subtitleLayout = nil
+        }
+        let titleHeight = titleLayout?.layoutSize.height ?? 0
+        let subtitleHeight = subtitleLayout.map { $0.layoutSize.height + 2 } ?? 0
+        let textHeight = titleHeight + subtitleHeight
+
+        let height: CGFloat
+        let controlY: CGFloat
+        var titleOrigin: NSPoint?
+        var subtitleOrigin: NSPoint?
+        if inline {
+            height = max(53, max(textHeight, blockHeight) + vertical * 2)
+            let textY = floor((height - textHeight) / 2)
+            titleOrigin = NSMakePoint(contentLeft, textY)
+            subtitleOrigin = NSMakePoint(contentLeft, textY + titleHeight + 2)
+            controlY = floor((height - blockHeight) / 2)
+        } else {
+            var y = vertical
+            if titleLayout != nil {
+                titleOrigin = NSMakePoint(contentLeft, y)
+                y += titleHeight
+                if subtitleLayout != nil {
+                    subtitleOrigin = NSMakePoint(contentLeft, y + 2)
+                    y += subtitleHeight
+                }
+                y += 8
+            }
+            controlY = titleLayout == nil && !hasStopLabels ? floor((max(38, blockHeight + vertical * 2) - NativeSliderGeometry.knobSize.height) / 2) : y
+            height = titleLayout == nil && !hasStopLabels ? max(38, blockHeight + vertical * 2) : y + blockHeight + vertical
+        }
+
+        var trackLeft = sliderLeft
+        var trackRight = sliderRight
+        var smallMarkerRect: NSRect?
+        var largeMarkerRect: NSRect?
+        if hasMarkers, let first = sizes.first, let last = sizes.last {
+            let small = NSAttributedString.initialize(string: "A", font: .normal(min(CGFloat(first), 11))).size()
+            let large = NSAttributedString.initialize(string: "A", font: .normal(min(CGFloat(last), 15))).size()
+            let midY = controlY + NativeSliderGeometry.knobSize.height / 2
+            smallMarkerRect = NSMakeRect(sliderLeft, floor(midY - small.height / 2), ceil(small.width), ceil(small.height))
+            largeMarkerRect = NSMakeRect(sliderRight - ceil(large.width), floor(midY - large.height / 2), ceil(large.width), ceil(large.height))
+            trackLeft += ceil(small.width) + 8
+            trackRight -= ceil(large.width) + 8
+        }
+        let trackRect = NSMakeRect(trackLeft, controlY + (NativeSliderGeometry.knobSize.height - NativeSliderGeometry.trackHeight) / 2, max(0, trackRight - trackLeft), NativeSliderGeometry.trackHeight)
+        let knobHalf = NativeSliderGeometry.knobSize.width / 2
+        let span = max(0, trackRect.width - knobHalf * 2)
+        let count = max(1, CGFloat(sizes.count - 1))
+        let centers = (0 ..< sizes.count).map { trackRect.minX + knobHalf + span * CGFloat($0) / count }
+        return NativeSliderGeometry(height: height, controlY: controlY, trackRect: trackRect, centers: centers, titleOrigin: titleOrigin, subtitleOrigin: subtitleOrigin, smallMarkerRect: smallMarkerRect, largeMarkerRect: largeMarkerRect, labelHeight: labelHeight)
+    }
+
+    fileprivate func visibleLabels(_ geometry: NativeSliderGeometry, selected: Int) -> [(NativeSliderLabel, TextViewLayout)] {
+        guard hasStopLabels else {
+            return []
+        }
+        var order = [0, sizes.count - 1, selected]
+        for i in 0 ..< sizes.count where !order.contains(i) {
+            order.append(i)
+        }
+        var placed: [(NativeSliderLabel, TextViewLayout)] = []
+        let y = geometry.controlY + NativeSliderGeometry.labelOffset
+        for index in order where index >= 0 && index < sizes.count && !placed.contains(where: { $0.0.index == index }) {
+            guard let layout = labelLayout(index, selected: index == selected) else {
+                continue
+            }
+            let imageWidth = titlesImages.map { index < $0.count ? $0[index].backingSize.width + 2 : 0 } ?? 0
+            let width = ceil(layout.layoutSize.width) + imageWidth
+            var x = geometry.centers[index] - width / 2
+            x = min(max(x, geometry.trackRect.minX), geometry.trackRect.maxX - width)
+            let rect = NSMakeRect(x, y, width, geometry.labelHeight)
+            let spaced = rect.insetBy(dx: -NativeSliderGeometry.labelSpacing / 2, dy: 0)
+            if placed.contains(where: { $0.0.rect.insetBy(dx: -NativeSliderGeometry.labelSpacing / 2, dy: 0).intersects(spaced) }) {
+                continue
+            }
+            placed.append((NativeSliderLabel(index: index, rect: rect), layout))
+        }
+        return placed
     }
 
     public override func viewClass() -> AnyClass {
@@ -126,6 +305,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
     private var pendingSelect: DispatchWorkItem?
     private var shownPosition: CGFloat?
     private var positionAnimator: DisplayLinkAnimator?
+    private var snappedIndex: Int?
 
     public required init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -168,6 +348,10 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
     private func metrics(_ item: SelectSizeRowItem) -> Metrics? {
         guard !item.sizes.isEmpty else {
             return nil
+        }
+        if item.isNative {
+            let geometry = item.nativeGeometry(width: containerView.frame.width)
+            return Metrics(centers: geometry.centers, centerY: geometry.controlY + NativeSliderGeometry.knobSize.height / 2)
         }
         let left: CGFloat
         let right: CGFloat
@@ -225,8 +409,15 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         return shownPosition ?? targetPosition
     }
 
+    private var knobSize: NSSize {
+        if let item = item as? SelectSizeRowItem, item.isNative {
+            return NativeSliderGeometry.knobSize
+        }
+        return SelectSizeRowView.thumbSize
+    }
+
     private func thumbRect(at position: CGFloat, _ metrics: Metrics) -> NSRect {
-        let size = SelectSizeRowView.thumbSize
+        let size = knobSize
         let center = NSMakePoint(centerX(at: position, metrics), metrics.centerY)
         return NSMakeRect(center.x - size.width / 2, center.y - size.height / 2, size.width, size.height)
     }
@@ -240,6 +431,9 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         thumbView.isHidden = false
         thumbView.backgroundColor = .white
         thumbView.layer?.borderColor = theme.colors.border.cgColor
+        let size = knobSize
+        thumbView.layer?.cornerRadius = size.height / 2
+        thumbView.layer?.shadowPath = CGPath(roundedRect: size.bounds, cornerWidth: size.height / 2, cornerHeight: size.height / 2, transform: nil)
         let previous = thumbPlaced ? thumbView.frame : thumbRect(at: renderedPosition, metrics)
         let rect = thumbRect(at: renderedPosition, metrics)
         if thumbView.frame != rect {
@@ -303,7 +497,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
             return
         }
         nativeLens.frame = containerView.bounds
-        let size = SelectSizeRowView.liftedThumbSize
+        let size = knobSize == NativeSliderGeometry.knobSize ? NativeSliderGeometry.liftedKnobSize : SelectSizeRowView.liftedThumbSize
         let frame = lifted ? NSMakeRect(rest.midX - size.width / 2, rest.midY - size.height / 2, size.width, size.height) : rest
         nativeLens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: theme.appearance, backingScale: backingScaleFactor, animation: animation, contentSources: [])
         let opacity: Float = lifted && nativeLens.hasActiveSurface ? 0 : 1
@@ -315,7 +509,18 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
     }
 
     private func setDragPosition(at x: CGFloat, item: SelectSizeRowItem, metrics: Metrics) {
-        let position = self.position(at: x, metrics)
+        var position = self.position(at: x, metrics)
+        let step = metrics.centers.count > 1 ? metrics.centers[1] - metrics.centers[0] : 0
+        let nearestIndex = Int(position.rounded())
+        if step > 0, abs(position - CGFloat(nearestIndex)) * step <= NativeSliderGeometry.snapDistance {
+            position = CGFloat(nearestIndex)
+            if snappedIndex != nearestIndex, tracking {
+                NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+            }
+            snappedIndex = nearestIndex
+        } else {
+            snappedIndex = nil
+        }
         dragPosition = position
         let nearest = item.sizes[Int(position.rounded())]
         if item.current != nearest {
@@ -329,13 +534,21 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
             return
         }
         let point = containerView.convert(event.locationInWindow, from: nil)
-        let area = NSMakeRect(first - 20, metrics.centerY - 16, last - first + 40, 32)
+        let area: NSRect
+        if item.isNative {
+            let geometry = item.nativeGeometry(width: containerView.frame.width)
+            let bottom = item.hasStopLabels ? NativeSliderGeometry.labelOffset + geometry.labelHeight : NativeSliderGeometry.knobSize.height
+            area = NSMakeRect(geometry.trackRect.minX - 6, geometry.controlY - 6, geometry.trackRect.width + 12, bottom + 12)
+        } else {
+            area = NSMakeRect(first - 20, metrics.centerY - 16, last - first + 40, 32)
+        }
         guard area.contains(point) else {
             super.mouseDown(with: event)
             return
         }
         let from = renderedPosition
         tracking = true
+        snappedIndex = Int(renderedPosition.rounded())
         committed = nil
         pendingSelect?.cancel()
         pendingSelect = nil
@@ -507,118 +720,88 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
                 addCursorRect(rect, cursor: NSCursor.pointingHand)
                 availableRects.append(rect)
             }
-        case let .modern(_, insets):
-            let minFontSize = CGFloat(item.sizes.first!)
-            let maxFontSize = CGFloat(item.sizes.last!)
-            
-            let minNode = TextNode.layoutText(.initialize(string: "A", color: theme.colors.text, font: .normal(min(minFontSize, 11))), backdorColor, 1, .end, NSMakeSize(.greatestFiniteMagnitude, .greatestFiniteMagnitude), nil, false, .left)
-            
-            let maxNode = TextNode.layoutText(.initialize(string: "A", color: theme.colors.text, font: .normal(min(maxFontSize, 15))), backdorColor, 1, .end, NSMakeSize(.greatestFiniteMagnitude, .greatestFiniteMagnitude), nil, false, .left)
-            
-            let minF = _focus(item.hasMarkers ? minNode.0.size : NSZeroSize)
-            let maxF = _focus(item.hasMarkers ? maxNode.0.size : NSZeroSize)
-            
-            if item.hasMarkers {
-                minNode.1.draw(NSMakeRect(insets.left, minF.minY, minF.width, minF.height), in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
-                maxNode.1.draw(NSMakeRect(containerView.frame.width - insets.right - maxF.width, maxF.minY, maxF.width, maxF.height), in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
+        case .modern:
+            let geometry = item.nativeGeometry(width: containerView.frame.width)
+            let current = renderedPosition
+            let selected = min(max(Int(current.rounded()), 0), item.sizes.count - 1)
+
+            func drawText(_ layout: TextViewLayout, at origin: NSPoint, lines: Int) {
+                let node = TextNode.layoutText(layout.attributedString, backdorColor, lines, .end, NSMakeSize(max(1, layout.layoutSize.width + 1), .greatestFiniteMagnitude), nil, false, .left)
+                node.1.draw(NSMakeRect(origin.x, origin.y, node.0.size.width, node.0.size.height), in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
             }
-            
-            let count = max(1, CGFloat(item.sizes.count) - 1)
-            
-            let insetBetweenFont: CGFloat = item.hasMarkers ? 20 : 0
-            
-            let width: CGFloat = containerView.frame.width - (insets.left + minF.width) - (insets.right + maxF.width) - insetBetweenFont * 2
-            
-            let per = floorToScreenPixels(backingScaleFactor, width / (count))
-            
-            ctx.setFillColor(theme.colors.accent.cgColor)
-            let lineSize = NSMakeSize(width, 2)
-            let lc = _focus(lineSize)
-            let minX = insets.left + minF.width + insetBetweenFont
-            
-            let interactionRect = NSMakeRect(minX, lc.minY, lc.width, lc.height)
-            
-            ctx.fill(interactionRect)
-            
-            let current: CGFloat = renderedPosition
-            
-            let selectSize = NSMakeSize(20, 20)
-            
-            let selectPoint = NSMakePoint(minX + floorToScreenPixels(backingScaleFactor, interactionRect.width / CGFloat(count)) * current - selectSize.width / 2, _focus(selectSize).minY)
-            
+            if let title = item.titleLayout, let origin = geometry.titleOrigin {
+                drawText(title, at: origin, lines: 1)
+            }
+            if let subtitle = item.subtitleLayout, let origin = geometry.subtitleOrigin {
+                drawText(subtitle, at: origin, lines: 2)
+            }
+
+            if let small = geometry.smallMarkerRect, let first = item.sizes.first {
+                let node = TextNode.layoutText(.initialize(string: "A", color: theme.colors.text, font: .normal(min(CGFloat(first), 11))), backdorColor, 1, .end, NSMakeSize(.greatestFiniteMagnitude, .greatestFiniteMagnitude), nil, false, .left)
+                node.1.draw(small, in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
+            }
+            if let large = geometry.largeMarkerRect, let last = item.sizes.last {
+                let node = TextNode.layoutText(.initialize(string: "A", color: theme.colors.text, font: .normal(min(CGFloat(last), 15))), backdorColor, 1, .end, NSMakeSize(.greatestFiniteMagnitude, .greatestFiniteMagnitude), nil, false, .left)
+                node.1.draw(large, in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
+            }
+
+            let track = geometry.trackRect
+            let radius = track.height / 2
+            let fillX = geometry.centers.isEmpty ? track.minX : min(max(geometry.centers[0] + (geometry.centers.count > 1 ? (geometry.centers[1] - geometry.centers[0]) : 0) * current, track.minX), track.maxX)
+            let trackColor = theme.colors.text.withAlphaComponent(0.13)
+
+            func segment(_ from: CGFloat, _ to: CGFloat, dotted: Bool) {
+                guard to > from else { return }
+                let rect = NSMakeRect(from, track.minY, to - from, track.height)
+                if dotted {
+                    let dash: CGFloat = 6
+                    var x = rect.minX
+                    while x < rect.maxX {
+                        let w = min(dash, rect.maxX - x)
+                        ctx.addPath(CGPath(roundedRect: NSMakeRect(x, rect.minY, w, rect.height), cornerWidth: min(radius, w / 2), cornerHeight: radius, transform: nil))
+                        x += dash + 3
+                    }
+                } else {
+                    ctx.addPath(CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
+                }
+                ctx.fillPath()
+            }
+
+            for (filled, color) in [(false, trackColor), (true, theme.colors.accent)] {
+                ctx.setFillColor(color.cgColor)
+                let limit = filled ? fillX : track.maxX
+                if item.dottedIndexes.isEmpty {
+                    segment(track.minX, limit, dotted: false)
+                } else {
+                    var x = track.minX
+                    for i in 1 ..< max(1, item.sizes.count) {
+                        let end = i == item.sizes.count - 1 ? track.maxX : geometry.centers[i]
+                        segment(x, min(end, limit), dotted: item.dottedIndexes.contains(i))
+                        x = end
+                        if x >= limit { break }
+                    }
+                }
+            }
+
             ctx.setFillColor(theme.colors.grayText.cgColor)
-            let unMinX = selectPoint.x + selectSize.width / 2
-
-
-
-            ctx.fill(NSMakeRect(unMinX, lc.minY, lc.maxX - unMinX, lc.height))
-
-            
-            for i in 0 ..< item.sizes.count {
-                let perSize = NSMakeSize(10, 10)
-                let perF = _focus(perSize)
-                let point = NSMakePoint(minX + per * CGFloat(i) - (i > 0 ? perSize.width / 2 : 0), perF.minY)
-                ctx.setFillColor(theme.colors.background.cgColor)
-                ctx.fill(NSMakeRect(point.x, point.y, perSize.width, perSize.height))
-                
-                ctx.setFillColor(CGFloat(i) <= current + 0.001 ? theme.colors.accent.cgColor : theme.colors.grayText.cgColor)
-                ctx.fillEllipse(in: NSMakeRect(point.x + perSize.width/2 - 2, point.y + 3, 4, 4))
-
-
-                if item.dottedIndexes.contains(i), i > 0 {
-                    let prevPoint = NSMakePoint(minX + per * CGFloat(i - 1) + (i == 1 ? perSize.width : perSize.width / 2), lc.minY)
-                    let rect = NSMakeRect(prevPoint.x, lc.minY, point.x - prevPoint.x, lc.height)
-                    ctx.clear(rect)
-                    let w: CGFloat = 16
-
-
-                    let count = Int(floor(rect.width / w))
-                    let total = CGFloat(count) * w
-
-                    let inset: CGFloat = ceil((rect.width - total) / 2)
-
-                    for j in 0 ..< count {
-                        let rect = NSMakeRect(rect.minX + CGFloat(j) * w, rect.minY, w, rect.height)
-                        ctx.saveGState()
-                        ctx.setFillColor(CGFloat(i) <= current + 0.001 ? theme.colors.accent.cgColor : theme.colors.grayText.cgColor)
-                        ctx.fill(NSMakeRect(rect.minX + inset + 2, rect.minY, w - 4, rect.height))
-                        ctx.restoreGState()
-                    }
-                }
-
-                if let titles = item.titles, titles.count == item.sizes.count, titles.count > 1 {
-                    let title = titles[i]
-                    let titleNode = TextNode.layoutText(.initialize(string: title, color: theme.colors.grayText, font: .normal(.short)), backdorColor, 1, .end, NSMakeSize(.greatestFiniteMagnitude, .greatestFiniteMagnitude), nil, false, .left)
-
-                    var rect = NSMakeRect(min(max(point.x - titleNode.0.size.width / 2 + 4, minX), frame.width - titleNode.0.size.width - minX), point.y - 15 - titleNode.0.size.height, titleNode.0.size.width, titleNode.0.size.height)
-
-                    if i == titles.count - 1 {
-                        rect.origin.x = min(rect.minX, (point.x + 5) - titleNode.0.size.width)
-                    }
-                    
-                    if let image = item.titlesImages?[i] {
-                        ctx.draw(image, in: CGRect(origin: NSMakePoint(rect.minX - image.backingSize.width + 4, rect.minY), size: image.backingSize))
-                        rect.origin.x += 6
-                    }
-                    
-
-                    titleNode.1.draw(rect, in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
-                }
+            for center in geometry.centers {
+                ctx.fillEllipse(in: NSMakeRect(center - NativeSliderGeometry.tickSize / 2, geometry.controlY + NativeSliderGeometry.tickOffset, NativeSliderGeometry.tickSize, NativeSliderGeometry.tickSize))
             }
 
-            if let titles = item.titles, titles.count == 1, let title = titles.first {
-                let titleNode = TextNode.layoutText(.initialize(string: title, color: theme.colors.grayText, font: .normal(.short)), backdorColor, 1, .end, NSMakeSize(.greatestFiniteMagnitude, .greatestFiniteMagnitude), nil, false, .left)
-                titleNode.1.draw(NSMakeRect(_focus(titleNode.0.size).minX, insets.top , titleNode.0.size.width, titleNode.0.size.height), in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
+            for (label, layout) in item.visibleLabels(geometry, selected: selected) {
+                var textX = label.rect.minX
+                if let images = item.titlesImages, label.index < images.count {
+                    let image = images[label.index]
+                    ctx.draw(image, in: CGRect(origin: NSMakePoint(textX, label.rect.midY - image.backingSize.height / 2), size: image.backingSize))
+                    textX += image.backingSize.width + 2
+                }
+                drawText(layout, at: NSMakePoint(textX, label.rect.minY), lines: 1)
             }
-
 
             resetCursorRects()
             availableRects.removeAll()
-            
-            for i in 0 ..< item.sizes.count {
-                let perF = _focus(selectSize)
-                let point = NSMakePoint(interactionRect.minX + floorToScreenPixels(backingScaleFactor, interactionRect.width / (count)) * CGFloat(i) - selectSize.width / 2, perF.minY)
-                let rect = NSMakeRect(point.x, point.y, selectSize.width, selectSize.height)
+            for center in geometry.centers {
+                let rect = NSMakeRect(center - NativeSliderGeometry.knobSize.width / 2, geometry.controlY, NativeSliderGeometry.knobSize.width, NativeSliderGeometry.knobSize.height)
                 addCursorRect(rect, cursor: NSCursor.pointingHand)
                 availableRects.append(rect)
             }
