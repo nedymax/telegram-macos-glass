@@ -60,7 +60,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                     switchView = SwitchView()
                     containerView.addSubview(switchView!)
                 }
-                switchView?.setFrameSize(item.settingsPresentation != nil ? NSMakeSize(36, 18) : NSMakeSize(32, 20))
+                switchView?.setFrameSize(item.settingsPresentation != nil ? NSMakeSize(36, 36 * SwitchView.preferredSize.height / SwitchView.preferredSize.width) : SwitchView.preferredSize)
                 switchView?.autoswitch = item.autoswitch
                 switchView?.presentation = item.switchAppearance
                 switchView?.setIsOn(stateback,animated:animated)
@@ -146,7 +146,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                 }
                 let underselect = item.customTheme?.underSelectedColor ?? theme.colors.underSelectedColor
 
-                let layout = item.isSelected ? nil : TextViewLayout(.initialize(string: value, color: isSelect ? underselect : textColor, font: .normal(item.settingsPresentation != nil ? SettingsRowMetrics.titleSize : .title)), maximumNumberOfLines: 1)
+                let layout = item.isSelected && item.settingsPresentation == nil ? nil : TextViewLayout(.initialize(string: value, color: isSelect ? underselect : textColor, font: .normal(item.settingsPresentation != nil ? SettingsRowMetrics.titleSize : .title)), maximumNumberOfLines: 1)
 
                 textView?.set(layout: layout)
                 secondaryTextView?.removeFromSuperview()
@@ -181,8 +181,8 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                 let grayText = item.customTheme?.grayTextColor ?? theme.colors.grayText
                 let underselect = item.customTheme?.underSelectedColor ?? theme.colors.underSelectedColor
 
-                let primaryLayout = item.isSelected ? nil : TextViewLayout(.initialize(string: primary, color: isSelect ? underselect : textColor, font: .normal(item.settingsPresentation != nil ? SettingsRowMetrics.titleSize : .title)), maximumNumberOfLines: 1, alignment: .right)
-                let secondaryLayout = item.isSelected ? nil : TextViewLayout(.initialize(string: secondary, color: isSelect ? underselect : grayText, font: .normal(.text)), maximumNumberOfLines: 1, alignment: .right)
+                let primaryLayout = item.isSelected && item.settingsPresentation == nil ? nil : TextViewLayout(.initialize(string: primary, color: isSelect ? underselect : textColor, font: .normal(item.settingsPresentation != nil ? SettingsRowMetrics.titleSize : .title)), maximumNumberOfLines: 1, alignment: .right)
+                let secondaryLayout = item.isSelected && item.settingsPresentation == nil ? nil : TextViewLayout(.initialize(string: secondary, color: isSelect ? underselect : grayText, font: .normal(.text)), maximumNumberOfLines: 1, alignment: .right)
 
                 textView?.set(layout: primaryLayout)
                 secondaryTextView?.set(layout: secondaryLayout)
@@ -361,7 +361,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
         if let inset = item.settingsTextInset {
             return inset + (selectLeftControl != nil ? 38 : 0)
         }
-        let t = item.isSelected && item.settingsPresentation == nil ? item.activeThumb : item.thumb
+        let t = item.isSelected ? item.activeThumb : item.thumb
         if let thumb = t {
             if let textInset = thumb.textInset {
                 textXAdditional = textInset
@@ -382,7 +382,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
             switch item.viewType {
             case .legacy:
                 super.draw(layer, in: ctx)
-                let t = item.isSelected && item.settingsPresentation == nil ? item.activeThumb : item.thumb
+                let t = item.isSelected ? item.activeThumb : item.thumb
                 if let thumb = t {
                     var f = focus(thumb.thumb.systemSize)
                     if item.descLayout != nil {
@@ -404,7 +404,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                     ctx.fillEllipse(in: NSMakeRect(containerView.frame.width - 14 - item.inset.right - 16, floorToScreenPixels(backingScaleFactor, (frame.height - 14) / 2), 14, 14))
                 }
             case let .modern(_, insets):
-                let t = item.isSelected && item.settingsPresentation == nil ? item.activeThumb : item.thumb
+                let t = item.isSelected ? item.activeThumb : item.thumb
                 if let thumb = t {
                     let f = focus(item.settingsIconSize ?? thumb.thumb.systemSize)
                     

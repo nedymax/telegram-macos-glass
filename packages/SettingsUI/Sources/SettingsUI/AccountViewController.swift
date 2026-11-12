@@ -744,7 +744,7 @@ private func accountInfoEntries<Context: AccountContextProtocol>(peerView:PeerVi
 private func prepareEntries<Context: AccountContextProtocol>(left: [AppearanceWrapperEntry<AccountInfoEntry<Context>>], right: [AppearanceWrapperEntry<AccountInfoEntry<Context>>], arguments: AccountInfoArguments<Context>, initialSize: NSSize) -> TableUpdateTransition {
     let (removed, inserted, updated)  = proccessEntriesWithoutReverse(left, right: right) { entry -> TableRowItem in
         let item = entry.entry.item(arguments, initialSize: initialSize)
-        if item is GeneralInteractedRowItem || item is SettingsAccountRowItem {
+        if item is GeneralInteractedRowItem || item is SettingsAccountRowItem || item is AccountInfoItem {
             return item.settingsRow(.sidebar)
         }
         return item

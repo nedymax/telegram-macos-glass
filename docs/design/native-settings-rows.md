@@ -30,6 +30,8 @@ Cards and separators:
 - Gap between cards: **10pt**
 - Separator: 1pt band, inset 10pt from both card edges
 - Trailing toggle ends 10pt from the card edge
+- Toggle is the mini `NSSwitch`, 36×16. Rendered on macOS 27: regular 54×24, small 44×20, mini 36×16, large 64×28
+- Section headers are sentence case ("Power saving", not "POWER SAVING"), 13pt bold, primary text colour
 
 Fonts:
 - Row title 13pt regular; subtitle 11pt regular, secondary color

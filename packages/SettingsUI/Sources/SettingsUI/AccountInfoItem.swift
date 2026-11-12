@@ -232,6 +232,9 @@ private class AccountInfoView : GeneralContainableRowView {
     
   
     public override var backdorColor: NSColor {
+        if let item = item as? GeneralRowItem, item.settingsPresentation == .sidebar {
+            return isSelect ? theme.colors.accent : theme.colors.background
+        }
         return isSelect ? theme.colors.accentSelect : theme.colors.background
     }
         

@@ -667,7 +667,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         guard let item = item as? SelectSizeRowItem else {
             return
         }
-        containerView.settingsCornerRadius = item.settingsPresentation != nil ? SettingsRowMetrics.cardCornerRadius : nil
+        containerView.applySettingsCorners(item)
         switch item.viewType {
         case .legacy:
             self.containerView.setCorners([])

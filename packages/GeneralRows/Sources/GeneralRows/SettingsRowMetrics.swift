@@ -17,7 +17,7 @@ public enum SettingsRowMetrics {
     public static let subtitleGap: CGFloat = 3
     public static let verticalInset: CGFloat = 10
     public static let sidebarHeight: CGFloat = 32
-    public static let sidebarInset: CGFloat = 3
+    public static let sidebarInset: CGFloat = 10
     public static let sidebarContentInset: CGFloat = 9
     public static let sidebarIconGap: CGFloat = 8
     public static let cardCornerRadius: CGFloat = 12

@@ -14,6 +14,6 @@ assert(SettingsRowMetrics.textInset(presentation: .content, hasIcon: true) == 30
 assert(SettingsRowMetrics.textInset(presentation: .hub, hasIcon: true) == 38)
 assert(SettingsRowMetrics.textInset(presentation: .sidebar, hasIcon: true) == 28)
 assert(SettingsRowMetrics.textInset(presentation: .content, hasIcon: false) == 0)
-assert(SettingsRowMetrics.sidebarInset + SettingsRowMetrics.sidebarContentInset == 12)
+assert(SettingsRowMetrics.sidebarInset + SettingsRowMetrics.sidebarContentInset == 19)
 assert(SettingsRowMetrics.deviceIconSize == 26)
 print("Settings row metrics: 15 checks passed")

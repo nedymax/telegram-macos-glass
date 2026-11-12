@@ -103,7 +103,7 @@ open class GeneralContainableRowView : TableRowView {
             return
         }
         
-        containerView.settingsCornerRadius = item.settingsPresentation == .sidebar ? SettingsRowMetrics.sidebarCornerRadius : (item.settingsPresentation != nil ? SettingsRowMetrics.cardCornerRadius : nil)
+        containerView.applySettingsCorners(item)
         borderView.isHidden = !item.hasBorder || item.settingsPresentation == .sidebar
     }
     
@@ -128,6 +128,17 @@ open class GeneralRowContainerView : Control, MorphCornerProviding {
 
     open var cornerRadius: CGFloat = 20
     public var settingsCornerRadius: CGFloat?
+
+    public func applySettingsCorners(_ item: TableRowItem) {
+        switch (item as? GeneralRowItem)?.settingsPresentation {
+        case .sidebar:
+            settingsCornerRadius = SettingsRowMetrics.sidebarCornerRadius
+        case .some:
+            settingsCornerRadius = SettingsRowMetrics.cardCornerRadius
+        case nil:
+            settingsCornerRadius = nil
+        }
+    }
     // The visible rounding is drawn by `maskLayer`, not `layer.cornerRadius`, so report it for the morph.
     public var morphCornerRadius: CGFloat { return settingsCornerRadius ?? cornerRadius }
     // The row's layer is geometry-flipped (min-Y is the visual top, as createMask's arc order assumes), so a

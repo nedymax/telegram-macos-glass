@@ -163,9 +163,17 @@ open class GeneralTextRowItem: GeneralRowItem {
         guard settingsPresentation != nil else { return self }
         setSettingsInsets(NSEdgeInsets(top: isHeader ? 0 : 6, left: SettingsRowMetrics.contentInset, bottom: isHeader ? 6 : 0, right: SettingsRowMetrics.contentInset))
         let text = NSMutableAttributedString(attributedString: layout.attributedString)
+        if isHeader {
+            let string = text.string
+            if string.rangeOfCharacter(from: .lowercaseLetters) == nil {
+                let lowered = string.lowercased()
+                text.replaceCharacters(in: text.range, with: lowered.prefix(1).uppercased() + lowered.dropFirst())
+            }
+            text.addAttribute(.foregroundColor, value: theme.colors.text, range: text.range)
+        }
         text.enumerateAttribute(.font, in: text.range) { value, range, _ in
             let font = value as? NSFont ?? .normal(SettingsRowMetrics.subtitleSize)
-            text.addAttribute(.font, value: isHeader ? NSFont.medium(SettingsRowMetrics.titleSize) : NSFontManager.shared.convert(font, toSize: SettingsRowMetrics.subtitleSize), range: range)
+            text.addAttribute(.font, value: isHeader ? NSFont.bold(SettingsRowMetrics.titleSize) : NSFontManager.shared.convert(font, toSize: SettingsRowMetrics.subtitleSize), range: range)
         }
         let interactions = layout.interactions
         layout = TextViewLayout(text, alignment: alignment)
