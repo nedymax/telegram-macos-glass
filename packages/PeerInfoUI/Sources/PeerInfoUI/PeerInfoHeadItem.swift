@@ -473,7 +473,8 @@ class PeerInfoHeadItem<Context: AccountContextProtocol>: GeneralRowItem {
                 height += PeerInfoBalanceView.spacing + PeerInfoBalanceView.height
             }
             if !items.isEmpty {
-                height += ActionItem.circleItemHeight + insets.top
+                let maxActionSize: NSSize = items.max(by: { $0.size.height < $1.size.height })!.size
+                height += maxActionSize.height + insets.top
             }
             if self.threadId != nil {
                 height += 50
@@ -761,7 +762,11 @@ class PeerInfoHeadItem<Context: AccountContextProtocol>: GeneralRowItem {
     }
 
     fileprivate var expandedAvatarHeight: CGFloat {
-        return max(floor(blockWidth), collapsedHeight - expandedAvatarInsets)
+        var height = floor(blockWidth * 0.75)
+        if let tableHeight = table?.frame.height, tableHeight > 0 {
+            height = min(height, floor(tableHeight * 0.6))
+        }
+        return max(height, collapsedHeight - expandedAvatarInsets)
     }
 
     fileprivate var effectiveNameLayout: TextViewLayout {
@@ -2338,15 +2343,15 @@ private final class PeerInfoHeadView<Context: AccountContextProtocol> : GeneralC
         let photoDimensions = item.peer?.largeProfileImage?.dimensions.size ?? NSMakeSize(640, 640)
         if let clipView = expandedClipView {
             let size = photoContainerFrame.size
-            let filled = photoDimensions.aspectFilled(size)
-            transition.updateFrame(view: clipView, frame: size.bounds)
+            let fitted = photoDimensions.aspectFitted(size)
+            let frame = NSMakeRect(floorToScreenPixels(backingScaleFactor, (size.width - fitted.width) / 2), floorToScreenPixels(backingScaleFactor, (size.height - fitted.height) / 2), fitted.width, fitted.height)
+            transition.updateFrame(view: clipView, frame: frame)
             if let view = expandedBlurView {
-                transition.updateFrame(view: view, frame: size.bounds)
+                transition.updateFrame(view: view, frame: frame.insetBy(dx: -fitted.width * 0.5, dy: 0))
             }
             if let photoView = expandedPhotoView {
-                let photoFrame = NSMakeRect(floorToScreenPixels(backingScaleFactor, (size.width - filled.width) / 2), floorToScreenPixels(backingScaleFactor, (size.height - filled.height) / 2), filled.width, filled.height)
-                transition.updateFrame(view: photoView, frame: photoFrame)
-                photoView.set(arguments: TransformImageArguments(corners: ImageCorners(), imageSize: filled, boundingSize: filled, intrinsicInsets: NSEdgeInsets()))
+                transition.updateFrame(view: photoView, frame: fitted.bounds)
+                photoView.set(arguments: TransformImageArguments(corners: ImageCorners(), imageSize: fitted, boundingSize: fitted, intrinsicInsets: NSEdgeInsets()))
             }
         }
         if let clipView = collapsingClipView {
@@ -2534,12 +2539,24 @@ private final class PeerInfoHeadView<Context: AccountContextProtocol> : GeneralC
         fatalError("init(coder:) has not been implemented")
     }
     
+    private func _actionItemWidth(_ items: [ActionItem]) -> CGFloat {
+        guard let item = self.item as? PeerInfoHeadItem<Context> else {
+            return 0
+        }
+
+        let actionItemInset = ActionItem.actionItemInsetWidth(isColorfull: item.nameColor != nil)
+        let sideInset: CGFloat = 14
+        let width = (item.blockWidth - sideInset - item.inset.left - item.inset.right - (actionItemInset * CGFloat(items.count - 1)))
+
+        return min(170, width / CGFloat(items.count))
+    }
     
     private func layoutActionItems(_ items: [ActionItem], animated: Bool) {
         
         if !items.isEmpty, let rowItem = self.item as? PeerInfoHeadItem<Context> {
-            let itemHeight = ActionItem.circleItemHeight
-
+            let maxActionSize: NSSize = items.max(by: { $0.size.height < $1.size.height })!.size
+            
+            
             while actionsView.subviews.count > items.count {
                 actionsView.subviews.removeLast()
             }
@@ -2549,10 +2566,10 @@ private final class PeerInfoHeadView<Context: AccountContextProtocol> : GeneralC
             
             let inset: CGFloat = 0
 
-            let actionItemWidth = ActionItem.circleItemWidth(items)
-            let actionItemInset = ActionItem.circleItemGap
+            let actionItemWidth = _actionItemWidth(items)
+            let actionItemInset = ActionItem.actionItemInsetWidth(isColorfull: rowItem.nameColor != nil)
 
-            actionsView.change(size: NSMakeSize(actionItemWidth * CGFloat(items.count) + CGFloat(items.count - 1) * actionItemInset, itemHeight), animated: animated)
+            actionsView.change(size: NSMakeSize(actionItemWidth * CGFloat(items.count) + CGFloat(items.count - 1) * actionItemInset, maxActionSize.height), animated: animated)
 
             var x: CGFloat = inset
             let useGlass = System.liquidGlass && (rowItem.nameColor != nil || rowItem.isAvatarExpanded) && rowItem.threadId == nil && !rowItem.editing
@@ -2561,7 +2578,7 @@ private final class PeerInfoHeadView<Context: AccountContextProtocol> : GeneralC
             for (i, item) in items.enumerated() {
                 let view = actionsView.subviews[i] as! ActionButton
                 let item = rowItem.isAvatarExpanded ? ActionItem(text: item.text, color: .white, image: item.image, animation: item.animation, destruct: item.destruct, action: item.action, subItems: item.subItems) : item
-                view.updateAndLayout(item: item, bgColor: buttonColor, useGlass: useGlass, circle: true, labelWidth: actionItemWidth)
+                view.updateAndLayout(item: item, bgColor: buttonColor, useGlass: useGlass)
                 if item.subItems?.isEmpty == false, let menu = view.contextMenu {
                     let screen: AnalyticsScreen = rowItem.threadId != nil ? .peerInfoTopic : .peerInfo
                     view.contextMenu = {
@@ -2570,7 +2587,7 @@ private final class PeerInfoHeadView<Context: AccountContextProtocol> : GeneralC
                         return menu()
                     }
                 }
-                view.setFrameSize(NSMakeSize(actionItemWidth, itemHeight))
+                view.setFrameSize(NSMakeSize(actionItemWidth, maxActionSize.height))
                 view.change(pos: NSMakePoint(x, 0), animated: false)
                 x += actionItemWidth + actionItemInset
             }

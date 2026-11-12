@@ -6,13 +6,9 @@ public final class ActionButton : Control {
     fileprivate let imageView: ImageView = ImageView()
     fileprivate let textView: TextView = TextView()
     private var glassView: LiquidGlassView?
-    private let circleView = View()
-    private var circle = false
 
     public required init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        circleView.isEventLess = true
-        addSubview(circleView)
         addSubview(imageView)
         addSubview(textView)
 
@@ -43,26 +39,17 @@ public final class ActionButton : Control {
         fatalError("init(coder:) has not been implemented")
     }
 
-    public func updateAndLayout(item: ActionItem, bgColor: NSColor, useGlass: Bool, circle: Bool = false, labelWidth: CGFloat = ActionItem.actionItemWidth) {
+    public func updateAndLayout(item: ActionItem, bgColor: NSColor, useGlass: Bool) {
         self.setAccessibilityLabel(item.text)
-        self.toolTip = circle ? item.text : nil
-        self.circle = circle
-        let font: NSFont = circle ? .normal(ActionItem.circleLabelSize) : .normal(.text)
         if useGlass {
             let foreground: NSColor = bgColor.lightness > 0.8 ? NSColor.black : NSColor.white
             self.imageView.image = item.image.highlight(color: foreground)
-            let layout = TextViewLayout(.initialize(string: item.text, color: foreground, font: font), maximumNumberOfLines: circle ? 1 : INT32_MAX, truncationType: .end, alignment: .center)
-            layout.measure(width: labelWidth)
+            let layout = TextViewLayout(.initialize(string: item.text, color: foreground, font: .normal(.text)), alignment: .center)
+            layout.measure(width: ActionItem.actionItemWidth)
             self.textView.update(layout)
         } else {
             self.imageView.image = item.image
-            if circle {
-                let layout = TextViewLayout(.initialize(string: item.text, color: item.color, font: font), maximumNumberOfLines: 1, truncationType: .end, alignment: .center)
-                layout.measure(width: labelWidth)
-                self.textView.update(layout)
-            } else {
-                self.textView.update(item.textLayout)
-            }
+            self.textView.update(item.textLayout)
         }
         self.imageView.sizeToFit()
 
@@ -71,7 +58,7 @@ public final class ActionButton : Control {
             if let existing = self.glassView {
                 glass = existing
             } else {
-                glass = LiquidGlassView(frame: bounds, cornerRadius: circle ? ActionItem.circleSize / 2 : 20, hasShadow: true, hasBorder: true, forceAppearance: .forceLight)
+                glass = LiquidGlassView(frame: bounds, cornerRadius: 20, hasShadow: true, hasBorder: true, forceAppearance: .forceLight)
                 self.glassView = glass
                 addSubview(glass, positioned: .below, relativeTo: imageView)
             }
@@ -80,23 +67,14 @@ public final class ActionButton : Control {
             self.layer?.cornerRadius = 0
             self.layer?.masksToBounds = false
             self.stretchReferenceView = glass
-            circleView.backgroundColor = .clear
         } else {
             if let glass = self.glassView {
                 glass.removeFromSuperview()
                 self.glassView = nil
             }
             self.stretchReferenceView = nil
-            if circle {
-                self.backgroundColor = .clear
-                self.layer?.cornerRadius = 0
-                circleView.backgroundColor = bgColor
-                circleView.layer?.cornerRadius = ActionItem.circleSize / 2
-            } else {
-                self.backgroundColor = bgColor
-                self.layer?.cornerRadius = 20
-                circleView.backgroundColor = .clear
-            }
+            self.backgroundColor = bgColor
+            self.layer?.cornerRadius = 20
         }
 
 
@@ -129,20 +107,10 @@ public final class ActionButton : Control {
 
     public override func layout() {
         super.layout()
-        if circle {
-            let circleFrame = NSMakeRect(floorToScreenPixels(backingScaleFactor, (frame.width - ActionItem.circleSize) / 2), 0, ActionItem.circleSize, ActionItem.circleSize)
-            circleView.frame = circleFrame
-            glassView?.frame = circleFrame
-            glassView?.updateLayout(size: circleFrame.size, transition: .immediate)
-            imageView.setFrameOrigin(NSMakePoint(floorToScreenPixels(backingScaleFactor, circleFrame.midX - imageView.frame.width / 2), floorToScreenPixels(backingScaleFactor, circleFrame.midY - imageView.frame.height / 2)))
-            textView.centerX(y: circleFrame.maxY + ActionItem.circleLabelGap)
-        } else {
-            circleView.frame = .zero
-            glassView?.frame = bounds
-            glassView?.updateLayout(size: bounds.size, transition: .immediate)
-            imageView.centerX(y: 5)
-            textView.centerX(y: frame.height - textView.frame.height - 11)
-        }
+        glassView?.frame = bounds
+        glassView?.updateLayout(size: bounds.size, transition: .immediate)
+        imageView.centerX(y: 5)
+        textView.centerX(y: frame.height - textView.frame.height - 11)
     }
 }
 
@@ -164,29 +132,12 @@ public struct SubActionItem {
 public final class ActionItem {
 
     public static let actionItemWidth: CGFloat = 125
-    public static let circleSize: CGFloat = 40
-    public static let circleLabelSize: CGFloat = 11
-    public static let circleLabelGap: CGFloat = 6
-    public static let circleItemGap: CGFloat = 12
-    public static let circleMinWidth: CGFloat = 64
-    public static let circleMaxWidth: CGFloat = 96
-
-    public static func circleItemWidth(_ items: [ActionItem]) -> CGFloat {
-        let widest = items.map { NSAttributedString.initialize(string: $0.text, font: .normal(circleLabelSize)).size().width }.max() ?? 0
-        return min(circleMaxWidth, max(circleMinWidth, ceil(widest) + 8))
-    }
-
-    public static var circleItemHeight: CGFloat {
-        let label = NSAttributedString.initialize(string: "A", font: .normal(circleLabelSize)).size().height
-        return circleSize + circleLabelGap + ceil(label)
-    }
     public static func actionItemInsetWidth(isColorfull: Bool) -> CGFloat {
         return isColorfull ? 12 : 20
     }
 
 
     public let text: String
-    public let color: NSColor
     public let destruct: Bool
     public let image: CGImage
     public let action:()->Void
@@ -199,7 +150,6 @@ public final class ActionItem {
 
     public init(text: String, color: NSColor, image: CGImage, animation: LocalAnimatedSticker, destruct: Bool = false, action: @escaping()->Void, subItems:[SubActionItem]? = nil) {
         self.text = text
-        self.color = color
         self.image = image.highlight(color: color)
         self.action = action
         self.animation = animation
