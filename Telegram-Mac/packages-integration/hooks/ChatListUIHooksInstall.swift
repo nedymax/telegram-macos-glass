@@ -91,8 +91,8 @@ func installChatListUIHooks() {
         navigateToChat(navigation: navigation, context: context.concrete, chatLocation: chatLocation, focusTarget: focusTarget, initialAction: initialAction, additional: additional, animated: animated, navigationStyle: navigationStyle)
     }, makeChatController: { context, chatLocation, initialAction in
         return ChatController(context: context.concrete, chatLocation: chatLocation, initialAction: initialAction)
-    }, makeChatControllerWithMode: { context, chatLocation, mode in
-        return ChatController(context: context.concrete, chatLocation: chatLocation, mode: mode)
+    }, makeChatControllerWithMode: { context, chatLocation, mode, holder in
+        return ChatController(context: context.concrete, chatLocation: chatLocation, mode: mode, chatLocationContextHolder: holder)
     }, makeChatAdditionController: { context, chatLocation in
         return ChatAdditionController(context: context.concrete, chatLocation: chatLocation)
     }, makeChatAdditionControllerWithFocus: { context, chatLocation, focusTarget, initialAction in
@@ -168,9 +168,11 @@ func installChatListUIHooks() {
                 crashReportStore.markHandled(reports)
             })
         }
+    }, openDemoAccount: { context, id in
+        context.concrete.sharedContext.openAccount(id: id)
     })
-    hooks.navigateToChatWithContext = { navigation, context, chatLocation, mode, focusTarget, initialAction, holder, additional, style, callback in
-        navigateToChat(navigation: navigation, context: context.concrete, chatLocation: chatLocation, mode: mode, focusTarget: focusTarget, initialAction: initialAction, chatLocationContextHolder: holder, additional: additional, navigationStyle: style, callback: callback)
+    hooks.navigateToChatWithContext = { navigation, context, chatLocation, mode, focusTarget, initialAction, holder, additional, style, analyticsContext, callback in
+        navigateToChat(navigation: navigation, context: context.concrete, chatLocation: chatLocation, mode: mode, focusTarget: focusTarget, initialAction: initialAction, chatLocationContextHolder: holder, additional: additional, navigationStyle: style, callback: callback, analyticsContext: analyticsContext)
     }
     ChatListUIHooks.install(hooks)
 }

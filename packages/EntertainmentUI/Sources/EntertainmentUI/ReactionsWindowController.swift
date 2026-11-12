@@ -9,6 +9,7 @@ import TelegramContext
 import TelegramTheme
 import TelegramUtils
 import TelegramMediaUtils
+import AppAnalytics
 
 private var reactions: ReactionsWindowController?
 
@@ -68,8 +69,8 @@ public final class ReactionsWindowController : NSObject {
             shadow.shadowColor = NSColor.black.withAlphaComponent(0.2)
             shadow.shadowOffset = NSMakeSize(0, 0)
             self.shadow = shadow
-            self.layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 20, cornerHeight: 20, transform: nil)
             
+            container.isHidden = false
             contentView.layer?.opacity = 1
             let duration: Double = 0.35
             
@@ -84,6 +85,13 @@ public final class ReactionsWindowController : NSObject {
             self.container.layer?.animateBounds(from: from.size.bounds.offsetBy(dx: offset.x, dy: offset.y), to: to.size.bounds, duration: duration, timingFunction: .spring)
             
             self.container.layer?.animatePosition(from: offset, to: .zero, duration: duration, timingFunction: .spring)
+            
+            let fromRect = NSRect(origin: offset, size: from.size).insetBy(dx: 10, dy: 10)
+            let fromRadius = min(20, fromRect.height / 2)
+            let fromPath = CGPath(roundedRect: fromRect, cornerWidth: fromRadius, cornerHeight: fromRadius, transform: nil)
+            let toPath = CGPath(roundedRect: bounds, cornerWidth: 20, cornerHeight: 20, transform: nil)
+            self.layer?.shadowPath = toPath
+            self.layer?.animate(from: fromPath, to: toPath, keyPath: "shadowPath", timingFunction: .spring, duration: duration)
         }
         
         func initFake(_ from: NSRect, to: NSRect) {
@@ -112,7 +120,7 @@ public final class ReactionsWindowController : NSObject {
             mask.frame = rect
             mask.cornerRadius = 20
             container.layer?.mask = mask
-
+            container.isHidden = true
         }
         
         override func layout() {
@@ -198,14 +206,23 @@ public final class ReactionsWindowController : NSObject {
     private var skipAppearAnimation = false
     
     private let parentWindow: Window
-    public init<Context: AccountContextProtocol>(_ context: Context, peerId: PeerId, selectedItems: [EmojiesSectionRowItem.SelectedItem], react: @escaping(StickerPackItem, NSRect?)->Void, onClose:(()->Void)? = nil, presentation: TelegramPresentationTheme = theme, name: String = "", moveTop: Bool = false, mode: EmojiesController.Mode = .reactions, parentWindow: Window? = nil) {
+    private let analyticsScreen: AnalyticsScreen?
+    public init<Context: AccountContextProtocol>(_ context: Context, peerId: PeerId, selectedItems: [EmojiesSectionRowItem.SelectedItem], react: @escaping(StickerPackItem, NSRect?)->Void, reactLarge: ((StickerPackItem, NSRect?)->Void)? = nil, onClose:(()->Void)? = nil, presentation: TelegramPresentationTheme = theme, name: String = "", moveTop: Bool = false, mode: EmojiesController.Mode = .reactions, parentWindow: Window? = nil, orderedTags: [RecentReactionItem]? = nil) {
         self.parentWindow = parentWindow ?? context.window
         self.context = context
         self.presentation = presentation
         self.onClose = onClose
         self.name = name
         self.moveTop = moveTop
-        self.emojies = EmojiesController(context, mode: context.peerId == peerId ? .defaultTags : mode, selectedItems: selectedItems, presentation: presentation)
+        self.emojies = EmojiesController(context, mode: context.peerId == peerId ? .defaultTags : mode, selectedItems: selectedItems, presentation: presentation, orderedTags: orderedTags)
+        switch context.peerId == peerId ? .defaultTags : mode {
+        case .reactions, .defaultTags:
+            self.analyticsScreen = AnalyticsScreen.chatReactionPicker
+        case .messageEffects:
+            self.analyticsScreen = AnalyticsScreen.chatMessageEffectPicker
+        default:
+            self.analyticsScreen = nil
+        }
         self.emojies.loadViewIfNeeded()
         super.init()
         
@@ -214,6 +231,12 @@ public final class ReactionsWindowController : NSObject {
         interactions.sendAnimatedEmoji = { [weak self] sticker, _, _, _, fromRect in
             react(sticker, fromRect)
             self?.close(animated: true)
+        }
+        if let reactLarge {
+            interactions.sendLargeReaction = { [weak self] sticker, fromRect in
+                reactLarge(sticker, fromRect)
+                self?.close(animated: true)
+            }
         }
         emojies.update(with: interactions, chatInteraction: EntertainmentUIHooks.shared.makeChatInteraction(context, peerId))
 
@@ -260,6 +283,7 @@ public final class ReactionsWindowController : NSObject {
     public func show(_ initialView: NSView & StickerFramesCollector, animated: Bool = true) {
         reactions?.panel?.orderOut(nil)
         if let previous = reactions {
+            Analytics.shared.screens.hideStandalone(owner: previous)
         }
         
         reactions = self
@@ -287,6 +311,9 @@ public final class ReactionsWindowController : NSObject {
         panel.order(.below, relativeTo: initialWindow.windowNumber)
         
         self.panel = panel
+        if let analyticsScreen {
+            Analytics.shared.screens.showStandalone(analyticsScreen, owner: self)
+        }
         let context = self.context
                 
         
@@ -373,6 +400,7 @@ public final class ReactionsWindowController : NSObject {
             guard let view = view, let initialView = initialView, let `self` = self else {
                 return
             }
+            initialView.revealDidStart()
             CATransaction.begin()
             initialView.removeFromSuperview()
             CATransaction.commit()
@@ -405,6 +433,7 @@ public final class ReactionsWindowController : NSObject {
     private func close(animated: Bool = false) {
         
         self.onClose?()
+        Analytics.shared.screens.hideStandalone(owner: self)
         
         self.overlay.removeFromSuperview()
         self.context.window.removeAllHandlers(for: self)
@@ -417,6 +446,7 @@ public final class ReactionsWindowController : NSObject {
             if let v = panel?.contentView?.subviews.first(where: { $0 is V }) {
                 v.layer?.rasterizationScale = System.backingScale
                 v.layer?.shouldRasterize = true
+                v.layer?.animateScaleCenter(from: 1, to: 0.9, duration: 0.2, removeOnCompletion: false, timingFunction: .easeIn)
             }
             panel?.contentView?.layer?.animateAlpha(from: 1, to: 0, duration: 0.2, removeOnCompletion: false, completion: { _ in
                 panel?.orderOut(nil)

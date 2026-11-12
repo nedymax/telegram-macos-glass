@@ -11,6 +11,8 @@ public final class GlassSegmentView: View {
     private var labels: [TextView] = []
     private var currentTheme: PresentationTheme = presentation
     private var selectionPosition: CGFloat?
+    private lazy var lens = GlassSelectionLens(host: self, selectionView: selectionView)
+    private var lifted = false
 
     public private(set) var titles: [String] = []
     public private(set) var selectedIndex: Int?
@@ -43,17 +45,23 @@ public final class GlassSegmentView: View {
                 let label = TextView()
                 label.userInteractionEnabled = false
                 label.isSelectable = false
-                addSubview(label)
+                (lens.contentView ?? self).addSubview(label)
                 labels.append(label)
             }
             applyTheme()
         }
         self.selectedIndex = index
         self.selectionPosition = index.flatMap { CGFloat($0) }
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let animated = animated && !reduceMotion
+        if reduceMotion {
+            selectionView.layer?.removeAllAnimations()
+        }
         updateLayout(size: frame.size, transition: animated ? .animated(duration: 0.4, curve: .spring) : .immediate)
     }
 
     public func setSelection(position: CGFloat, animated: Bool) {
+        let animated = animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         if !animated {
             selectionView.layer?.removeAllAnimations()
         }
@@ -78,7 +86,7 @@ public final class GlassSegmentView: View {
         }
     }
 
-    private var itemFrames: [NSRect] {
+    public var itemFrames: [NSRect] {
         var x: CGFloat = 0
         return labels.map { label in
             let frame = NSMakeRect(x, 0, label.frame.width + GlassSegmentView.itemInset * 2, GlassSegmentView.height)
@@ -126,12 +134,15 @@ public final class GlassSegmentView: View {
         }
         var position = CGFloat(pressedIndex)
         var moved = false
-        if pressedIndex != selectedIndex {
+        lens.updateMode(content: labels)
+        lifted = lens.liftsOnPress
+        if pressedIndex != selectedIndex || lifted {
             setSelection(position: position, animated: true)
         }
         while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
             if next.type == .leftMouseUp {
                 let index = Int(position.rounded())
+                lifted = false
                 setSelection(position: CGFloat(index), animated: true)
                 if !moved || index != selectedIndex {
                     didSelect?(index)
@@ -153,6 +164,9 @@ public final class GlassSegmentView: View {
     }
 
     private func updateLayout(size: NSSize, transition: ContainedViewLayoutTransition) {
+        if lens.updateMode(content: labels) {
+            lifted = false
+        }
         transition.updateFrame(view: glass, frame: size.bounds)
         glass.updateLayout(size: size, transition: transition)
 
@@ -162,12 +176,16 @@ public final class GlassSegmentView: View {
             transition.updateFrame(view: label, frame: labelFrame)
         }
 
+        var selection: NSRect?
         if let position = selectionPosition, !frames.isEmpty {
+            let frame = selectionFrame(at: position, frames: frames)
             let selectionTransition: ContainedViewLayoutTransition = selectionView.isHidden ? .immediate : transition
             selectionView.isHidden = false
-            selectionTransition.updateFrame(view: selectionView, frame: selectionFrame(at: position, frames: frames))
+            selectionTransition.updateFrame(view: selectionView, frame: frame)
+            selection = frame
         } else {
             selectionView.isHidden = true
         }
+        lens.update(selection: selection, lifted: lifted, sources: labels, appearance: currentTheme.appearance, transition: transition)
     }
 }

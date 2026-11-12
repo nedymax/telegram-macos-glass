@@ -40,7 +40,8 @@ public final class DownloadsControl : Control {
 
         self.layer?.cornerRadius = frameRect.height / 2
 
-        let glass = LiquidGlassView(frame: bounds, cornerRadius: frameRect.height / 2, hasShadow: true, hasBorder: true, tintAlpha: 0.3)
+        let glass = LiquidGlassView(frame: bounds, cornerRadius: frameRect.height / 2, hasShadow: true, hasBorder: true, tintAlpha: 0.15)
+        glass.isEventLess = true
         self.glassView = glass
         addSubview(glass)
         self.stretchReferenceView = glass
@@ -69,7 +70,6 @@ public final class DownloadsControl : Control {
         let theme = theme as! TelegramPresentationTheme
         self.backgroundColor = .clear
         self.border = []
-        glassView.customTint = theme.colors.background
 
         progressView.style = ControlStyle(foregroundColor: theme.colors.accent, backgroundColor: .clear, highlightColor: .clear)
 
@@ -105,9 +105,10 @@ public final class DownloadsControl : Control {
         let progressInset = frame.height / 2
         progressView.frame = NSMakeRect(progressInset, frame.height - progressView.frame.height, frame.width - progressInset * 2, 2)
 
-        titleView.resize(frame.width - 20)
+        let textWidth = max(0, frame.width - 30 - nextView.frame.width)
+        titleView.resize(textWidth)
         titleView.setFrameOrigin(.zero)
-        textContainer.setFrameSize(NSMakeSize(frame.width - 10 - 10, titleView.frame.height))
+        textContainer.setFrameSize(NSMakeSize(textWidth, titleView.frame.height))
         textContainer.centerY(x: 10)
         nextView.centerY(x: frame.width - 10 - nextView.frame.width)
 
@@ -230,6 +231,15 @@ public final class DownloadsSummary {
         return stateValue.get() |> deliverOnMainQueue
     }
     
+    private static func messageId(_ entry: FetchManagerEntrySummary) -> MessageId? {
+        switch entry.id.locationKey {
+        case let .messageId(messageId):
+            return messageId
+        default:
+            return nil
+        }
+    }
+
     public init(_ fetchManager: FetchManagerImpl, context: any AccountContextProtocol) {
         self.fetchManager = fetchManager
         self.context = context
@@ -360,9 +370,29 @@ public final class DownloadsSummary {
             }
         }
         
+        let entries = Promise<[(entry: FetchManagerEntrySummary, progress: Double)]>()
+        entries.set(entriesWithFetchStatuses)
+
+        let postbox = context.account.postbox
+        let downloadingMessages: Signal<(ids: Set<MessageId>, messages: [MessageId: Message]), NoError> = entries.get()
+        |> map { entries -> Set<MessageId> in
+            return Set(entries.compactMap { DownloadsSummary.messageId($0.entry) })
+        }
+        |> distinctUntilChanged
+        |> mapToSignal { ids -> Signal<(ids: Set<MessageId>, messages: [MessageId: Message]), NoError> in
+            if ids.isEmpty {
+                return .single((ids, [:]))
+            }
+            let key: PostboxViewKey = .messages(ids)
+            return postbox.combinedView(keys: [key])
+            |> map { views -> (ids: Set<MessageId>, messages: [MessageId: Message]) in
+                return (ids, (views.views[key] as? MessagesView)?.messages ?? [:])
+            }
+        }
+
         let recentDownload = recentDownloadItems(postbox: context.account.postbox)
-        let combined = combineLatest(queue: .mainQueue(), entriesWithFetchStatuses, recentDownload)
-        let stateSignal: Signal<State, NoError> = (combined |> mapToSignal { entries, recentDownloadItems -> Signal<State, NoError> in
+        let combined = combineLatest(queue: .mainQueue(), entries.get(), recentDownload, downloadingMessages)
+        let stateSignal: Signal<State, NoError> = (combined |> map { entries, recentDownloadItems, downloading -> State? in
             if !entries.isEmpty {
                 var totalBytes = 0.0
                 var totalProgressInBytes = 0.0
@@ -375,31 +405,25 @@ public final class DownloadsSummary {
                     totalProgressInBytes += Double(size) * progress
                 }
                 
-                let ids:[MessageId] = entries.map { $0.entry }.compactMap { value in
-                    switch value.id.locationKey {
-                    case let .messageId(messageId):
-                        return messageId
-                    default:
-                        return nil
-                    }
+                let ids: [MessageId] = entries.compactMap { DownloadsSummary.messageId($0.entry) }
+                guard Set(ids) == downloading.ids else {
+                    return nil
                 }
-                let signals = ids.map { id in
-                    engine.account.postbox.transaction { transaction in
-                        transaction.getMessage(id)
-                    }
-                }
-                return combineLatest(signals) |> map { msgs in
-                    return .downloading(bytesLoaded: totalProgressInBytes, totalBytes: totalBytes, messages: msgs.compactMap { $0 })
-                }
+                return .downloading(bytesLoaded: totalProgressInBytes, totalBytes: totalBytes, messages: ids.compactMap { downloading.messages[$0] })
             } else {
                 let unseen = recentDownloadItems.filter { !$0.isSeen }.map { $0.message }
                 if !unseen.isEmpty {
-                    return .single(.hasUnseen(unseen))
+                    return .hasUnseen(unseen)
                 }
-                return .single(.empty)
+                return .empty
             }
         }
+        |> filter { $0 != nil }
+        |> map { $0! }
         |> distinctUntilChanged
+        |> mapToThrottled { state -> Signal<State, NoError> in
+            return .single(state) |> then(Signal<State, NoError>.complete() |> delay(1.0 / 30.0, queue: .mainQueue()))
+        }
         |> deliverOnMainQueue)
 
         

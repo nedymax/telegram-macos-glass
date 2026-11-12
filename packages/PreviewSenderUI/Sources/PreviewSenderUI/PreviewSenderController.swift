@@ -1,3 +1,4 @@
+import AppAnalytics
 import Cocoa
 import ImageIO
 import TGUIKit
@@ -38,6 +39,13 @@ fileprivate struct PreviewSendingState : Hashable {
         case archive = 3
     }
 
+    var analyticsMode: AnalyticsMediaJourney.Spec.MediaMode {
+        switch state {
+        case .media: return .media
+        case .file: return .file
+        case .archive: return .archive
+        }
+    }
     enum Sort : Int32 {
         case down
         case up
@@ -47,7 +55,6 @@ fileprivate struct PreviewSendingState : Hashable {
     let isSpoiler: Bool
     let sort: Sort
     let payAmount: Int64?
-    let sendMessageStars: StarsAmount?
     
     func hash(into hasher: inout Hasher) {
         hasher.combine(state)
@@ -55,9 +62,6 @@ fileprivate struct PreviewSendingState : Hashable {
         hasher.combine(isSpoiler)
         if let payAmount {
             hasher.combine(payAmount)
-        }
-        if let sendMessageStars {
-            hasher.combine(sendMessageStars.value)
         }
     }
     
@@ -70,19 +74,19 @@ fileprivate struct PreviewSendingState : Hashable {
     }
     
     func withUpdatedState(_ state: State) -> PreviewSendingState {
-        return .init(state: state, isCollage: self.isCollage, isSpoiler: self.isSpoiler, sort: self.sort, payAmount: self.payAmount, sendMessageStars: self.sendMessageStars)
+        return .init(state: state, isCollage: self.isCollage, isSpoiler: self.isSpoiler, sort: self.sort, payAmount: self.payAmount)
     }
     func withUpdatedIsCollage(_ isCollage: Bool) -> PreviewSendingState {
-        return .init(state: self.state, isCollage: isCollage, isSpoiler: self.isSpoiler, sort: self.sort, payAmount: self.payAmount, sendMessageStars: self.sendMessageStars)
+        return .init(state: self.state, isCollage: isCollage, isSpoiler: self.isSpoiler, sort: self.sort, payAmount: self.payAmount)
     }
     func withUpdatedIsSpoiler(_ isSpoiler: Bool) -> PreviewSendingState {
-        return .init(state: self.state, isCollage: self.isCollage, isSpoiler: isSpoiler, sort: self.sort, payAmount: self.payAmount, sendMessageStars: self.sendMessageStars)
+        return .init(state: self.state, isCollage: self.isCollage, isSpoiler: isSpoiler, sort: self.sort, payAmount: self.payAmount)
     }
     func withUpdatedSort(_ sort: Sort) -> PreviewSendingState {
-        return .init(state: self.state, isCollage: self.isCollage, isSpoiler: isSpoiler, sort: sort, payAmount: self.payAmount, sendMessageStars: self.sendMessageStars)
+        return .init(state: self.state, isCollage: self.isCollage, isSpoiler: isSpoiler, sort: sort, payAmount: self.payAmount)
     }
     func withUpdatedPayAmount(_ payAmount: Int64?) -> PreviewSendingState {
-        return .init(state: self.state, isCollage: self.isCollage, isSpoiler: isSpoiler, sort: sort, payAmount: payAmount, sendMessageStars: self.sendMessageStars)
+        return .init(state: self.state, isCollage: self.isCollage, isSpoiler: isSpoiler, sort: sort, payAmount: payAmount)
     }
 }
 
@@ -120,6 +124,7 @@ fileprivate class PreviewSenderView : Control {
     fileprivate let textView:UITextView
     fileprivate let sendButton = ImageButton()
     fileprivate let emojiButton = ImageButton()
+    private var renderCancelButton: ImageButton?
     fileprivate let actionsContainerView: View = View()
     fileprivate let headerView: View = View()
     fileprivate let draggingView = DraggingView(frame: NSZeroRect)
@@ -144,7 +149,7 @@ fileprivate class PreviewSenderView : Control {
     fileprivate var totalCount: Int = 0
     fileprivate var slowMode: SlowMode? = nil
     
-    private var _state: PreviewSendingState = PreviewSendingState(state: .file, isCollage: FastSettings.isNeedCollage, isSpoiler: false, sort: .down, payAmount: nil, sendMessageStars: nil)
+    private var _state: PreviewSendingState = PreviewSendingState(state: .file, isCollage: FastSettings.isNeedCollage, isSpoiler: false, sort: .down, payAmount: nil)
     
     var state: PreviewSendingState {
         set {
@@ -259,7 +264,7 @@ fileprivate class PreviewSenderView : Control {
         }, for: .Hover)
 
         sendButton.set(handler: { [weak self] _ in
-            self?.controller?.send(false)
+            self?.controller?.send(false, via: .sendControl)
         }, for: .SingleClick)
 
 
@@ -301,6 +306,7 @@ fileprivate class PreviewSenderView : Control {
             if options.contains(.media) {
                 menu.addItem(ContextMenuItem(strings().previewSenderSendAsMedia, handler: {
                     if self.state.state != .media {
+                        self.controller?.analyticsMediaJourney?.step(.selectMedia)
                     }
                     updateValue {
                         $0.withUpdatedState(.media)
@@ -310,6 +316,7 @@ fileprivate class PreviewSenderView : Control {
            
             menu.addItem(ContextMenuItem(strings().previewSenderSendAsFile, handler: {
                 if self.state.state != .file {
+                    self.controller?.analyticsMediaJourney?.step(.selectFile)
                 }
                 updateValue {
                     $0.withUpdatedState(.file)
@@ -318,6 +325,7 @@ fileprivate class PreviewSenderView : Control {
             if totalCount > 1 {
                 menu.addItem(ContextMenuItem(strings().previewSenderArchive, handler: {
                     if self.state.state != .archive {
+                        self.controller?.analyticsMediaJourney?.step(.selectArchive)
                     }
                     updateValue {
                         $0.withUpdatedState(.archive)
@@ -329,6 +337,7 @@ fileprivate class PreviewSenderView : Control {
 
                 menu.addItem(ContextMenuItem(strings().previewSenderGrouped, handler: {
                     if !self.state.isCollage {
+                        self.controller?.analyticsMediaJourney?.step(.selectGrouped)
                     }
                     updateValue {
                         $0.withUpdatedIsCollage(true)
@@ -337,6 +346,7 @@ fileprivate class PreviewSenderView : Control {
                 }, itemImage: newValue.isCollage ? MenuAnimation.menu_check_selected.value : nil))
                 menu.addItem(ContextMenuItem(strings().previewSenderUngrouped, handler: {
                     if self.state.isCollage {
+                        self.controller?.analyticsMediaJourney?.step(.selectUngrouped)
                     }
                     updateValue {
                         $0.withUpdatedIsCollage(false)
@@ -391,6 +401,7 @@ fileprivate class PreviewSenderView : Control {
 
             if canSpoiler {
                 menu.addItem(ContextMenuItem(!newValue.isSpoiler ? strings().previewSenderSpoilerTooltipEnable : strings().previewSenderSpoilerTooltipDisable, handler: {
+                    self.controller?.analyticsMediaJourney?.step(.toggleSpoiler)
                     updateValue {
                         $0.withUpdatedIsSpoiler(!$0.isSpoiler)
                     }
@@ -512,7 +523,7 @@ fileprivate class PreviewSenderView : Control {
         let layout = TextViewLayout(.initialize(string: title, color: theme.colors.text, font: .medium(.text)))
         self.titleView.update(layout)
         
-        if let sendPaidMessages = state.sendMessageStars, let controller {
+        if let controller, let sendPaidMessages = controller.chatInteraction.presentation.sendPaidMessageStars {
             let messagesCount = count
             let current: StarsSendActionView
             if let view = self.starsSendActionView {
@@ -537,6 +548,33 @@ fileprivate class PreviewSenderView : Control {
         needsLayout = true
     }
     
+    func updateRenderCancel(_ cancel: (() -> Void)?) {
+        if let cancel {
+            let current: ImageButton
+            if let view = renderCancelButton {
+                current = view
+            } else {
+                current = ImageButton()
+                current.autohighlight = false
+                current.scaleOnClick = true
+                current.set(image: theme.icons.chatInlineDismiss, for: .Normal)
+                current.frame = emojiButton.frame
+                current.setAccessibilityLabel(strings().voiceOverCommonCancel)
+                inputBox.addSubview(current)
+                renderCancelButton = current
+            }
+            current.removeAllHandlers()
+            current.set(handler: { _ in
+                cancel()
+            }, for: .Click)
+            emojiButton.isHidden = true
+        } else if let view = renderCancelButton {
+            performSubviewRemoval(view, animated: true, scale: true)
+            renderCancelButton = nil
+            emojiButton.isHidden = false
+        }
+    }
+
     private static let fieldEdge: CGFloat = 8
     private static let textInsetX: CGFloat = 12
 
@@ -582,6 +620,9 @@ fileprivate class PreviewSenderView : Control {
 
         let emojiFrame = NSMakeRect(actionsFrame.minX - ChatInputSendButton.fieldTextGap - emojiButton.frame.width, inputBoxFrame.height - emojiButton.frame.height, emojiButton.frame.width, emojiButton.frame.height)
         transition.updateFrame(view: emojiButton, frame: emojiFrame)
+        if let renderCancelButton {
+            transition.updateFrame(view: renderCancelButton, frame: emojiFrame)
+        }
 
         let textInsetX = PreviewSenderView.textInsetX
         let textBoxWidth = max(0, emojiFrame.minX - textInsetX)
@@ -768,15 +809,20 @@ private struct PreviewState : Equatable {
     let medias:[Media]
     let currentState: PreviewSendingState
     let editedData: [URL : EditedImageData]
-    init(urls: [URL], medias: [Media], currentState: PreviewSendingState, editedData: [URL : EditedImageData]) {
+    let renderingPreviews: [URL : CGImage]
+    init(urls: [URL], medias: [Media], currentState: PreviewSendingState, editedData: [URL : EditedImageData], renderingPreviews: [URL : CGImage] = [:]) {
         self.urls = urls
         self.medias = medias
         self.currentState = currentState
         self.editedData = editedData
+        self.renderingPreviews = renderingPreviews
     }
     
     func withUpdatedEditedData(_ f:([URL : EditedImageData]) -> [URL : EditedImageData]) -> PreviewState {
-        return PreviewState(urls: self.urls, medias: self.medias, currentState: self.currentState, editedData: f(self.editedData))
+        return PreviewState(urls: self.urls, medias: self.medias, currentState: self.currentState, editedData: f(self.editedData), renderingPreviews: self.renderingPreviews)
+    }
+    func withUpdatedRenderingPreviews(_ f:([URL : CGImage]) -> [URL : CGImage]) -> PreviewState {
+        return PreviewState(urls: self.urls, medias: self.medias, currentState: self.currentState, editedData: self.editedData, renderingPreviews: f(self.renderingPreviews))
     }
     func apply(transition: UpdateTransition<Media>, urls:[URL], state: PreviewSendingState) -> PreviewState {
         var medias:[Media] = self.medias
@@ -790,7 +836,7 @@ private struct PreviewState : Equatable {
             medias[idx] = item
         }
         
-        return PreviewState(urls: urls, medias: medias, currentState: state, editedData: self.editedData)
+        return PreviewState(urls: urls, medias: medias, currentState: state, editedData: self.editedData, renderingPreviews: self.renderingPreviews)
     }
 }
 private func == (lhs: PreviewState, rhs: PreviewState) -> Bool {
@@ -803,7 +849,7 @@ private func == (lhs: PreviewState, rhs: PreviewState) -> Bool {
             }
         }
     }
-    return lhs.urls == rhs.urls && lhs.currentState == rhs.currentState && lhs.editedData == rhs.editedData
+    return lhs.urls == rhs.urls && lhs.currentState == rhs.currentState && lhs.editedData == rhs.editedData && lhs.renderingPreviews == rhs.renderingPreviews
 }
 
 
@@ -856,16 +902,16 @@ private enum PreviewEntryId : Hashable {
 
 private enum PreviewEntry : Comparable, Identifiable {
     case section(Int)
-    case media(index: Int, sectionId: Int, url: URL, media: Media, isSpoiler: Bool, payAmount: Int64?)
-    case mediaGroup(index: Int, sectionId: Int, urls: [URL], messages: [Message], isSpoiler: Bool, payAmount: Int64?)
+    case media(index: Int, sectionId: Int, url: URL, media: Media, isSpoiler: Bool, payAmount: Int64?, renderingPreview: CGImage?)
+    case mediaGroup(index: Int, sectionId: Int, urls: [URL], messages: [Message], isSpoiler: Bool, payAmount: Int64?, renderingPreviews: [URL : CGImage])
     case archive(index: Int, sectionId: Int, urls: [URL], media: Media)
     var stableId: PreviewEntryId {
         switch self {
         case let .section(sectionId):
             return .section(sectionId)
-        case let .media(_, _, _, media, _, _):
+        case let .media(_, _, _, media, _, _, _):
             return .media(media)
-        case let .mediaGroup(index, _, _, _, _, _):
+        case let .mediaGroup(index, _, _, _, _, _, _):
             return .mediaGroup(index)
         case .archive:
             return .archive
@@ -876,9 +922,9 @@ private enum PreviewEntry : Comparable, Identifiable {
         switch self {
         case let .section(sectionId):
             return (sectionId + 1) * 1000 - sectionId
-        case let .media(index, sectionId, _, _, _, _):
+        case let .media(index, sectionId, _, _, _, _, _):
             return (sectionId * 1000) + index
-        case let .mediaGroup(index, sectionId, _, _, _, _):
+        case let .mediaGroup(index, sectionId, _, _, _, _, _):
             return (sectionId * 1000) + index
         case let .archive(index, sectionId, _, _):
             return (sectionId * 1000) + index
@@ -889,8 +935,8 @@ private enum PreviewEntry : Comparable, Identifiable {
         switch self {
         case .section:
             return GeneralRowItem(initialSize, height: 20, stableId: stableId)
-        case let .media(_, _, url, media, isSpoiler, payAmount):
-            return MediaPreviewRowItem(initialSize, media: media, context: arguments.context, theme: arguments.theme, editedData: state.editedData[url], isSpoiler: isSpoiler, payAmount: payAmount, edit: {
+        case let .media(_, _, url, media, isSpoiler, payAmount, renderingPreview):
+            return MediaPreviewRowItem(initialSize, media: media, context: arguments.context, theme: arguments.theme, editedData: state.editedData[url], isSpoiler: isSpoiler, payAmount: payAmount, renderingPreview: renderingPreview, edit: {
                 arguments.edit(url)
             }, paint: {
                 arguments.paint(url)
@@ -903,8 +949,8 @@ private enum PreviewEntry : Comparable, Identifiable {
             }, delete: {
               // arguments.delete(url)
             })
-        case let .mediaGroup(_, _, urls, messages, isSpoiler, payAmount):
-            return MediaGroupPreviewRowItem(initialSize, messages: messages, urls: urls, editedData: state.editedData, isSpoiler: isSpoiler, payAmount: payAmount, edit: { url in
+        case let .mediaGroup(_, _, urls, messages, isSpoiler, payAmount, renderingPreviews):
+            return MediaGroupPreviewRowItem(initialSize, messages: messages, urls: urls, editedData: state.editedData, renderingPreviews: renderingPreviews, isSpoiler: isSpoiler, payAmount: payAmount, edit: { url in
                 arguments.edit(url)
             }, paint: { url in
                 arguments.paint(url)
@@ -919,8 +965,8 @@ private enum PreviewEntry : Comparable, Identifiable {
 }
 private func == (lhs: PreviewEntry, rhs: PreviewEntry) -> Bool {
     switch lhs {
-    case let .media(index, sectionId, url, lhsMedia, spoiler, payAmount):
-        if case .media(index, sectionId, url, let rhsMedia, spoiler, payAmount) = rhs {
+    case let .media(index, sectionId, url, lhsMedia, spoiler, payAmount, renderingPreview):
+        if case .media(index, sectionId, url, let rhsMedia, spoiler, payAmount, renderingPreview) = rhs {
             return lhsMedia.isEqual(to: rhsMedia)
         } else {
             return false
@@ -931,8 +977,8 @@ private func == (lhs: PreviewEntry, rhs: PreviewEntry) -> Bool {
         } else {
             return false
         }
-    case let .mediaGroup(index, sectionId, url, lhsMessages, spoiler, payAmount):
-        if case .mediaGroup(index, sectionId, url, let rhsMessages, spoiler, payAmount) = rhs {
+    case let .mediaGroup(index, sectionId, url, lhsMessages, spoiler, payAmount, renderingPreviews):
+        if case .mediaGroup(index, sectionId, url, let rhsMessages, spoiler, payAmount, renderingPreviews) = rhs {
             if lhsMessages.count != rhsMessages.count {
                 return false
             } else {
@@ -977,18 +1023,18 @@ private func previewMediaEntries( _ state: PreviewState) -> [PreviewEntry] {
             }
             let collages = messages.chunks(10)
             for collage in collages {
-                entries.append(.mediaGroup(index: index, sectionId: sectionId, urls: state.urls, messages: collage, isSpoiler: state.currentState.isSpoiler, payAmount: state.currentState.payAmount))
+                entries.append(.mediaGroup(index: index, sectionId: sectionId, urls: state.urls, messages: collage, isSpoiler: state.currentState.isSpoiler, payAmount: state.currentState.payAmount, renderingPreviews: state.renderingPreviews))
                 index += 1
             }
         } else {
             for (i, media) in state.medias.enumerated() {
-                entries.append(.media(index: index, sectionId: sectionId, url: state.urls[i], media: media, isSpoiler: state.currentState.isSpoiler, payAmount: state.currentState.payAmount))
+                entries.append(.media(index: index, sectionId: sectionId, url: state.urls[i], media: media, isSpoiler: state.currentState.isSpoiler, payAmount: state.currentState.payAmount, renderingPreview: state.renderingPreviews[state.urls[i]]))
                 index += 1
             }
         }
     case .file:
         for (i, media) in state.medias.enumerated() {
-            entries.append(.media(index: index, sectionId: sectionId, url: state.urls[i], media: media, isSpoiler: false, payAmount: state.currentState.payAmount))
+            entries.append(.media(index: index, sectionId: sectionId, url: state.urls[i], media: media, isSpoiler: false, payAmount: state.currentState.payAmount, renderingPreview: nil))
             index += 1
         }
     }
@@ -1269,9 +1315,22 @@ private struct UrlAndState : Equatable {
 
 
 public class PreviewSenderController: ModalViewController, Notifable {
+    private var mediaJourney: AnalyticsMediaJourney?
+    public var analyticsMediaJourney: AnalyticsMediaJourney? {
+        get {
+            mediaJourney?.restrict(to: analyticsContext ?? Analytics.shared.unresolvedContext())
+            return mediaJourney
+        }
+        set {
+            if mediaJourney !== newValue { mediaJourney?.discard() }
+            newValue?.restrict(to: analyticsContext ?? Analytics.shared.unresolvedContext())
+            mediaJourney = newValue
+        }
+    }
 
     public override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        analyticsMediaJourney?.previewShown()
     }
    
     private let pendingActions = PreviewSenderPendingActions()
@@ -1293,9 +1352,38 @@ public class PreviewSenderController: ModalViewController, Notifable {
     private func validateSendSource() -> Bool {
         guard sendSourceValidation?() != false else {
             sendSourceValidation = { false }
+            analyticsMediaJourney?.discard()
             return false
         }
         return true
+    }
+
+    private func startRenderingEdit(cancel: @escaping () -> Void) {
+        isRenderingEdit = true
+        renderCancelDisposable.set((Signal<Void, NoError>.single(Void()) |> delay(2.0, queue: .mainQueue())).start(next: { [weak self] in
+            self?.genericView.updateRenderCancel(cancel)
+        }))
+    }
+
+    private func finishRenderingEdit(applied: Bool) {
+        guard isRenderingEdit else { return }
+        isRenderingEdit = false
+        renderCancelDisposable.set(nil)
+        genericView.updateRenderCancel(nil)
+        if applied {
+            flushPendingRenderSend()
+        } else if pendingRenderSend != nil {
+            pendingRenderSend = nil
+            genericView.sendButton.alphaValue = 1.0
+            genericView.sendButton.shake(beep: false)
+        }
+    }
+
+    private func flushPendingRenderSend() {
+        guard !isRenderingEdit, let pending = pendingRenderSend, getMediaUrls() == urls, !getMedias().contains(where: isPreviewPlaceholder) else { return }
+        pendingRenderSend = nil
+        genericView.sendButton.alphaValue = 1.0
+        pending()
     }
 
     private func capturePendingSendAction() -> () -> Bool {
@@ -1327,6 +1415,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
     }
     
     var getMedias:()->[Media] = { return [] }
+    private var getMediaUrls: () -> [URL] = { return [] }
     var updateCustomPreview:(String, String?)->Void = { _, _ in }
 
     fileprivate var previews: [String: String] = [:] {
@@ -1378,6 +1467,9 @@ public class PreviewSenderController: ModalViewController, Notifable {
     private let inputInteraction:PreviewContextInteraction = PreviewContextInteraction()
     private let contextChatInteraction: ChatInteraction
     private let editorDisposable = MetaDisposable()
+    private var isRenderingEdit = false
+    private var pendingRenderSend: (() -> Void)?
+    private let renderCancelDisposable = MetaDisposable()
     private let attachmentEdits = PreviewSenderAttachmentEdits()
     private let archiverStatusesDisposable = MetaDisposable()
     private var archiveStatuses: [ArchiveSource : ArchiveStatus] = [:]
@@ -1389,7 +1481,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
         return .modal
     }
     
-    private var sendCurrentMedia:((Bool, ChatInteraction.Schedule?, Bool?)->Void)? = nil
+    private var sendCurrentMedia:((Bool, ChatInteraction.Schedule?, Bool?, AnalyticsMediaJourney.Spec.SubmitVia)->Void)? = nil
     private let placeholderSuccessorIds = Atomic<[MediaId: MediaId]>(value: [:])
     private let mediaPreparationQueue: OperationQueue = {
         let queue = OperationQueue()
@@ -1399,7 +1491,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
     }()
     private var runEditor:((URL, Bool)->Void)? = nil
     private var editedVideos: [URL: EditedVideoData] = [:]
-    private var insertAdditionUrls:(([URL]) -> Void)? = nil
+    private var insertAdditionUrls:(([URL], AnalyticsMediaJourney.Spec.Step) -> Void)? = nil
     
     private let animated: Atomic<Bool> = Atomic(value: false)
 
@@ -1441,7 +1533,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
             if let list = list {
                 return [DragItem(title: strings().previewDraggingAddItemsOther(list.count), desc: "", handler: { [weak self] in
                     guard let self, !self.pendingActions.isClosed, !self.sent, dropAction.takeIfCurrent() else { return }
-                    self.insertAdditionUrls?(list.map({URL(fileURLWithPath: $0)}))
+                    self.insertAdditionUrls?(list.map({URL(fileURLWithPath: $0)}), .addDrop)
                     
                 })]
             }
@@ -1451,8 +1543,9 @@ public class PreviewSenderController: ModalViewController, Notifable {
     
     public override func returnKeyAction() -> KeyHandlerResult {
         if let currentEvent = NSApp.currentEvent {
-            if FastSettings.checkSendingAbility(for: currentEvent), didSetReady {
-                send(false)
+            let hasMarkedText = genericView.textView.inputView.hasMarkedText()
+            if FastSettings.checkSendingAbility(for: currentEvent), didSetReady, !hasMarkedText {
+                send(false, via: currentEvent.modifierFlags.contains(.command) ? .cmdEnter : .enter)
                 return .invoked
             }
         }
@@ -1465,11 +1558,12 @@ public class PreviewSenderController: ModalViewController, Notifable {
         let currentText = self.genericView.textView.string()
         let basicText = self.temporaryInputState?.inputText ?? ""
         if (self.temporaryInputState == nil && !currentText.isEmpty) || (basicText != currentText) {
-            let childAction = PreviewSenderChildAction(isCurrent: capturePendingAction())
+            analyticsMediaJourney?.step(.openConfirmation)
+            let childAction = PreviewSenderChildAction(context: analyticsContext ?? Analytics.shared.unresolvedContext(), isCurrent: capturePendingAction())
             verifyAlert_button(for: context.window, header: strings().mediaSenderDiscardChangesHeader, information: strings().mediaSenderDiscardChangesText, ok: strings().mediaSenderDiscardChangesOK, successHandler: { [weak self] _ in
                 childAction.resolve { self?.closeModal() }
             }, cancelHandler: { [weak self] in
-                childAction.resolve {}
+                childAction.resolve { self?.analyticsMediaJourney?.step(.cancelConfirmation) }
             }, onDeinit: {
                 childAction.dismissed()
             })
@@ -1481,19 +1575,31 @@ public class PreviewSenderController: ModalViewController, Notifable {
     fileprivate func closeModal() {
         guard !pendingActions.isClosed else { return }
         pendingActions.close()
+        if !sent {
+            analyticsMediaJourney?.cancel()
+        }
         // A send transforms the preview into a message, so it must NOT morph back onto the attach button
         // (that reads as a cancel); only an actual cancel/discard morphs back.
         super.close(animationType: self.sent ? .noMorph : .common)
     }
     
-    func send(_ silent: Bool, atDate: ChatInteraction.Schedule? = nil, asSpoiler: Bool? = nil) {
+    func send(_ silent: Bool, atDate: ChatInteraction.Schedule? = nil, asSpoiler: Bool? = nil, via: AnalyticsMediaJourney.Spec.SubmitVia = .unknown) {
         guard !pendingActions.isClosed, !sent else { return }
         guard validateSendSource() else {
             self.genericView.sendButton.shake(beep: false)
             return
         }
+        if isRenderingEdit || getMediaUrls() != urls {
+            pendingRenderSend = { [weak self] in
+                self?.send(silent, atDate: atDate, asSpoiler: asSpoiler)
+            }
+            genericView.sendButton.alphaValue = 0.5
+            return
+        }
         pendingActions.invalidate()
+        analyticsMediaJourney?.retrySubmissionIfBlocked()
         if self.getMedias().contains(where: isPreviewPlaceholder) {
+            analyticsMediaJourney?.submissionBlocked(.preparation)
             self.genericView.sendButton.shake(beep: false)
             return
         }
@@ -1502,7 +1608,8 @@ public class PreviewSenderController: ModalViewController, Notifable {
         let context = self.context
         if context.isPremium {
             if text.length > context.premiumLimits.caption_length_limit_premium {
-                let childAction = PreviewSenderChildAction(isCurrent: capturePendingAction())
+                analyticsMediaJourney?.submissionBlocked(.captionLimit)
+                let childAction = PreviewSenderChildAction(context: analyticsContext ?? Analytics.shared.unresolvedContext(), isCurrent: capturePendingAction())
                 alert(for: chatInteraction.interactionContext.window, info: strings().chatInputErrorMessageTooLongOther(text.length - Int(context.premiumLimits.caption_length_limit_premium)), completion: {
                     childAction.resolve {}
                 }, onDeinit: {
@@ -1512,12 +1619,14 @@ public class PreviewSenderController: ModalViewController, Notifable {
             }
         } else {
             if text.length > context.premiumLimits.caption_length_limit_default {
-                let childAction = PreviewSenderChildAction(isCurrent: capturePendingAction())
+                analyticsMediaJourney?.submissionBlocked(.captionLimit)
+                let analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
+                let childAction = PreviewSenderChildAction(context: analyticsContext, isCurrent: capturePendingAction())
                 verifyAlert_button(for: context.window, information: strings().chatInputErrorMessageTooLongOther(text.length - Int(context.premiumLimits.caption_length_limit_default)), ok: strings().alertOK, cancel: "", option: strings().premiumGetPremiumDouble, successHandler: { result in
                     childAction.resolve {
                         switch result {
                         case .thrid:
-                            FeatureNavigationHooks.shared.showPremiumLimitObserved(context, .caption(text.length))
+                            FeatureNavigationHooks.shared.showPremiumLimitObserved(context, .caption(text.length), analyticsContext: analyticsContext)
                         default:
                             break
                         }
@@ -1535,17 +1644,21 @@ public class PreviewSenderController: ModalViewController, Notifable {
         case .scheduled:
             if let peer = chatInteraction.peer {
                 let scheduleAction = capturePendingAction()
-                FeatureNavigationHooks.shared.selectDateObserved(context, context.window, nil, nil, .schedule(peer.id), selectedAt: { [weak self] date, repeatPeriod in
+                analyticsMediaJourney?.step(.openSchedule)
+                let analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
+                FeatureNavigationHooks.shared.selectDateObserved(context, context.window, nil, nil, .schedule(peer.id), analyticsContext: analyticsContext, selectedAt: { [weak self] date, repeatPeriod in
                     guard scheduleAction() else { return }
-                    self?.sendCurrentMedia?(silent, .init(date: date, repeatPeriod: repeatPeriod), asSpoiler)
+                    self?.sendCurrentMedia?(silent, .init(date: date, repeatPeriod: repeatPeriod), asSpoiler, via)
                 }, cancelled: { [weak self] in
                     guard scheduleAction() else { return }
-                }, dismissed: {
+                    self?.analyticsMediaJourney?.step(.cancelSchedule)
+                }, dismissed: { [journey = self.analyticsMediaJourney] in
                     guard scheduleAction() else { return }
+                    journey?.discard()
                 })
             }
         case .history, .thread, .customChatContents:
-            sendCurrentMedia?(silent, atDate, asSpoiler)
+            sendCurrentMedia?(silent, atDate, asSpoiler, via)
         case .pinned:
             break
         case .customLink:
@@ -1655,7 +1768,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
             
             if peer.id != context.account.peerId, !fromEffect {
                 items.append(ContextMenuItem(strings().chatSendWithoutSound, handler: { [weak self] in
-                    self?.send(true)
+                    self?.send(true, via: .sendMenu)
                 }, itemImage: MenuAnimation.menu_mute.value))
             }
             switch chatInteraction.mode {
@@ -1674,24 +1787,28 @@ public class PreviewSenderController: ModalViewController, Notifable {
                         items.append(ContextMenuItem(text, handler: { [weak self] in
                             guard let self, !self.pendingActions.isClosed, !self.sent else { return }
                             let scheduleAction = self.capturePendingAction()
-                            FeatureNavigationHooks.shared.selectDateObserved(context, context.window, nil, nil, .schedule(peer.id), selectedAt: { [weak self] date, repeatPeriod in
+                            self.analyticsMediaJourney?.step(.openSchedule)
+                            let analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
+                            FeatureNavigationHooks.shared.selectDateObserved(context, context.window, nil, nil, .schedule(peer.id), analyticsContext: analyticsContext, selectedAt: { [weak self] date, repeatPeriod in
                                 guard scheduleAction() else { return }
-                                self?.send(false, atDate: .init(date: date, repeatPeriod: repeatPeriod))
+                                self?.send(false, atDate: .init(date: date, repeatPeriod: repeatPeriod), via: .sendMenu)
                             }, cancelled: { [weak self] in
                                 guard scheduleAction() else { return }
-                            }, dismissed: {
+                                self?.analyticsMediaJourney?.step(.cancelSchedule)
+                            }, dismissed: { [journey = self.analyticsMediaJourney] in
                                 guard scheduleAction() else { return }
+                                journey?.discard()
                             })
                         }, itemImage: MenuAnimation.menu_schedule_message.value))
                         
                         if peer.id != context.peerId, presentation.canScheduleWhenOnline {
                             items.append(ContextMenuItem(strings().chatSendSendWhenOnline, handler: { [weak self] in
-                                self?.send(false, atDate: .init(date: scheduleWhenOnlineDate, repeatPeriod: nil))
+                                self?.send(false, atDate: .init(date: scheduleWhenOnlineDate, repeatPeriod: nil), via: .sendMenu)
                             }, itemImage: MenuAnimation.menu_online.value))
                         }
                         
                         items.append(ContextMenuItem(strings().previewSenderSendAsSpoiler, handler: { [weak self] in
-                            self?.send(false, asSpoiler: true)
+                            self?.send(false, asSpoiler: true, via: .sendMenu)
                         }, itemImage: MenuAnimation.menu_send_spoiler.value))
                         
                         
@@ -1827,6 +1944,10 @@ public class PreviewSenderController: ModalViewController, Notifable {
         
         self.genericView.textView.context = context
         self.genericView.textView.isSecretChat = chatInteraction.peerId.namespace == Namespaces.Peer.SecretChat || chatInteraction.presentation.peer?.isSecretChat == true
+        self.genericView.textView.analyticsContextProvider = { [weak self] in
+            guard let self else { return Analytics.shared.unresolvedContext() }
+            return self.chatInteraction.captureAnalyticsContext(inherited: self.analyticsContext ?? Analytics.shared.unresolvedContext())
+        }
         genericView.draggingView.controller = self
         genericView.controller = self
         inputInteraction.add(observer: self)
@@ -1877,7 +1998,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
             genericView.applyOptions([], count: 1, canCollage: false, canSpoiler: false)
             genericView.actions.isHidden = true
 
-            self.sendCurrentMedia = { [weak self] silent, atDate, _ in
+            self.sendCurrentMedia = { [weak self] silent, atDate, _, _ in
                 guard let self, !self.pendingActions.isClosed, !self.sent, self.validateSendSource() else { return }
                 let inputState = self.genericView.textView.interactions.presentation
                 var input = inputState.textInputState().subInputState(from: NSMakeRange(0, inputState.inputText.length))
@@ -1900,7 +2021,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
             return
         }
 
-        let initialState = PreviewState(urls: [], medias: [], currentState: .init(state: .media, isCollage: true, isSpoiler: false, sort: .down, payAmount: nil, sendMessageStars: chatInteraction.presentation.sendPaidMessageStars), editedData: [:])
+        let initialState = PreviewState(urls: [], medias: [], currentState: .init(state: .media, isCollage: true, isSpoiler: false, sort: .down, payAmount: nil), editedData: [:])
         
         let statePromise:ValuePromise<PreviewState> = ValuePromise(ignoreRepeated: true)
         let stateValue = Atomic(value: initialState)
@@ -1910,6 +2031,9 @@ public class PreviewSenderController: ModalViewController, Notifable {
         
         self.getMedias = {
             return stateValue.with { $0.medias }
+        }
+        self.getMediaUrls = {
+            return stateValue.with { $0.urls }
         }
         
         self.updateCustomPreview = { [weak self] path, preview in
@@ -1932,6 +2056,8 @@ public class PreviewSenderController: ModalViewController, Notifable {
             let previousCount = self.urls.count
             self.urls.removeAll(where: {$0 == url})
             if previousCount != self.urls.count {
+                self.analyticsMediaJourney?.step(.removeMedia)
+                self.analyticsMediaJourney?.selected(count: self.urls.count, mode: self.genericView.state.analyticsMode)
             }
             if self.editedVideos.removeValue(forKey: url) != nil {
                 PendingVideoRenders.shared.cancel(path: url.path)
@@ -1944,6 +2070,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
             let previous = self.urls
             self.urls.move(at: from, to: to)
             if previous != self.urls {
+                self.analyticsMediaJourney?.step(.reorderMedia)
             }
             self.lockInteractiveChanges = false
         })
@@ -1980,7 +2107,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
                 if !changed {
                     return state
                 }
-                return PreviewState(urls: state.urls, medias: medias, currentState: state.currentState, editedData: state.editedData)
+                return PreviewState(urls: state.urls, medias: medias, currentState: state.currentState, editedData: state.editedData, renderingPreviews: state.renderingPreviews)
             }
         }
 
@@ -2098,7 +2225,10 @@ public class PreviewSenderController: ModalViewController, Notifable {
             self.genericView.state = state
             let isPreparing = medias.contains(where: isPreviewPlaceholder)
             self.genericView.sendButton.isEnabled = !isPreparing
-            self.genericView.sendButton.alphaValue = isPreparing ? 0.5 : 1.0
+            self.genericView.sendButton.alphaValue = isPreparing || self.pendingRenderSend != nil ? 0.5 : 1.0
+            if !isPreparing {
+                self.flushPendingRenderSend()
+            }
             
             let options = self.cachedSenderOptions(self.urls)
             var canCollage = canCollagesFromUrl(self.urls)
@@ -2166,10 +2296,10 @@ public class PreviewSenderController: ModalViewController, Notifable {
         default:
             break
         }
-        var state: PreviewSendingState = .init(state: mediaState, isCollage: canCollage, isSpoiler: false, sort: .down, payAmount: nil, sendMessageStars: chatInteraction.presentation.sendPaidMessageStars)
+        var state: PreviewSendingState = .init(state: mediaState, isCollage: canCollage, isSpoiler: false, sort: .down, payAmount: nil)
         if let _ = chatInteraction.presentation.slowMode {
             if state.state != .archive && self.urls.count > 1, !state.isCollage {
-                state = .init(state: .archive, isCollage: false, isSpoiler: false, sort: .down, payAmount: nil, sendMessageStars: chatInteraction.presentation.sendPaidMessageStars)
+                state = .init(state: .archive, isCollage: false, isSpoiler: false, sort: .down, payAmount: nil)
             }
         }
         
@@ -2200,10 +2330,11 @@ public class PreviewSenderController: ModalViewController, Notifable {
             self.urlsAndStateValue.set(UrlAndState(self.urls, state, previews: self.previews))
         }
         
-        self.sendCurrentMedia = { [weak self] silent, atDate, asSpoiler in
+        self.sendCurrentMedia = { [weak self] silent, atDate, asSpoiler, via in
             guard let self, !self.pendingActions.isClosed, !self.sent, self.validateSendSource() else { return }
             
             if stateValue.with({ $0.medias.contains(where: isPreviewPlaceholder) }) {
+                self.analyticsMediaJourney?.submissionBlocked(.preparation)
                 self.genericView.sendButton.shake(beep: false)
                 return
             }
@@ -2212,8 +2343,10 @@ public class PreviewSenderController: ModalViewController, Notifable {
             let inputState = self.genericView.textView.interactions.presentation
             
             if let slowMode = slowMode, slowMode.hasLocked {
+                self.analyticsMediaJourney?.submissionBlocked(.slowMode)
                 self.genericView.textView.shake()
             } else if self.inputPlaceholder != strings().previewSenderCaptionPlaceholder && slowMode != nil && inputState.inputText.length > 0 {
+                self.analyticsMediaJourney?.submissionBlocked(.slowMode)
                 tooltip(for: self.genericView.sendButton, text: strings().slowModeMultipleError)
                 self.genericView.textView.selectAll()
                 self.genericView.textView.shake()
@@ -2222,6 +2355,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
                 let state = stateValue.with { $0.currentState }
                 let medias = stateValue.with { $0.medias }
                 if medias.contains(where: isPreviewPlaceholder) {
+                    self.analyticsMediaJourney?.submissionBlocked(.preparation)
                     return
                 }
                 var permissions:[(String, Int)] = []
@@ -2230,12 +2364,14 @@ public class PreviewSenderController: ModalViewController, Notifable {
                         if let status = self.archiveStatuses[.resource(resource)] {
                             switch status {
                             case .waiting, .fail, .none:
+                                self.analyticsMediaJourney?.submissionBlocked(.preparation)
                                 self.genericView.tableView.optionalItem(at: i)?.view?.shakeView()
                                 return
                             default:
                                 break
                             }
                         } else {
+                            self.analyticsMediaJourney?.submissionBlocked(.preparation)
                             self.genericView.tableView.optionalItem(at: i)?.view?.shakeView()
                             return
                         }
@@ -2273,7 +2409,8 @@ public class PreviewSenderController: ModalViewController, Notifable {
                 if let first = permissions.first {
                     if let totalBoostNeed = chatInteraction.presentation.totalBoostNeed {
                         if totalBoostNeed > 0 {
-                            let childAction = PreviewSenderChildAction(isCurrent: self.capturePendingAction())
+                            self.analyticsMediaJourney?.submissionBlocked(.permission)
+                            let childAction = PreviewSenderChildAction(context: self.analyticsContext ?? Analytics.shared.unresolvedContext(), isCurrent: self.capturePendingAction())
                             verifyAlert(for: context.window, information: strings().boostGroupChatInputSendMedia, ok: strings().boostGroupChatInputBoost, successHandler: { [weak self] _ in
                                 childAction.resolve { self?.chatInteraction.boostToUnrestrict(.unblockText(totalBoostNeed)) }
                             }, cancelHandler: {
@@ -2284,6 +2421,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
                             return
                         }
                     } else {
+                        self.analyticsMediaJourney?.submissionBlocked(.permission)
                         showModalText(for: context.window, text: first.0)
                         return
                     }
@@ -2310,6 +2448,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
                 let effect = self.contextChatInteraction.presentation.messageEffect
                 
                 let submissionAction = self.capturePendingSendAction()
+                let submissionContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
                 let invoke:(Bool?)->Void = { [weak self] alwaysPaidMessage in
                     guard let self, !self.pendingActions.isClosed, !self.sent, self.window != nil, submissionAction() else {
                         return
@@ -2321,26 +2460,31 @@ public class PreviewSenderController: ModalViewController, Notifable {
                     if let alwaysPaidMessage {
                         self.chatInteraction.update { $0.withUpdatedAlwaysPaidMessage(alwaysPaidMessage) }
                     }
-                    self.chatInteraction.sendMessage(silent, atDate, effect)
+                    let batchCount = state.isCollage && medias.count > 1 ? medias.chunks(10).count : 1
+                    self.analyticsMediaJourney?.selected(count: self.urls.count, mode: state.analyticsMode)
+                    let submission = self.analyticsMediaJourney?.beginSubmission(parts: batchCount + 1, via: via, scheduled: atDate != nil, silent: silent)
+                    self.chatInteraction.sendMessageObserved(silent, atDate, effect, submission: submission, part: 0)
                     if atDate == nil, let source = self.genericView.mediaSendFlightSource() {
                         self.chatInteraction.mediaSendFlight?.launch(source)
                     }
                     if state.isCollage && medias.count > 1 {
                         let collages = medias.chunks(10)
-                        for collage in collages {
+                        for (index, collage) in collages.enumerated() {
                             guard self.validateSendSource() else {
+                                submission?.discard()
                                 self.closeModal()
                                 return
                             }
-                            self.chatInteraction.sendMedias(makeMedia(collage, true), input, state.isCollage && state.payAmount == nil, additionalMessage, silent, atDate, asSpoiler ?? state.isSpoiler, effect, state.sortValue == .up)
+                            self.chatInteraction.sendMediasObserved(makeMedia(collage, true), input, state.isCollage && state.payAmount == nil, additionalMessage, silent, atDate, asSpoiler ?? state.isSpoiler, effect, state.sortValue == .up, submission: submission, part: index + 1)
                             additionalMessage = nil
                         }
                     } else {
                         guard self.validateSendSource() else {
+                            submission?.discard()
                             self.closeModal()
                             return
                         }
-                        self.chatInteraction.sendMedias(makeMedia(medias, false), input, false, additionalMessage, silent, atDate, asSpoiler ?? state.isSpoiler, effect, state.sortValue == .up)
+                        self.chatInteraction.sendMediasObserved(makeMedia(medias, false), input, false, additionalMessage, silent, atDate, asSpoiler ?? state.isSpoiler, effect, state.sortValue == .up, submission: submission, part: 1)
                     }
                     
                     self.emoji.popover?.hide()
@@ -2359,26 +2503,28 @@ public class PreviewSenderController: ModalViewController, Notifable {
                         
                         let messageCountText = strings().chatPayStarsConfirmMediasOther(messagesCount)
                         
-                        verifyChatSendPayment(for: chatInteraction.interactionContext.window, header: strings().chatPayStarsConfirmTitle, information: strings().chatPayStarsConfirmText(peer.displayTitle, amount, amount, messageCountText), ok: strings().chatPayStarsConfirmPayMediaOther(messagesCount), option: strings().chatPayStarsConfirmCheckbox, successHandler: { [weak self] result in
+                        self.analyticsMediaJourney?.step(.openConfirmation)
+                        verifyChatSendPayment(for: chatInteraction.interactionContext.window, header: strings().chatPayStarsConfirmTitle, information: strings().chatPayStarsConfirmText(peer.displayTitle, amount, amount, messageCountText), ok: strings().chatPayStarsConfirmPayMediaOther(messagesCount), option: strings().chatPayStarsConfirmCheckbox, analyticsContext: submissionContext, successHandler: { [weak self] result in
                             guard let self, !self.pendingActions.isClosed, !self.sent else { return }
-                            
+                            guard chatPaidMessagePriceIsCurrent(self.chatInteraction, payStars) else { return }
                             if starsState.balance.value > starsPrice {
                                 invoke(result == .thrid)
                             } else {
                                 guard submissionAction() else { return }
-                                FeatureNavigationHooks.shared.showStarsPurchaseWithContext(context, context.window, .stars, nil, Int64(starsPrice))
+                                FeatureNavigationHooks.shared.showStarsPurchaseWithContext(context, context.window, .stars, nil, Int64(starsPrice), submissionContext)
                             }
                         }, cancelHandler: { [weak self] in
                             guard submissionAction() else { return }
-                        }, dismissed: {
-                            _ = submissionAction()
+                            self?.analyticsMediaJourney?.step(.cancelConfirmation)
+                        }, dismissed: { [journey = self.analyticsMediaJourney] in
+                            if submissionAction() { journey?.discard() }
                         })
                     } else {
                         if starsState.balance.value > starsPrice {
                             invoke(nil)
                         } else {
                             guard submissionAction() else { return }
-                            FeatureNavigationHooks.shared.showStarsPurchaseWithContext(context, context.window, .stars, nil, Int64(starsPrice))
+                            FeatureNavigationHooks.shared.showStarsPurchaseWithContext(context, context.window, .stars, nil, Int64(starsPrice), submissionContext)
                         }
                     }
                 } else {
@@ -2392,8 +2538,14 @@ public class PreviewSenderController: ModalViewController, Notifable {
         
         self.runEditor = { [weak self] url, paint in
             guard let self, !self.pendingActions.isClosed, !self.sent else { return }
+            guard !self.isRenderingEdit else {
+                NSSound.beep()
+                return
+            }
             
-            if MIMEType(url.path).hasPrefix("video/") {
+            let editedData = stateValue.with { $0.editedData }
+
+            if MIMEType(url.path).hasPrefix("video/"), editedData[url] == nil {
                 self.runVideoEditor(url)
                 return
             }
@@ -2401,7 +2553,9 @@ public class PreviewSenderController: ModalViewController, Notifable {
             guard let edit = self.attachmentEdits.begin(for: url, urls: self.urls) else { return }
             self.editorDisposable.set(nil)
             let chatAction = self.chatInteraction.captureDeferredSendAction()
-            let editedData = stateValue.with { $0.editedData }
+            let analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
+            let presentation = analyticsContext.beginPresentation()
+            defer { presentation.end() }
             
             let data = editedData[url] ?? EditedImageData(originalUrl: url)
             
@@ -2422,11 +2576,44 @@ public class PreviewSenderController: ModalViewController, Notifable {
                     var editedData = data
                     editedData.paintings = paintings
                     editedData.entities = entities
-                    let new = EditedImageData.generateNewUrl(data: editedData, selectedRect: CGRect(origin: .zero, size: image.size)) |> deliverOnMainQueue
-                    let subscription = MetaDisposable()
+                    var applied = false
+                    var finished = false
+                    let new = EditedImageData.generateNewUrl(data: editedData, selectedRect: CGRect(origin: .zero, size: image.size), allowsAnimation: true) |> deliverOnMainQueue |> afterDisposed { [weak self] in
+                        Queue.mainQueue().justDispatch {
+                            finished = true
+                            updateState { $0.withUpdatedRenderingPreviews { previews in
+                                var previews = previews
+                                previews.removeValue(forKey: url)
+                                return previews
+                            }}
+                            self?.finishRenderingEdit(applied: applied)
+                        }
+                    }
+                    let subscription = DisposableSet()
                     self.editorDisposable.set(subscription)
-                    subscription.set((new).start(next: { [weak self] new in
+                    self.startRenderingEdit(cancel: { [weak self] in
+                        edit.discard()
+                        self?.pendingRenderSend = nil
+                        self?.editorDisposable.set(nil)
+                    })
+                    if editedData.hasAnimatedStickers {
+                        let preview: Signal<CGImage, NoError> = Signal { subscriber in
+                            subscriber.putNext(editedData.makeImage(image, interface: false))
+                            subscriber.putCompletion()
+                            return EmptyDisposable
+                        } |> runOn(resourcesQueue) |> deliverOnMainQueue
+                        subscription.add(preview.start(next: { preview in
+                            guard !finished else { return }
+                            updateState { $0.withUpdatedRenderingPreviews { previews in
+                                var previews = previews
+                                previews[url] = preview
+                                return previews
+                            }}
+                        }))
+                    }
+                    subscription.add(analyticsContext.preservingPresentation(new).start(next: { [weak self] new in
                         guard let self, !self.pendingActions.isClosed, !self.sent, edit.apply(), chatAction.takeIfCurrent() else { return }
+                        applied = true
                         if let index = self.urls.firstIndex(of: url) {
                             updateState { $0.withUpdatedEditedData { data in
                                 var data = data
@@ -2437,24 +2624,31 @@ public class PreviewSenderController: ModalViewController, Notifable {
                                 return data
                             }}
                             self.urls[index] = new
+                            self.analyticsMediaJourney?.step(.applyEditor)
                             context.engine.accountData.addAppLogEvent(time: Date().timeIntervalSince1970, type: AppLogEvents.imageEditor.rawValue, peerId: context.peerId, data: [:])
                         }
                     }))
                 }, alone: true)
+                editor.analyticsContext = analyticsContext
                 editor.onCancelled = { [weak self] in
                     guard edit.cancel(), chatAction.takeIfCurrent() else { return }
+                    self?.analyticsMediaJourney?.step(.cancelEditor)
                 }
+                self.analyticsMediaJourney?.step(.openEditor)
                 showModal(with: editor, for: context.window, animationType: .scaleCenter)
 
             } else {
-                guard let editor = EditImageModalController(data.originalUrl, context: context, defaultData: data, canCutOut: self.canSendStickers) else { return }
+                guard let editor = EditImageModalController(data.originalUrl, context: context, defaultData: data, canCutOut: self.canSendStickers, allowsAnimation: true) else { return }
+                editor.analyticsContext = analyticsContext
                 editor.onCancelled = { [weak self] in
                     guard edit.cancel(), chatAction.takeIfCurrent() else { return }
+                    self?.analyticsMediaJourney?.step(.cancelEditor)
                 }
                 let subscription = MetaDisposable()
                 self.editorDisposable.set(subscription)
+                self.analyticsMediaJourney?.step(.openEditor)
                 showModal(with: editor, for: context.window, animationType: .scaleCenter)
-                subscription.set((editor.result |> deliverOnMainQueue).start(next: { [weak self] new, editedData in
+                subscription.set(analyticsContext.preservingPresentation(editor.result |> deliverOnMainQueue).start(next: { [weak self] new, editedData in
                     guard let self, !self.pendingActions.isClosed, !self.sent, edit.apply(), chatAction.takeIfCurrent() else { return }
                     if let index = self.urls.firstIndex(of: url) {
                         updateState { $0.withUpdatedEditedData { data in
@@ -2467,21 +2661,34 @@ public class PreviewSenderController: ModalViewController, Notifable {
                             return data
                         }}
                         self.urls[index] = new
+                        self.analyticsMediaJourney?.step(.applyEditor)
                         context.engine.accountData.addAppLogEvent(time: Date().timeIntervalSince1970, type: AppLogEvents.imageEditor.rawValue, peerId: context.peerId, data: [:])
                     }
                 }))
             }
         }
         
-        self.insertAdditionUrls = { [weak self] list in
+        self.insertAdditionUrls = { [weak self] list, route in
             guard let self, !self.pendingActions.isClosed, !self.sent else { return }
             let previous = self.urls
             _ = scrollAfterTransition.swap(true)
             self.urls.append(contentsOf: list)
             if previous == self.urls {
                 _ = scrollAfterTransition.swap(false)
+                if !list.isEmpty {
+                    switch route {
+                    case .addPaste:
+                        self.analyticsMediaJourney?.step(.addPasteUnchanged)
+                    case .addDrop:
+                        self.analyticsMediaJourney?.step(.addDropUnchanged)
+                    default:
+                        break
+                    }
+                }
                 NSSound.beep()
             } else {
+                self.analyticsMediaJourney?.step(route)
+                self.analyticsMediaJourney?.selected(count: self.urls.count, mode: self.genericView.state.analyticsMode)
             }
         }
 
@@ -2610,12 +2817,20 @@ public class PreviewSenderController: ModalViewController, Notifable {
     }
     
     fileprivate func editVideoCover(for url: URL, media: TelegramMediaFile) {
-        guard !pendingActions.isClosed, !sent, let edit = attachmentEdits.begin(for: url, urls: urls) else { return }
+        guard !pendingActions.isClosed, !sent else { return }
+        guard !isRenderingEdit else {
+            NSSound.beep()
+            return
+        }
+        guard let edit = attachmentEdits.begin(for: url, urls: urls) else { return }
         editorDisposable.set(nil)
         let selectionAction = capturePendingAction()
+        let analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
         let context = self.context
-        filePanel(with: photoExts, allowMultiple: false, for: context.window, cancelled: { [weak self] in
+        analyticsMediaJourney?.step(.openCoverPicker)
+        filePanel(with: photoExts, allowMultiple: false, for: context.window, analyticsContext: analyticsContext, cancelled: { [weak self] in
             guard selectionAction(), edit.cancel() else { return }
+            self?.analyticsMediaJourney?.step(.cancelCoverPicker)
         }, completion: { [weak self] files in
             guard let self, !self.pendingActions.isClosed, !self.sent, selectionAction(), edit.isActive else { return }
             guard let files else {
@@ -2624,8 +2839,11 @@ public class PreviewSenderController: ModalViewController, Notifable {
             }
             guard let first = files.first else {
                 edit.discard()
+                self.analyticsMediaJourney?.blocked(.emptySelection)
                 return
             }
+            let presentation = analyticsContext.beginPresentation()
+            defer { presentation.end() }
             let settings: EditControllerSettings
             if let size = media.dimensions?.size {
                 settings = .disableSizes(dimensions: SelectionRectDimensions.bestDimension(for: size), circle: false)
@@ -2634,20 +2852,25 @@ public class PreviewSenderController: ModalViewController, Notifable {
             }
             guard let editor = EditImageModalController(URL(fileURLWithPath: first), context: context, settings: settings) else {
                 edit.discard()
+                self.analyticsMediaJourney?.blocked(.preparation)
                 return
             }
             let resultAction = self.chatInteraction.captureDeferredSendAction()
+            editor.analyticsContext = analyticsContext
             editor.onCancelled = { [weak self] in
                 guard edit.cancel(), resultAction.takeIfCurrent() else { return }
+                self?.analyticsMediaJourney?.step(.cancelEditor)
             }
             let subscription = MetaDisposable()
             self.editorDisposable.set(subscription)
+            self.analyticsMediaJourney?.step(.openEditor)
             showModal(with: editor, for: context.window, animationType: .scaleCenter)
-            subscription.set((editor.result |> take(1) |> deliverOnMainQueue).start(next: { [weak self] new, _ in
+            subscription.set(analyticsContext.preservingPresentation(editor.result |> take(1) |> deliverOnMainQueue).start(next: { [weak self] new, _ in
                 guard let self, !self.pendingActions.isClosed, !self.sent, edit.apply(), resultAction.takeIfCurrent(), self.urls.contains(url) else { return }
                 let previous = self.previews[url.path]
                 self.updateCustomPreview(url.path, new.path)
                 if previous != self.previews[url.path] {
+                    self.analyticsMediaJourney?.step(.applyCover)
                 }
             }, completed: {
                 edit.discard()
@@ -2656,11 +2879,17 @@ public class PreviewSenderController: ModalViewController, Notifable {
     }
 
     fileprivate func removeVideoCover(for url: URL) {
-        guard !pendingActions.isClosed, !sent, let edit = attachmentEdits.begin(for: url, urls: urls), edit.apply() else { return }
+        guard !pendingActions.isClosed, !sent else { return }
+        guard !isRenderingEdit else {
+            NSSound.beep()
+            return
+        }
+        guard let edit = attachmentEdits.begin(for: url, urls: urls), edit.apply() else { return }
         editorDisposable.set(nil)
         let previous = previews[url.path]
         updateCustomPreview(url.path, nil)
         if previous != previews[url.path] {
+            analyticsMediaJourney?.step(.removeCover)
         }
     }
 
@@ -2668,6 +2897,9 @@ public class PreviewSenderController: ModalViewController, Notifable {
         guard !pendingActions.isClosed, !sent, let edit = attachmentEdits.begin(for: url, urls: urls) else { return }
         editorDisposable.set(nil)
         let chatAction = chatInteraction.captureDeferredSendAction()
+        let analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
+        let presentation = analyticsContext.beginPresentation()
+        defer { presentation.end() }
         let context = self.context
         let editor = EditVideoController(context: context, url: url, edited: editedVideos[url], completion: { [weak self] new, data in
             guard let self, !self.pendingActions.isClosed, !self.sent, edit.apply(), chatAction.takeIfCurrent(), let index = self.urls.firstIndex(of: url) else {
@@ -2687,10 +2919,14 @@ public class PreviewSenderController: ModalViewController, Notifable {
                 self.previews = previews
             }
             self.urls[index] = new
+            self.analyticsMediaJourney?.step(.applyEditor)
         })
+        editor.analyticsContext = analyticsContext
         editor.onCancelled = { [weak self] in
             guard edit.cancel(), chatAction.takeIfCurrent() else { return }
+            self?.analyticsMediaJourney?.step(.cancelEditor)
         }
+        self.analyticsMediaJourney?.step(.openEditor)
         showModal(with: editor, for: context.window, animationType: .scaleCenter)
     }
     
@@ -2707,17 +2943,22 @@ public class PreviewSenderController: ModalViewController, Notifable {
     }
     
     private func makeEffectPremiumAction() -> () -> Void {
+        let analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
+        let journey = analyticsMediaJourney
         let isCurrent = capturePendingAction()
         return { [weak self] in
             guard let self, !self.pendingActions.isClosed, !self.sent, isCurrent() else { return }
-            FeatureNavigationHooks.shared.showPremiumBoardingObserved(self.context, self.context.window, .messageEffects, false, nil)
+            journey?.step(.openEffectPremium)
+            FeatureNavigationHooks.shared.showPremiumBoardingObserved(self.context, self.context.window, .messageEffects, false, nil, analyticsContext: analyticsContext)
         }
     }
 
     func togglePaidContent() {
         guard !pendingActions.isClosed, !sent else { return }
         if self.genericView.state.payAmount == nil {
-            let childAction = PreviewSenderChildAction(isCurrent: capturePendingAction())
+            let analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
+            let childAction = PreviewSenderChildAction(context: analyticsContext, isCurrent: capturePendingAction())
+            analyticsMediaJourney?.step(.openPrice)
             let controller = MediaPaidSetterController(context: context, callback: { [weak self] amount in
                 childAction.resolve {
                     guard let self, !self.pendingActions.isClosed, !self.sent, amount > 0 else { return }
@@ -2725,15 +2966,19 @@ public class PreviewSenderController: ModalViewController, Notifable {
                     let state = self.genericView.state.withUpdatedPayAmount(amount).withUpdatedIsSpoiler(false)
                     self.genericView.stateValueInteractiveUpdate?(state)
                     if previous != amount, self.genericView.state.payAmount == amount {
+                        self.analyticsMediaJourney?.step(.applyPrice)
                     }
                 }
             }, cancelled: { [weak self] in
                 childAction.resolve {
                     guard let self, !self.pendingActions.isClosed, !self.sent else { return }
+                    self.analyticsMediaJourney?.step(.cancelPrice)
                 }
             }, dismissed: {
                 childAction.dismissed()
             })
+            controller.analyticsContext = analyticsContext
+            controller.current.analyticsContext = analyticsContext
             let onDeinit = controller.onDeinit
             controller.onDeinit = {
                 onDeinit?()
@@ -2745,6 +2990,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
             let state = self.genericView.state.withUpdatedPayAmount(nil).withUpdatedIsSpoiler(false)
             self.genericView.stateValueInteractiveUpdate?(state)
             if self.genericView.state.payAmount == nil {
+                analyticsMediaJourney?.step(.removePrice)
             }
         }
     }
@@ -2784,6 +3030,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
         pasteDisposable.dispose()
         attachmentEdits.close()
         editorDisposable.dispose()
+        if !sent { analyticsMediaJourney?.discard() }
         super.viewWillDisappear(animated)
         if !sent {
             chatInteraction.update({
@@ -2821,7 +3068,10 @@ public class PreviewSenderController: ModalViewController, Notifable {
     private let presentation: TelegramPresentationTheme?
     private let appFile: TelegramMediaFile?
 
-    public init(appFile: TelegramMediaFile, chatInteraction: ChatInteraction, presentation: TelegramPresentationTheme? = nil) {
+    public init(appFile: TelegramMediaFile, chatInteraction: ChatInteraction, presentation: TelegramPresentationTheme? = nil, analyticsContext: AnalyticsContext? = nil) {
+        let analyticsContext = chatInteraction.captureAnalyticsContext(inherited: analyticsContext ?? chatInteraction.captureAnalyticsContext())
+        let analyticsPresentation = analyticsContext.beginPresentation()
+        defer { analyticsPresentation.end() }
         self.presentation = presentation
         self._urls = []
         self.attributedString = nil
@@ -2834,6 +3084,9 @@ public class PreviewSenderController: ModalViewController, Notifable {
         inputContextHelper = InputContextHelper(chatInteraction: contextChatInteraction)
         self.chatInteraction = chatInteraction
         super.init(frame: NSMakeRect(0, 0, 320, 300))
+        self.analyticsContext = analyticsContext
+        self.contextChatInteraction.inheritedAnalyticsContext = analyticsContext
+        self.emoji.analyticsContext = analyticsContext
         bar = .init(height: 0)
 
         contextChatInteraction.movePeerToInput = { [weak self] peer in
@@ -2861,7 +3114,10 @@ public class PreviewSenderController: ModalViewController, Notifable {
         self.chatInteraction.add(observer: self)
     }
 
-    public init(urls:[URL], chatInteraction:ChatInteraction, asMedia:Bool = true, attributedString: NSAttributedString? = nil, presentation: TelegramPresentationTheme? = nil) {
+    public init(urls:[URL], chatInteraction:ChatInteraction, asMedia:Bool = true, attributedString: NSAttributedString? = nil, presentation: TelegramPresentationTheme? = nil, analyticsContext: AnalyticsContext? = nil) {
+        let analyticsContext = chatInteraction.captureAnalyticsContext(inherited: analyticsContext ?? chatInteraction.captureAnalyticsContext())
+        let analyticsPresentation = analyticsContext.beginPresentation()
+        defer { analyticsPresentation.end() }
         self.presentation = presentation
         let filtred = urls.filter { url in
             return FileManager.default.fileExists(atPath: url.path)
@@ -2883,6 +3139,9 @@ public class PreviewSenderController: ModalViewController, Notifable {
         inputContextHelper = InputContextHelper(chatInteraction: contextChatInteraction)
         self.chatInteraction = chatInteraction
         super.init(frame:NSMakeRect(0, 0, 320, 300))
+        self.analyticsContext = analyticsContext
+        self.contextChatInteraction.inheritedAnalyticsContext = analyticsContext
+        self.emoji.analyticsContext = analyticsContext
         bar = .init(height: 0)
         
 
@@ -2956,6 +3215,9 @@ public class PreviewSenderController: ModalViewController, Notifable {
                 if value.slowMode != oldValue.slowMode {
                     let urls = self.urls
                     self.urls = urls
+                }
+                if value.sendPaidMessageStars != oldValue.sendPaidMessageStars, self.genericView.totalCount > 0 {
+                    self.genericView.applyOptions(self.genericView.options, count: self.genericView.totalCount, canCollage: self.genericView.canCollage, canSpoiler: self.genericView.canSpoiler)
                 }
             }
             if value.effectiveInput != oldValue.effectiveInput {
@@ -3060,10 +3322,11 @@ public class PreviewSenderController: ModalViewController, Notifable {
         guard !pendingActions.isClosed, !sent else { return }
         let pasteAction = pasteActions.captureToken()
         let chatAction = chatInteraction.captureDeferredSendAction()
+        let analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
         let subscription = MetaDisposable()
         pasteDisposable.set(subscription)
         guard !pendingActions.isClosed, !sent, pasteAction.isCurrent, chatAction.isAvailable else { return }
-        subscription.set((signal |> deliverOnMainQueue).start(next: { [weak self] urls in
+        subscription.set(analyticsContext.preservingPresentation(signal |> deliverOnMainQueue).start(next: { [weak self] urls in
             guard let self, !self.pendingActions.isClosed, !self.sent, pasteAction.take(), chatAction.takeIfCurrent() else { return }
             completion(urls)
         }))
@@ -3094,8 +3357,9 @@ public class PreviewSenderController: ModalViewController, Notifable {
                     if !attachments.isEmpty {
                         self.receivePasteURLs(prepareTextAttachments(attachments), completion: { [weak self] urls in
                             if !urls.isEmpty {
-                                self?.insertAdditionUrls?(urls)
+                                self?.insertAdditionUrls?(urls, .addPaste)
                             } else {
+                                self?.analyticsMediaJourney?.blocked(.preparation)
                             }
                         })
                     }
@@ -3110,7 +3374,7 @@ public class PreviewSenderController: ModalViewController, Notifable {
                 if urls.isEmpty {
                     _ = pasteRtf()
                 } else {
-                    self?.insertAdditionUrls?(urls)
+                    self?.insertAdditionUrls?(urls, .addPaste)
                 }
             })
         } else {

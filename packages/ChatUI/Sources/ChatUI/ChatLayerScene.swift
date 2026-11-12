@@ -472,8 +472,8 @@ class ChatLayerSceneView: View {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        guard hasLayerContent else { return }
-        let needsTracking = tracksPointer && window != nil && !visibleRect.isEmpty
+        guard hasLayerContent, window != nil || !tracksPointer else { return }
+        let needsTracking = tracksPointer && !visibleRect.isEmpty
         guard needsTracking != (pointerArea != nil) else { return }
         if let pointerArea {
             removeTrackingArea(pointerArea)
@@ -484,6 +484,14 @@ class ChatLayerSceneView: View {
         addTrackingArea(area)
         pointerArea = area
     }
+
+    #if DEBUG
+    var debugPointerTracking: (needed: Bool, installed: Bool) {
+        let needed = hasLayerContent && tracksPointer && window != nil && !visibleRect.isEmpty
+        let installed = storedState?.pointerArea.map { area in trackingAreas.contains { $0 === area } } ?? false
+        return (needed, installed)
+    }
+    #endif
 
     func invalidateHitIndex() {
         guard hasLayerContent else { return }
@@ -634,15 +642,22 @@ class ChatLayerSceneView: View {
         return node == nil
     }
 
+    var hasExposedPointer: Bool {
+        return lastPointer.map { chatLayerPointerIsExposed(self, at: $0) } ?? false
+    }
+
     func updateHover(at point: NSPoint?) {
         guard let current = storedState else { return }
         hoverGeneration += 1
         let generation = hoverGeneration
-        let target = point.flatMap(hitNode)
+        let isExposed = point.map { chatLayerPointerIsExposed(self, at: $0) } ?? true
+        let target = isExposed ? point.flatMap(hitNode) : nil
         guard storedState === current, hoverGeneration == generation else { return }
         let enabledTarget = target?.isEffectivelyEnabled == true ? target : nil
         if matchesHoverPath(enabledTarget) {
-            updatePointerCursor(hovered.reversed().first(where: { $0.cursor != nil })?.cursor ?? .arrow, at: point)
+            if isExposed {
+                updatePointerCursor(hovered.reversed().first(where: { $0.cursor != nil })?.cursor ?? .arrow, at: point)
+            }
             return
         }
         let next = path(to: enabledTarget)
@@ -658,7 +673,9 @@ class ChatLayerSceneView: View {
             _ = node.onPointer?(event(.entered, node: node, point: point ?? .zero))
         }
         guard storedState === current, hoverGeneration == generation else { return }
-        updatePointerCursor(next.reversed().first(where: { $0.cursor != nil })?.cursor ?? .arrow, at: point)
+        if isExposed {
+            updatePointerCursor(next.reversed().first(where: { $0.cursor != nil })?.cursor ?? .arrow, at: point)
+        }
     }
 
     func updatePointerCursor(_ cursor: NSCursor, at point: NSPoint?) {
@@ -674,6 +691,7 @@ class ChatLayerSceneView: View {
         lastPointer = point
         updateHover(at: point)
         guard storedState === current, inputGeneration == generation else { return true }
+        if kind == .moved, !hasExposedPointer { return false }
         if kind == .up {
             if blockedButtons.remove(button) != nil { return true }
             guard let target = captures.removeValue(forKey: button) else { return false }
@@ -707,7 +725,7 @@ class ChatLayerSceneView: View {
                 if kind == .down {
                     if node.scene === self && node.isVisible && node.isEffectivelyEnabled {
                         captures[button] = node
-                        if node.acceptsKeyboardFocus {
+                        if node.acceptsKeyboardFocus, button == 0, native?.modifierFlags.contains(.control) != true {
                             focus(node)
                             guard storedState === current, focusedNode === node else { return true }
                             window?.makeFirstResponder(self)

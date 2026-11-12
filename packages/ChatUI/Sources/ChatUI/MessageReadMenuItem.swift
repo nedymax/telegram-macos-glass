@@ -1,4 +1,5 @@
 import Foundation
+import AppAnalytics
 import TelegramCore
 import SwiftSignalKit
 import TGUIKit
@@ -325,7 +326,9 @@ public final class MessageReadMenuRowItem : AppMenuRowItem {
 
             
             self.item.submenu = menu
-            if let view = self.view, view.mouseInside() || self.isSelected {
+            if let view = self.view as? AppMenuRowView, view.mouseInside() {
+                view.presentSubmenuAfterDelay()
+            } else if self.isSelected {
                 self.interaction?.presentSubmenu(self.item)
             }
             
@@ -797,6 +800,32 @@ func forwardMenuTopicItems(_ list: [EngineChatList.Item], canSend: (EngineChatLi
     return items
 }
 
+private func forwardTopicMenuItem(_ item: EngineChatList.Item, in peer: Peer, context: any AccountContextProtocol, callback: @escaping (PeerId, Int64?) -> Void) -> ContextMenuItem? {
+    guard let threadData = item.threadData else {
+        return nil
+    }
+    let threadId: Int64?
+    if case let .forum(id) = item.id {
+        threadId = id
+    } else {
+        threadId = nil
+    }
+    let menuItem = ContextMenuItem(threadData.info.title, handler: {
+        if let threadId {
+            callback(peer.id, threadId)
+        }
+    })
+    let threadMessage = item.messages.first
+    if let threadId, peer.isMonoForum, let threadPeer = threadMessage?.peers[PeerId(threadId)] {
+        ContextMenuItem.makeItemAvatar(menuItem, account: context.account, peer: threadPeer, source: .peer(threadPeer, threadPeer.smallProfileImage, threadPeer.namePeerColor, TelegramUtilsHooks.shared.peerLetters(threadPeer), threadMessage?._asMessage(), nil))
+        menuItem.title = threadPeer.displayTitle
+    } else {
+        ContextMenuItem.makeItemAvatar(menuItem, account: context.account, peer: peer, source: .topic(threadData.info, threadId == 1))
+    }
+    ContextMenuItem.checkPremiumRequired(menuItem, context: context, peer: peer)
+    return menuItem
+}
+
 public final class ReactionPeerMenu : ContextMenuItem {
     public enum Source : Equatable {
         case builtin(TelegramMediaFile)
@@ -815,8 +844,14 @@ public final class ReactionPeerMenu : ContextMenuItem {
     private let disposable = MetaDisposable()
     private let afterNameBadge: CGImage?
     private let message: Message?
+    private let analyticsContext: AnalyticsContext
 
-    public init(title: String, handler:@escaping()->Void, peer: Peer, context: any AccountContextProtocol, reaction: Source?, readTimestamp: Int32? = nil, message: Message? = nil, destination: Destination = .common, afterNameBadge: CGImage? = nil, removeTail: Bool = true, overrideWidth: CGFloat? = nil, selfSaved: Bool = true, canDelete: Bool = false) {
+    public init(title: String, handler:@escaping()->Void, peer: Peer, context: any AccountContextProtocol, reaction: Source?, readTimestamp: Int32? = nil, message: Message? = nil, destination: Destination = .common, afterNameBadge: CGImage? = nil, removeTail: Bool = true, overrideWidth: CGFloat? = nil, selfSaved: Bool = true, canDelete: Bool = false, analyticsContext: AnalyticsContext? = nil) {
+        let inherited = message?.containsSecretMedia == true ? Analytics.shared.unresolvedContext() : (analyticsContext ?? Analytics.shared.unresolvedContext())
+        let origin = Analytics.shared.captureContext(engine: context.engine, peerId: message?.id.peerId ?? peer.id, inherited: inherited).restricting(peerId: peer.id)
+        let presentation = origin.beginPresentation()
+        defer { presentation.end() }
+        self.analyticsContext = origin
         self.reaction = reaction
         self.peer = peer
         self.context = context
@@ -831,12 +866,15 @@ public final class ReactionPeerMenu : ContextMenuItem {
             let menu = ContextMenu()
             menu.addItem(ContextMenuItem(strings().messageContextDelete, handler: { [weak self] in
                 guard let self, let message = self.message else { return }
+                let origin = Analytics.shared.captureContext(engine: context.engine, peerId: message.id.peerId, inherited: self.analyticsContext).restricting(peerId: self.peer.id)
+                let presentation = origin.beginPresentation()
+                defer { presentation.end() }
                 let chatPeerId = message.id.peerId
                 guard let channel = message.peers[chatPeerId] as? TelegramChannel else {
                     return
                 }
                 let reactionPeer = self.peer
-                showModal(with: DeleteGroupMessagesController(context: context, channel: channel, messages: [message], allPeers: Set([reactionPeer.id]), reactionAuthor: reactionPeer.id, onComplete: {}), for: context.window)
+                showModal(with: DeleteGroupMessagesController(context: context, channel: channel, messages: [message], allPeers: Set([reactionPeer.id]), reactionAuthor: reactionPeer.id, analyticsContext: origin, onComplete: {}), for: context.window)
             }, itemMode: .destruct, itemImage: MenuAnimation.menu_delete.value))
             self.submenu = menu
         }
@@ -900,50 +938,21 @@ public final class ReactionPeerMenu : ContextMenuItem {
                 }
             }))
         } else if TelegramUtilsHooks.shared.peerIsForum(peer) || (peer.isAdmin && peer.isMonoForum), case let .forward(callback, _) = destination {
-            let signal = ChatHistoryUIHooks.shared.forumChatListItems(peer.id, context.account) |> take(1) |> deliverOnMainQueue
-            disposable.set(signal.start(next: { [weak self] list in
-                let menu = ContextMenu()
-                let topics = forwardMenuTopicItems(list, canSend: { item in
-                    return peer.canSendMessage(true, media: message?.media.first, threadData: item.threadData)
-                })
-                for item in topics {
-                    if let threadData = item.threadData {
-                        let threadId: Int64?
-                        switch item.id {
-                        case let .forum(id):
-                            threadId = id
-                        default:
-                            threadId = nil
-                        }
-                        let menuItem = ContextMenuItem(threadData.info.title, handler: {
-                            if let threadId = threadId {
-                                callback(peer.id, threadId)
-                            }
-                        })
-                        
-                        let threadMesssage = item.messages.first
-                        
-                        if let threadId, peer.isMonoForum, let peer = threadMesssage?.peers[PeerId(threadId)] {
-                            ContextMenuItem.makeItemAvatar(menuItem, account: context.account, peer: peer, source: .peer(peer, peer.smallProfileImage, peer.namePeerColor, TelegramUtilsHooks.shared.peerLetters(peer), threadMesssage?._asMessage(), nil))
-                            menuItem.title = peer.displayTitle
-                        } else {
-                            ContextMenuItem.makeItemAvatar(menuItem, account: context.account, peer: peer, source: .topic(threadData.info, threadId == 1))
-                            menuItem.title = threadData.info.title
-                        }
-                        
-                        switch destination {
-                        case .forward:
-                            ContextMenuItem.checkPremiumRequired(menuItem, context: context, peer: peer)
-                        default:
-                            break
-                        }
-                        menu.addItem(menuItem)
+            let menu = ContextMenu()
+            self.submenu = menu
+            menu.asyncItemsProvider = { [weak self] completion in
+                let signal = ChatHistoryUIHooks.shared.forumChatListItems(peer.id, context.account) |> take(1) |> deliverOnMainQueue
+                return signal.start(next: { list in
+                    let topics = forwardMenuTopicItems(list, canSend: { item in
+                        peer.canSendMessage(true, media: message?.media.first, threadData: item.threadData)
+                    })
+                    if topics.isEmpty, let self {
+                        self.submenu = nil
+                        self.redraw?()
                     }
-                }
-                if !menu.items.isEmpty {
-                    self?.submenu = menu
-                }
-            }))
+                    completion(topics.compactMap { forwardTopicMenuItem($0, in: peer, context: context, callback: callback) })
+                })
+            }
         }
         ContextMenuItem.makeItemAvatar(self, account: context.account, peer: peer, source: .peer(peer, peer.smallProfileImage, peer.namePeerColor, TelegramUtilsHooks.shared.peerLetters(peer), message, nil), selfAsSaved: selfSaved)
         if !peer.isCommunity {

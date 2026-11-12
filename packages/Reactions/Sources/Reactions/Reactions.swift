@@ -17,9 +17,9 @@ public final class Reactions {
     private let reactable = DisposableDict<MessageId>()
     
     public struct Interactive {
-        public let messageId: MessageId
-        public let reaction: MessageReaction.Reaction?
+        fileprivate let createdAt: TimeInterval
         public let rect: NSRect?
+        public let isLarge: Bool
     }
     public struct InteractiveStatus {
         public let fileId: Int64?
@@ -61,9 +61,36 @@ public final class Reactions {
 
     public var isPremium: Bool = false
     
-    private let _isInteractive = Atomic<Interactive?>(value: nil)
-    public var interactive: Interactive? {
-        return _isInteractive.swap(nil)
+    private struct InteractiveKey: Hashable {
+        let messageId: MessageId
+        let reaction: MessageReaction.Reaction
+    }
+
+    private let pendingInteractive = Atomic<[InteractiveKey: Interactive]>(value: [:])
+    private let interactiveLifetime: TimeInterval = 30
+
+    private func recordInteractive(_ messageId: MessageId, reaction: MessageReaction.Reaction, fromRect: NSRect?, isLarge: Bool) {
+        let key = InteractiveKey(messageId: messageId, reaction: reaction)
+        let now = ProcessInfo.processInfo.systemUptime
+        _ = pendingInteractive.modify { pending in
+            var pending = pending.filter { now - $0.value.createdAt < interactiveLifetime }
+            pending[key] = Interactive(createdAt: now, rect: fromRect, isLarge: isLarge)
+            return pending
+        }
+    }
+
+    public func takeInteractive(_ messageId: MessageId, reaction: MessageReaction.Reaction) -> Interactive? {
+        let key = InteractiveKey(messageId: messageId, reaction: reaction)
+        var interactive: Interactive?
+        _ = pendingInteractive.modify { pending in
+            var pending = pending
+            interactive = pending.removeValue(forKey: key)
+            return pending
+        }
+        guard let interactive, ProcessInfo.processInfo.systemUptime - interactive.createdAt < interactiveLifetime else {
+            return nil
+        }
+        return interactive
     }
     
     private let _interactiveStatus = Atomic<InteractiveStatus?>(value: nil)
@@ -110,16 +137,20 @@ public final class Reactions {
         messageEffectsState.set(((engine.stickers.availableMessageEffects() |> then(.complete() |> suspendAwareDelay(1 * 60 * 60, queue: .concurrentDefaultQueue()))) |> restart) |> distinctUntilChanged)
     }
     
-    public func react(_ messageId: MessageId, values: [UpdateMessageReaction], fromRect: NSRect? = nil, storeAsRecentlyUsed: Bool = false) {
-        _ = _isInteractive.swap(.init(messageId: messageId, reaction: nil, rect: fromRect))
-        reactable.set(updateMessageReactionsInteractively(account: self.engine.account, messageIds: [messageId], reactions: values, isLarge: false, storeAsRecentlyUsed: storeAsRecentlyUsed).start(), forKey: messageId)
+    public func react(_ messageId: MessageId, reaction: MessageReaction.Reaction, values: [UpdateMessageReaction], fromRect: NSRect? = nil, storeAsRecentlyUsed: Bool = false, isLarge: Bool = false) {
+        if values.contains(where: { $0.reaction == reaction }) {
+            recordInteractive(messageId, reaction: reaction, fromRect: fromRect, isLarge: isLarge)
+        } else {
+            _ = takeInteractive(messageId, reaction: reaction)
+        }
+        reactable.set(updateMessageReactionsInteractively(account: self.engine.account, messageIds: [messageId], reactions: values, isLarge: isLarge, storeAsRecentlyUsed: storeAsRecentlyUsed).start(), forKey: messageId)
     }
     
     public func sendStarsReaction(_ messageId: MessageId, count: Int, privacy: TelegramPaidReactionPrivacy = .default, fromRect: NSRect? = nil) {
         if let signal = checkStarsAmount?(count, messageId.peerId) {
             _ = signal.start(next: { [weak self] value, starsAllowed in
                 if value && starsAllowed {
-                    _ = self?._isInteractive.swap(.init(messageId: messageId, reaction: .stars, rect: fromRect))
+                    self?.recordInteractive(messageId, reaction: .stars, fromRect: fromRect, isLarge: false)
                     _ = self?.engine.messages.sendStarsReaction(id: messageId, count: count, privacy: privacy).startStandalone()
                     self?.successStarsAmount?(.init(value: -Int64(count), nanos: 0))
                     self?.sentStarReactions?(messageId, count)

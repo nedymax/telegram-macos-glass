@@ -15,6 +15,7 @@ import TelegramContext
 import TelegramTheme
 import TelegramUtils
 import TelegramMediaUtils
+import AppAnalytics
 
 public enum PeerMediaSharedEntryStableId : Hashable {
     case messageId(MessageId)
@@ -404,9 +405,13 @@ open class PeerMediaListController<Context: AccountContextProtocol>: TableViewCo
     
     public func load(with tagMask:MessageTags) -> Void {
         if tagMask.contains(.file) {
+            analyticsScreen = .peerInfoMediaFiles
         } else if tagMask.contains(.webPage) {
+            analyticsScreen = .peerInfoMediaLinks
         } else if tagMask.contains(.music) {
+            analyticsScreen = .peerInfoMediaMusic
         } else if tagMask.contains(.voiceOrInstantVideo) {
+            analyticsScreen = .peerInfoMediaVoice
         }
      
         
@@ -502,6 +507,9 @@ open class PeerMediaListController<Context: AccountContextProtocol>: TableViewCo
                 let interactions = ChatMediaLayoutParameters(presentation: .Empty, media: media)
                 interactions.showMedia = { message in
                     self?.chatInteraction.focusMessageId(nil, .init(messageId: message.id, string: nil), .none(nil))
+                }
+                interactions.showMessage = { message in
+                    self?.chatInteraction.focusMessageId(nil, .init(messageId: message.id, string: nil), .center(id: 0, innerId: nil, animated: false, focus: .init(focus: true), inset: 0))
                 }
                 showChatGallery(context: context, message: message, self?.genericView, interactions, type: type, chatMode: mode, chatLocation: chatLocation, contextHolder: contextHolder, cachedPeerData: self?.chatInteraction.presentation.cachedData)
             }

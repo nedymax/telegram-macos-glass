@@ -83,6 +83,7 @@ final class QrStudioToastView: View {
         self.contentView.layer?.masksToBounds = false
 
         self.iconView.isEventLess = true
+        self.iconView.isAccessibilityDecorative = true
         self.iconView.contentGravity = .center
         self.contentView.addSubview(self.iconView)
 
@@ -102,6 +103,7 @@ final class QrStudioToastView: View {
         self.contentView.addSubview(self.progressView)
 
         self.cancelIconView.isEventLess = true
+        self.cancelIconView.isAccessibilityDecorative = true
         self.cancelIconView.image = NSImage(named: "Icon_StoryClose")?.precomposed(NSColor.white)
         self.cancelIconView.contentGravity = .resizeAspect
         self.cancelIconView.isHidden = true
@@ -134,6 +136,8 @@ final class QrStudioToastView: View {
             return "menu_copy_link"
         case "download":
             return "menu_save_as"
+        case "image":
+            return "menu_copy_media"
         case "check":
             return "menu_check_selected"
         default:

@@ -1,4 +1,5 @@
 import Cocoa
+import AppAnalytics
 import TelegramCore
 import CurrencyFormat
 import SwiftSignalKit
@@ -322,6 +323,8 @@ class UserInfoArguments<Context: AccountContextProtocol> : PeerInfoArguments<Con
                                         showModalText(for: context.window, text: strings().botVerificationAdded(peer._asPeer().displayTitle))
                                     }
                                 })
+                            }, onDeinit: {
+                                
                             })
                         }
                     })
@@ -350,15 +353,26 @@ class UserInfoArguments<Context: AccountContextProtocol> : PeerInfoArguments<Con
     func shareContact() {
         ownContactShareAction.reset()
         let context = self.context
+        let origin = captureAnalyticsContext()
+        let presentation = origin.beginPresentation()
+        defer { presentation.end() }
+        let journey = AnalyticsShareJourney(context: origin, entry: .profileContact, source: .peerInfo)
         let peer = getPeerView(peerId: effectivePeerId, postbox: context.account.postbox) |> take(1) |> deliverOnMainQueue
-        shareDisposable.set((peer).start(next: { [weak self] peer in
+        shareDisposable.set(origin.preservingPresentation(peer).start(next: { [weak self] peer in
             guard let context = self?.context else {
+                journey.discard()
                 return
             }
             if let peer = peer as? TelegramUser {
-                let controller = ShareModalController(ShareContactObject(context, user: peer))
+                let origin = origin.restricting(peerId: peer.id)
+                let presentation = origin.beginPresentation()
+                defer { presentation.end() }
+                journey.sourceReady()
+                let controller = ShareModalController(ShareContactObject(context, user: peer), analyticsContext: origin)
+                controller.setAnalyticsShareJourney(journey)
                 showModal(with: controller, for: context.window)
             } else {
+                journey.sourceUnavailable()
             }
         }))
     }
@@ -420,7 +434,7 @@ class UserInfoArguments<Context: AccountContextProtocol> : PeerInfoArguments<Con
     
     func shareMyInfo() {
         shareDisposable.set(nil)
-        ownContactShareAction.start(context: context, peerId: peerId)
+        ownContactShareAction.start(context: context, peerId: peerId, analyticsContext: captureAnalyticsContext())
     }
     
     func addContact() {
@@ -680,6 +694,13 @@ class UserInfoArguments<Context: AccountContextProtocol> : PeerInfoArguments<Con
         pullNavigation()?.back()
     }
     
+    func reportUser(_ user: TelegramUser) {
+        guard let peerId = peerInfoUserReportTarget(user, accountPeerId: context.peerId) else {
+            return
+        }
+        reportComplicated(context: context, subject: .peer(peerId), title: strings().reportComplicatedPeerTitle(user.displayTitle))
+    }
+
     func reportBot() {
         let peerId = self.peerId
         let context = self.context
@@ -2470,7 +2491,7 @@ enum UserInfoEntry<Context: AccountContextProtocol>: PeerInfoEntry {
 
             return GeneralTextRowItem(initialSize, stableId: stableId.hashValue, text: .attributed(attr), viewType: viewType, context: arguments.context)
         case let .birthday(_, text, canBirth, viewType):
-            return  TextAndLabelItem(initialSize, stableId:stableId.hashValue, label: strings().peerInfoBirthday, copyMenuText: strings().textCopyLabelBio, text:text, context: arguments.context, viewType: viewType, gift: canBirth ? arguments.giftBirthday : nil)
+            return  TextAndLabelItem(initialSize, stableId:stableId.hashValue, label: strings().peerInfoBirthday, copyMenuText: strings().contextCopy, text:text, context: arguments.context, viewType: viewType, gift: canBirth ? arguments.giftBirthday : nil)
         case let .phoneNumber(_, _, value, canCopy, viewType):
             var items:[ContextMenuItem] = []
             if value.number.hasPrefix("888") {

@@ -20,6 +20,7 @@ import InputDataUI
 import ChatModeTypes
 import Cocoa
 import InlineStickerLayer
+import AppAnalytics
 import ObjcUtils
 
 
@@ -178,8 +179,13 @@ private func segments(_ emoji: [EmojiSegment : [String]], skinModifiers: [EmojiS
     var segments:[EmojiSegment:[[NSAttributedString]]] = [:]
     for (key,list) in emoji {
         let items = list.map { emoji -> NSAttributedString in
+            if key == .Recent {
+                let attributed = NSMutableAttributedString(attributedString: .initialize(string: emoji, font: .normal(26.0)))
+                attributed.addAttribute(recentEmojiSourceKey, value: emoji, range: NSRange(location: 0, length: attributed.length))
+                return attributed
+            }
             let unmodified = emoji.emojiUnmodified
-            let value = skinModifiers.first(where: { $0.emoji == unmodified }).map { unmodified.emojiWithSkinModifier($0.modifier) } ?? emoji
+            let value = skinModifiers.first(where: { $0.emoji == unmodified && unmodified.canHaveSkinToneModifier }).map { unmodified.emojiWithSkinModifier($0.modifier) } ?? emoji
             return .initialize(string: value.normalizedEmoji, font: .normal(26.0))
         }
         let lines = stride(from: 0, to: items.count, by: 8).map {
@@ -208,6 +214,9 @@ private final class Arguments {
     let clearRecent:()->Void
     let selectEmojiCategory:(EmojiSearchCategories.Group?)->Void
     var staticEmojiFilter: ((String) -> Bool)?
+    var sendLarge: (() -> ((StickerPackItem, NSRect?) -> Void)?)?
+    var drag: ((StickerPackItem, EntertainmentStickerDrag) -> Bool)?
+    var dragEmoji: ((String, EntertainmentStickerDrag) -> Bool)?
     init(context: any AccountContextProtocol, mode: EmojiesController.Mode, ignorePremium: Bool, send:@escaping(StickerPackItem, StickerPackCollectionInfo?, Int32?, NSRect?)->Void, sendEmoji:@escaping(String, NSRect)->Void, selectEmojiSegment:@escaping(EmojiSegment)->Void, viewSet:@escaping(StickerPackCollectionInfo)->Void, showAllItems:@escaping(Int64)->Void, openPremium:@escaping()->Void, installPack:@escaping(StickerPackCollectionInfo,  [StickerPackItem])->Void, clearRecent:@escaping()->Void, selectEmojiCategory:@escaping(EmojiSearchCategories.Group?)->Void) {
         self.context = context
         self.send = send
@@ -514,9 +523,12 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
         }
     }
     let seg = segments(e, skinModifiers: state.recent.skinModifiers)
-    let seglist = seg.map { (key,_) -> EmojiSegment in
+    var seglist = seg.map { (key,_) -> EmojiSegment in
         return key
     }.sorted(by: <)
+    if !seglist.contains(.Recent) {
+        seglist.insert(.Recent, at: 0)
+    }
     
     
     let isPremium = state.peer?.peer.isPremium == true || arguments.ignorePremium
@@ -566,7 +578,7 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
                 index += 1
                 
                 entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: .init("search_e"), equatable: InputDataEquatable(search), comparable: nil, item: { initialSize, stableId in
-                    return EBlockItem(initialSize, stableId: stableId, attrLines: lines, segment: .Recent, account: arguments.context.account, selectHandler: arguments.sendEmoji)
+                    return EBlockItem(initialSize, stableId: stableId, attrLines: lines, segment: .Recent, account: arguments.context.account, selectHandler: arguments.sendEmoji, dragHandler: arguments.dragEmoji)
                 }))
                 index += 1
                 
@@ -619,7 +631,7 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
                 for chunk in chunks {
                     let tuple = Tuple(items: chunk, selected: emojiesRowSelection(state.selectedItems, in: chunk), color: state.color)
                     entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: .init("search_ae_\(string)"), equatable: InputDataEquatable(tuple), comparable: nil, item: { initialSize, stableId in
-                        return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: true, installed: false, info: nil, items: tuple.items, mode: arguments.mode.itemMode, selectedItems: tuple.selected, color: tuple.color, callback: arguments.send, ignorePremium: arguments.ignorePremium)
+                        return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: true, installed: false, info: nil, items: tuple.items, mode: arguments.mode.itemMode, selectedItems: tuple.selected, color: tuple.color, callback: arguments.send, largeCallback: arguments.sendLarge, drag: arguments.drag, ignorePremium: arguments.ignorePremium)
                     }))
                     index += 1
                     string += "a"
@@ -720,7 +732,7 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
                 }
                 let tuple = Tuple(items: reactionsPopular, selected: emojiesRowSelection(state.selectedItems, in: reactionsPopular), color: state.color)
                 entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_emoji_block(EmojiSegment.RecentAnimated.rawValue), equatable: InputDataEquatable(tuple), comparable: nil, item: { initialSize, stableId in
-                    return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: true, installed: true, info: nil, items: reactionsPopular, mode: arguments.mode.itemMode, selectedItems: tuple.selected, color: tuple.color, callback: arguments.send, ignorePremium: arguments.ignorePremium)
+                    return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: true, installed: true, info: nil, items: reactionsPopular, mode: arguments.mode.itemMode, selectedItems: tuple.selected, color: tuple.color, callback: arguments.send, largeCallback: arguments.sendLarge, drag: arguments.drag, ignorePremium: arguments.ignorePremium)
                 }))
                 index += 1
                 
@@ -744,7 +756,7 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
                     let tuple = Tuple(items: reactionsRecent, selected: emojiesRowSelection(state.selectedItems, in: reactionsRecent), color: state.color)
                     
                     entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_emoji_block(-1), equatable: InputDataEquatable(tuple), comparable: nil, item: { initialSize, stableId in
-                        return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: true, installed: true, info: nil, items: reactionsRecent, mode: arguments.mode.itemMode, selectedItems: tuple.selected, color: tuple.color, callback: arguments.send, ignorePremium: arguments.ignorePremium)
+                        return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: true, installed: true, info: nil, items: reactionsRecent, mode: arguments.mode.itemMode, selectedItems: tuple.selected, color: tuple.color, callback: arguments.send, largeCallback: arguments.sendLarge, drag: arguments.drag, ignorePremium: arguments.ignorePremium)
                     }))
                     index += 1
                 }
@@ -800,7 +812,7 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
                 let tuple = Tuple(items: shownItems, revealed: state.revealed[-1] ?? false, selected: emojiesRowSelection(state.selectedItems, in: shownItems), color: state.color)
                 
                 entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_emoji_block(EmojiSegment.RecentAnimated.rawValue), equatable: InputDataEquatable(tuple), comparable: nil, item: { initialSize, stableId in
-                    return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: tuple.revealed, installed: true, info: nil, items: tuple.items, mode: arguments.mode.itemMode, selectedItems: tuple.selected, color: tuple.color, callback: arguments.send, showAllItems: {
+                    return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: tuple.revealed, installed: true, info: nil, items: tuple.items, mode: arguments.mode.itemMode, selectedItems: tuple.selected, color: tuple.color, callback: arguments.send, largeCallback: arguments.sendLarge, drag: arguments.drag, showAllItems: {
                         arguments.showAllItems(-1)
                     }, ignorePremium: arguments.ignorePremium)
                 }))
@@ -811,13 +823,25 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
             let hasAnimatedRecent = arguments.mode == .emoji || arguments.mode == .stories || arguments.mode == .forumTopic || arguments.mode == .selectAvatar || arguments.mode == .channelReactions
             
             if key == .Recent, !recentAnimated.isEmpty, hasAnimatedRecent {
+                let removeRecent: ((MediaId) -> Void)?
+                if arguments.mode == .emoji || arguments.mode == .stories {
+                    removeRecent = { id in
+                        _ = removeAnimatedUsedEmoji(id, postbox: arguments.context.account.postbox).startStandalone()
+                    }
+                } else {
+                    removeRecent = nil
+                }
                 let tuple = Tuple(items: recentAnimated, selected: emojiesRowSelection(state.selectedItems, in: recentAnimated), color: state.color)
                 entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_emoji_block(EmojiSegment.RecentAnimated.rawValue), equatable: InputDataEquatable(tuple), comparable: nil, item: { initialSize, stableId in
-                    return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: true, installed: true, info: nil, items: recentAnimated, mode: arguments.mode.itemMode, selectedItems: tuple.selected, color: tuple.color, callback: arguments.send, ignorePremium: arguments.ignorePremium)
+                    return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: true, installed: true, info: nil, items: recentAnimated, mode: arguments.mode.itemMode, selectedItems: tuple.selected, color: tuple.color, callback: arguments.send, largeCallback: arguments.sendLarge, drag: arguments.drag, ignorePremium: arguments.ignorePremium, removeRecent: removeRecent)
                 }))
                 index += 1
             }
             
+            guard let lines = seg[key], !lines.isEmpty else {
+                continue
+            }
+
             if key != .Recent || !recentAnimated.isEmpty, arguments.mode == .emoji || arguments.mode == .stories {
                 entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_emoji_segment(key.rawValue), equatable: InputDataEquatable(key), comparable: nil, item: { initialSize, stableId in
                     return EStickItem(initialSize, stableId: stableId, segmentName:key.localizedString)
@@ -833,7 +857,6 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
                     let selectedOrders: [String: Int]
                     let selectionColor: NSColor?
                 }
-                let lines = seg[key]!
                 var selectedOrders: [String: Int] = [:]
                 if state.selectedItems.contains(where: { $0.index != nil }) {
                     let segmentKeys = Set(lines.flatMap { $0.map { emojiSelectionKey($0.string) } })
@@ -846,9 +869,17 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
                         }
                     }
                 }
+                let removeRecent: ((String) -> Void)?
+                if key == .Recent {
+                    removeRecent = { emoji in
+                        _ = removeUsedEmoji(emoji, postbox: arguments.context.account.postbox).startStandalone()
+                    }
+                } else {
+                    removeRecent = nil
+                }
                 let tuple = Tuple(key: key, lines: lines, selectedOrders: selectedOrders, selectionColor: state.color ?? theme.colors.text)
                 entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_emoji_block(key.rawValue), equatable: InputDataEquatable(tuple), comparable: nil, item: { initialSize, stableId in
-                    return EBlockItem(initialSize, stableId: stableId, attrLines: tuple.lines, segment: tuple.key, account: arguments.context.account, selectHandler: arguments.sendEmoji, selectedOrders: tuple.selectedOrders, selectionColor: tuple.selectionColor)
+                    return EBlockItem(initialSize, stableId: stableId, attrLines: tuple.lines, segment: tuple.key, account: arguments.context.account, selectHandler: arguments.sendEmoji, dragHandler: arguments.dragEmoji, selectedOrders: tuple.selectedOrders, selectionColor: tuple.selectionColor, removeRecent: removeRecent)
                 }))
                 index += 1
             }
@@ -870,7 +901,7 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
         index += 1
         
         entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: .init("collectibles"), equatable: InputDataEquatable(state.uniqueStarGiftsItems), comparable: nil, item: { initialSize, stableId in
-            return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: true, installed: true, info: nil, items: items, mode: arguments.mode.itemMode, selectedItems: [], color: theme.colors.text, callback: arguments.send, openPremium: arguments.openPremium, installPack: arguments.installPack, ignorePremium: arguments.ignorePremium, uniqueGifts: state.uniqueStarGiftsItems.map(\.starGift))
+            return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: true, installed: true, info: nil, items: items, mode: arguments.mode.itemMode, selectedItems: [], color: theme.colors.text, callback: arguments.send, largeCallback: arguments.sendLarge, drag: arguments.drag, openPremium: arguments.openPremium, installPack: arguments.installPack, ignorePremium: arguments.ignorePremium, uniqueGifts: state.uniqueStarGiftsItems.map(\.starGift))
         }))
         
         
@@ -914,7 +945,7 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
                 
         for tuple in tuples {
             entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_section(section.info.id.id, tuple.index), equatable: InputDataEquatable(tuple), comparable: nil, item: { initialSize, stableId in
-                return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: tuple.revealed, installed: tuple.section.installed, info: tuple.index == "a" ? section.info : nil, items: tuple.items, isBig: tuple.section.isBig, groupEmojiPack: tuple.section.groupEmojiPack, mode: arguments.mode.itemMode, selectedItems: tuple.selectedItems, color: tuple.color, callback: arguments.send, viewSet: { info in
+                return EmojiesSectionRowItem(initialSize, stableId: stableId, context: arguments.context, revealed: tuple.revealed, installed: tuple.section.installed, info: tuple.index == "a" ? section.info : nil, items: tuple.items, isBig: tuple.section.isBig, groupEmojiPack: tuple.section.groupEmojiPack, mode: arguments.mode.itemMode, selectedItems: tuple.selectedItems, color: tuple.color, callback: arguments.send, largeCallback: arguments.sendLarge, drag: arguments.drag, viewSet: { info in
                     arguments.viewSet(info)
                 }, showAllItems: {
                     arguments.showAllItems(section.info.id.id)
@@ -1657,7 +1688,7 @@ public final class AnimatedEmojiesView : Control {
 //        tableView.scrollerInsets = mode == .reactions ? .init() : .init(left: 0, right: 0, top: 46, bottom: 50)
 
 //        searchContainer.isHidden = mode == .reactions
-        tableView.scrollerInsets = .init(left: 0, right: 0, top: 46, bottom: 50)
+        tableView.scrollerInsets = .init(left: 0, right: 0, top: 46, bottom: tableView.additionalBottomScrollerInset(for: 50))
         
         updateSelectionState(animated: packs.animated)
         updateLocalizationAndTheme(theme: presentation ?? theme)
@@ -2067,6 +2098,7 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
     private var presentation: TelegramPresentationTheme?
     private let selectedItems: [EmojiesSectionRowItem.SelectedItem]
     private let ignorePremium: Bool
+    private let orderedTags: [RecentReactionItem]?
     
     public var staticEmojiFilter: ((String) -> Bool)?
 
@@ -2115,13 +2147,24 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
         })
     }
 
-    public init(_ context: Context, mode: Mode = .emoji, selectedItems: [EmojiesSectionRowItem.SelectedItem] = [], presentation: TelegramPresentationTheme? = nil, color: NSColor? = nil, ignorePremium: Bool = false) {
+    public init(_ context: Context, mode: Mode = .emoji, selectedItems: [EmojiesSectionRowItem.SelectedItem] = [], presentation: TelegramPresentationTheme? = nil, color: NSColor? = nil, ignorePremium: Bool = false, orderedTags: [RecentReactionItem]? = nil) {
+        self.orderedTags = orderedTags
         self.mode = mode
         self.presentation = presentation
         self.selectedItems = selectedItems
         self.color = color
         self.ignorePremium = ignorePremium
         super.init(context)
+        switch mode {
+        case .stories:
+            analyticsScreen = AnalyticsScreen.chatInputEmoji
+        case .channelStatus:
+            analyticsScreen = AnalyticsScreen.premiumEmojiStatus
+        case .backgroundIcon:
+            analyticsScreen = AnalyticsScreen.appEmojiPicker
+        default:
+            break
+        }
         _frameRect = NSMakeRect(0, 0, 350, 300)
         self.bar = .init(height: 0)
 
@@ -2308,6 +2351,23 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
             self?.updateSearchState(searchState)
         })
         arguments.staticEmojiFilter = self.staticEmojiFilter
+        arguments.sendLarge = { [weak self] in
+            return self?.interactions?.sendLargeReaction
+        }
+        arguments.drag = { [weak self] item, drag in
+            guard let dragItem = self?.interactions?.dragItem, context.isPremium || !item.file.isPremiumEmoji else {
+                return false
+            }
+            dragItem(.file(item.file._parse()), nil, drag)
+            return true
+        }
+        arguments.dragEmoji = { [weak self] emoji, drag in
+            guard let dragItem = self?.interactions?.dragItem else {
+                return false
+            }
+            dragItem(.emoji(emoji), nil, drag)
+            return true
+        }
         
         genericView.arguments = arguments
         
@@ -2613,6 +2673,7 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
                 }
             }))
         default:
+            let orderedTags = self.orderedTags
             let signal = combineLatest(queue: prepareQueue, emojies, featured, peer, search, reactions, recentUsedEmoji(postbox: context.account.postbox), reactionSettings, iconStatusEmoji, groupEmojiPack, forumTopic, searchCategories, context.reactions.stateValue, onStage.get()) |> filter { $0.12 }
             actionsDisposable.add(signal.start(next: { view, featured, peer, search, reactions, recentEmoji, reactionSettings, iconStatusEmoji, groupEmojiPack, forumTopic, searchCategories, availableReactions, _ in
                 
@@ -2819,8 +2880,8 @@ public final class EmojiesController<Context: AccountContextProtocol> : Telegram
                     current.reactions = reactions
                     current.recent = recentEmoji
                     current.uniqueStarGiftsItems = uniqueStarGiftsItems
-                    current.topReactionsItems = mode == .defaultTags ? defaultTagReactionsItems : topReactionsItems
-                    current.recentReactionsItems = mode == .defaultTags ? defaultTagReactionsItems : recentReactionsItems
+                    current.topReactionsItems = orderedTags ?? (mode == .defaultTags ? defaultTagReactionsItems : topReactionsItems)
+                    current.recentReactionsItems = orderedTags ?? (mode == .defaultTags ? defaultTagReactionsItems : recentReactionsItems)
                     current.featuredBackgroundIconEmojiItems = featuredBackgroundIconEmojiItems
                     current.featuredChannelStatusEmojiItems = featuredChannelStatusEmojiItems
                     current.reactionSettings = reactionSettings

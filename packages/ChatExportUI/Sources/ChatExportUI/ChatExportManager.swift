@@ -78,6 +78,50 @@ public func currentExportThemeColors() -> ExportThemeColors {
     )
 }
 
+public func chatExportIsRestricted(peer: Peer, cachedData: CachedPeerData?) -> Bool {
+    if peer is TelegramSecretChat || peer.isCopyProtectionEnabled {
+        return true
+    }
+    if let cachedData = cachedData as? CachedUserData {
+        return cachedData.flags.contains(.copyProtectionEnabled) || cachedData.flags.contains(.myCopyProtectionEnabled)
+    }
+    return false
+}
+
+private let chatExportUnverifiedText = "Could not check this chat"
+
+private func chatExportVerifiedRestriction(context: any AccountContextProtocol, peerId: PeerId) -> Signal<Bool?, NoError> {
+    let refreshed: Signal<Bool, NoError>
+    if peerId.namespace == Namespaces.Peer.CloudUser, peerId != context.peerId {
+        refreshed = context.engine.peers.fetchAndUpdateCachedPeerData(peerId: peerId)
+    } else {
+        refreshed = .single(true)
+    }
+    return refreshed
+    |> take(1)
+    |> mapToSignal { isFresh -> Signal<Bool?, NoError> in
+        guard isFresh else {
+            return .single(nil)
+        }
+        return context.account.postbox.transaction { transaction -> Bool? in
+            guard let peer = transaction.getPeer(peerId) else {
+                return nil
+            }
+            return chatExportIsRestricted(peer: peer, cachedData: transaction.getPeerCachedData(peerId: peerId))
+        }
+    }
+}
+
+private func chatExportSkipsMessage(_ message: Message) -> Bool {
+    if message.containsSecretMedia || message.isCopyProtected() {
+        return true
+    }
+    if message.media.first is TelegramMediaAction, let replyAttribute = message.replyAttribute, let target = message.associatedMessages[replyAttribute.messageId] {
+        return target.containsSecretMedia || target.isCopyProtected()
+    }
+    return false
+}
+
 public func exportChatToHtml(context: any AccountContextProtocol, peerId: PeerId, peerTitle: String, settings: ChatExportSettings) -> Signal<ChatExportUpdate, NoError> {
     return Signal { subscriber in
         let queue = Queue(name: "org.telegram.chatExport")
@@ -163,7 +207,15 @@ private final class ChatExportRun {
 
     // MARK: - Driver
 
-    public func run() {
+    @discardableResult
+    public func run(isVerified: Bool = false) -> Bool {
+        if !isVerified {
+            let isRestricted = blockingFirst(chatExportVerifiedRestriction(context: context, peerId: peerId), timeout: 30.0) ?? nil
+            if isRestricted != false {
+                emit(.failed(isRestricted == true ? strings().copyRestrictedChat : chatExportUnverifiedText))
+                return false
+            }
+        }
         let baseURL = outputURL ?? destinationURL()
         chatBaseURL = baseURL
         if format.includesHtml {
@@ -173,14 +225,14 @@ private final class ChatExportRun {
                 try writer.begin()
             } catch {
                 emit(.failed("Could not create export folder"))
-                return
+                return false
             }
         } else {
             do {
                 try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true, attributes: nil)
             } catch {
                 emit(.failed("Could not create export folder"))
-                return
+                return false
             }
         }
 
@@ -206,7 +258,11 @@ private final class ChatExportRun {
                 break
             }
             guard let view = blockingFirst(loadPage(anchor: anchor, afterIndex: afterIndex, holder: holder, input: input), timeout: 90.0) else {
-                break
+                if isCancelled {
+                    return false
+                }
+                emit(.failed("Could not load message history"))
+                return false
             }
             if settings.fromTimestamp == nil, settings.untilTimestamp == nil, let pageTotal = view.entries.compactMap({ $0.location?.count }).max(), pageTotal > totalCount {
                 totalCount = pageTotal
@@ -234,7 +290,15 @@ private final class ChatExportRun {
                     reachedRangeEnd = true
                     break
                 }
-                appendMessage(entry.message)
+                if chatExportSkipsMessage(entry.message) {
+                    continue
+                }
+                do {
+                    try appendMessage(entry.message)
+                } catch {
+                    emit(.failed("Could not write export files: \(error.localizedDescription)"))
+                    return false
+                }
                 processedCount += 1
                 if processedCount % 15 == 0 {
                     emitProgress()
@@ -250,7 +314,8 @@ private final class ChatExportRun {
                 break
             }
             if let prev = previousLast, prev == last.index {
-                break
+                emit(.failed("Message history pagination did not advance"))
+                return false
             }
             previousLast = last.index
             anchor = .message(last.index)
@@ -258,16 +323,22 @@ private final class ChatExportRun {
         }
 
         if format.includesHtml {
-            resultEntryURL = writer.finish()
+            do {
+                resultEntryURL = try writer.finish()
+            } catch {
+                emit(.failed("Could not write export files: \(error.localizedDescription)"))
+                return false
+            }
         }
         resultMessageCount = processedCount
 
         if isCancelled {
-            return
+            return false
         }
         mediaValue = nil
         emit(.progress(processed: processedCount, total: max(totalCount, processedCount), stage: "Finished", media: nil))
         emit(.completed(resultEntryURL ?? chatBaseURL))
+        return true
     }
 
     private func emitProgress() {
@@ -321,12 +392,12 @@ private final class ChatExportRun {
 
     // MARK: - Message → model
 
-    private func appendMessage(_ message: Message) {
+    private func appendMessage(_ message: Message) throws {
         if message.media.first is TelegramMediaAction {
             let (text, entities, _) = serviceMessageText(message, account: context.account)
             let html = ChatExportHtmlWriter.renderEntities(text: text, entities: entities)
             if format.includesHtml, !html.isEmpty {
-                writer.appendService(id: message.id.id, html: html, timestamp: message.timestamp)
+                try writer.appendService(id: message.id.id, html: html, timestamp: message.timestamp)
             }
             if format.includesJson {
                 jsonSink?(buildServiceJson(message, actionText: text))
@@ -370,7 +441,7 @@ private final class ChatExportRun {
 
         let model = ExportMessageModel(id: message.id.id, timestamp: message.timestamp, authorId: authorPeer?.id, authorName: name, colorIndex: colorIndex, initials: initials, textHtml: textHtml, forwardedFrom: forwarded, replyToId: replyToId, viaBot: nil, editedSuffix: editedSuffix, media: media, reactions: reactions, signature: nil, avatarSrc: authorAvatarSrc(authorPeer))
         if format.includesHtml {
-            writer.appendMessage(model)
+            try writer.appendMessage(model)
         }
         if format.includesJson {
             jsonSink?(buildMessageJson(message, model: model, media: media))
@@ -952,6 +1023,11 @@ public struct FullExportSettings {
     }
 }
 
+public struct FullExportChatFailure: Equatable {
+    public let peer: PeerEquatable
+    public let reason: String
+}
+
 public struct FullExportProgress: Equatable {
     public var stage: String
     public var chatIndex: Int
@@ -961,7 +1037,8 @@ public struct FullExportProgress: Equatable {
     public var processed: Int
     public var total: Int
     public var media: ChatExportMediaProgress?
-    public init(stage: String, chatIndex: Int, chatCount: Int, currentTitle: String, currentPeer: PeerEquatable? = nil, processed: Int, total: Int, media: ChatExportMediaProgress? = nil) {
+    public var failedChats: [FullExportChatFailure]
+    public init(stage: String, chatIndex: Int, chatCount: Int, currentTitle: String, currentPeer: PeerEquatable? = nil, processed: Int, total: Int, media: ChatExportMediaProgress? = nil, failedChats: [FullExportChatFailure] = []) {
         self.stage = stage
         self.chatIndex = chatIndex
         self.chatCount = chatCount
@@ -970,12 +1047,13 @@ public struct FullExportProgress: Equatable {
         self.processed = processed
         self.total = total
         self.media = media
+        self.failedChats = failedChats
     }
 }
 
 public enum FullExportUpdate: Equatable {
     case progress(FullExportProgress)
-    case completed(URL)
+    case completed(URL, failedChats: [FullExportChatFailure])
     case failed(String)
 }
 
@@ -1054,6 +1132,7 @@ private final class FullExportRun {
     private let emit: (FullExportUpdate) -> Void
 
     private var baseURL: URL!
+    private var failedChats: [FullExportChatFailure] = []
 
     private struct PersonalInfo {
         public let user: TelegramUser?
@@ -1360,6 +1439,13 @@ private final class FullExportRun {
         var paneItems: [ExportChatPaneItem] = []
         for (index, chat) in chats.enumerated() {
             if isCancelled { break }
+            let isRestricted = blockingFirst(chatExportVerifiedRestriction(context: context, peerId: chat.peerId), timeout: 30.0) ?? nil
+            if isRestricted != false {
+                if isRestricted == nil, !isCancelled {
+                    failedChats.append(FullExportChatFailure(peer: PeerEquatable(chat.peer), reason: chatExportUnverifiedText))
+                }
+                continue
+            }
             let folder = String(format: "%04ld", index) + "_" + sanitize(chat.title)
             let chatURL = baseURL.appendingPathComponent("chats", isDirectory: true).appendingPathComponent(folder, isDirectory: true)
             let chatSettings = ChatExportSettings(mediaTypes: settings.mediaTypes, sizeLimit: settings.sizeLimit, path: settings.path)
@@ -1367,8 +1453,12 @@ private final class FullExportRun {
             let run = ChatExportRun(context: context, peerId: chat.peerId, peerTitle: chat.title, settings: chatSettings, cancelled: cancelled, outputURL: chatURL, format: settings.format, jsonSink: jsonWriter != nil ? { [weak jsonWriter] object in jsonWriter?.appendMessage(object) } : nil, jsonMediaPrefix: "chats/\(folder)/", emit: { [weak self] update in
                 self?.forwardChatProgress(update, chatIndex: index + 1, chatCount: chatCount, chat: chat)
             })
-            run.run()
+            let succeeded = run.run(isVerified: true)
             jsonWriter?.endChat()
+            if isCancelled { break }
+            if !succeeded {
+                continue
+            }
             if overview != nil, let entryURL = run.resultEntryURL {
                 let relative = "chats/\(folder)/\(entryURL.lastPathComponent)"
                 let subtitle = "\(chat.typeLabel) · \(run.resultMessageCount) messages"
@@ -1396,18 +1486,22 @@ private final class FullExportRun {
             return
         }
         let indexURL = overview != nil ? baseURL.appendingPathComponent("export_results.html") : baseURL.appendingPathComponent("result.json")
-        emit(.completed(indexURL))
+        emit(.completed(indexURL, failedChats: failedChats))
     }
 
     private func emitStage(_ stage: String, chatCount: Int) {
-        emit(.progress(FullExportProgress(stage: stage, chatIndex: 0, chatCount: chatCount, currentTitle: stage, processed: 0, total: 0, media: nil)))
+        emit(.progress(FullExportProgress(stage: stage, chatIndex: 0, chatCount: chatCount, currentTitle: stage, processed: 0, total: 0, media: nil, failedChats: failedChats)))
     }
 
     private func forwardChatProgress(_ update: ChatExportUpdate, chatIndex: Int, chatCount: Int, chat: ChatEntry) {
         switch update {
         case let .progress(processed, total, _, media):
-            emit(.progress(FullExportProgress(stage: "Chats", chatIndex: chatIndex, chatCount: chatCount, currentTitle: chat.title, currentPeer: PeerEquatable(chat.peer), processed: processed, total: total, media: media)))
-        case .completed, .failed:
+            emit(.progress(FullExportProgress(stage: "Chats", chatIndex: chatIndex, chatCount: chatCount, currentTitle: chat.title, currentPeer: PeerEquatable(chat.peer), processed: processed, total: total, media: media, failedChats: failedChats)))
+        case let .failed(reason):
+            if isCancelled { return }
+            failedChats.append(FullExportChatFailure(peer: PeerEquatable(chat.peer), reason: reason))
+            emit(.progress(FullExportProgress(stage: "Chats", chatIndex: chatIndex, chatCount: chatCount, currentTitle: chat.title, processed: 0, total: 0, failedChats: failedChats)))
+        case .completed:
             break
         }
     }

@@ -17,6 +17,7 @@ import InputTextView
 import LocalAnimations
 import Localization
 import MessageUtils
+import MessageTextUtils
 import TelegramContext
 import TelegramMediaUtils
 import TelegramTheme
@@ -60,7 +61,7 @@ private let _streamingStates = Atomic<[MessageId: WeakReference<FoldingTextLayou
 public class ChatMessageItem: ChatRowItem {
     public private(set) var messageText:NSAttributedString
     public private(set) var textLayout: FoldingTextLayout
-    private var relativeDateTimer: SwiftSignalKit.Timer?
+    private var relativeDateTimer: RelativeDateUpdateTimer?
         
     
     public var isFragmentAd: Bool {
@@ -204,7 +205,7 @@ public class ChatMessageItem: ChatRowItem {
         }
         if let webpage = webpageLayout {
             let link = ChatHistoryLink.inApp(for: webpage.content.url.nsstring, context: context, messageId: message?.id, openInfo: chatInteraction.openInfo)
-            ChatHistoryLink.execute(inapp: link)
+            ChatHistoryLink.execute(inapp: link, morphSource: morphSource)
         } else if unsupported {
             invokeUpdateApp()
         }
@@ -225,6 +226,7 @@ public class ChatMessageItem: ChatRowItem {
     public private(set) var webpageLayout:WPLayout?
     
     public override init(_ initialSize:NSSize, _ chatInteraction:ChatInteraction,_ context: any AccountContextProtocol, _ entry: ChatHistoryEntry, theme: TelegramPresentationTheme) {
+        let relativeDateReferenceTimestamp = Date().timeIntervalSince1970
         
          if let message = entry.message {
              
@@ -535,7 +537,7 @@ public class ChatMessageItem: ChatRowItem {
                         }
                     }
                 }
-                showChatGallery(context: context, message: message, self?.table, (self?.webpageLayout as? WPMediaLayout)?.parameters, type: .alone, chatMode: chatInteraction.mode, chatLocation: chatInteraction.chatLocation, cachedPeerData: chatInteraction.presentation.cachedData)
+                showChatGallery(context: context, message: message, self?.table, (self?.webpageLayout as? WPMediaLayout)?.parameters, type: .alone, chatMode: chatInteraction.mode, chatLocation: chatInteraction.chatLocation, cachedPeerData: chatInteraction.presentation.cachedData, analyticsContext: chatInteraction.captureAnalyticsContext())
             }
             
             openSpecificTimecodeFromReply = { [weak self] timecode in
@@ -610,31 +612,20 @@ public class ChatMessageItem: ChatRowItem {
             
             textLayout.set(interactions)
 
-             var relativeDateUpdatePeriod: Double?
-             for attribute in message.attributes {
-                 if let attribute = attribute as? TextEntitiesMessageAttribute {
-                     for entity in attribute.entities {
-                         if case let .FormattedDate(format, timestamp) = entity.type, case .relative = format {
-                             let currentTimestamp = context.timestamp
-                             let value = abs(currentTimestamp - timestamp)
-                             if value < 120 {
-                                 relativeDateUpdatePeriod = 1
-                             } else if value <= 60 * 60 {
-                                 relativeDateUpdatePeriod = 60
-                             } else {
-                                 relativeDateUpdatePeriod = 30 * 60
-                             }
-                         }
-                     }
-                     break
-                 }
-             }
-             if let period = relativeDateUpdatePeriod {
-                 self.relativeDateTimer = SwiftSignalKit.Timer(timeout: period, repeat: true, completion: { [weak self] in
-                     self?.updateRelativeDates()
-                 }, queue: .mainQueue())
-                 self.relativeDateTimer?.start()
-             }
+            var relativeDateTimestamps: [Int32] = []
+            for attribute in message.attributes {
+                if let attribute = attribute as? TextEntitiesMessageAttribute {
+                    for entity in attribute.entities {
+                        if case let .FormattedDate(format, timestamp) = entity.type, case .relative = format {
+                            relativeDateTimestamps.append(timestamp)
+                        }
+                    }
+                    break
+                }
+            }
+            self.relativeDateTimer = RelativeDateUpdateTimer(timestamps: relativeDateTimestamps, relativeTo: relativeDateReferenceTimestamp, update: { [weak self] in
+                self?.updateRelativeDates()
+            })
 
             return
         }
@@ -943,6 +934,7 @@ public class ChatMessageItem: ChatRowItem {
                 header = TextNode.layoutText(.initialize(string: lg.prefixWithDots(15), color: color, font: .medium(.text)), nil, 1, .end, NSMakeSize(.greatestFiniteMagnitude, .greatestFiniteMagnitude), nil, false, .left)
                 
                 string.addAttribute(TextInputAttributes.quote, value: TextViewBlockQuoteData(id: Int(arc4random64()), colors: .init(main: color, secondary: nil, tertiary: theme.colors.isDark ? .black : color), isCode: true, space: 4, header: header), range: range)
+                string.addAttribute(TextInputAttributes.code, value: language ?? "", range: range)
                 fontAttributes.append((range, .monospace))
                 string.addAttribute(NSAttributedString.Key.foregroundColor, value: monospacedPre, range: range)
                 string.addAttribute(TextInputAttributes.monospace, value: true as NSNumber, range: range)
@@ -1103,7 +1095,10 @@ public class ChatMessageItem: ChatRowItem {
     }
 
     public override func inset(for text: String, range: NSRange?) -> CGFloat {
-        if let rect = self.textLayout.rect(for: text, range: range) {
+        let layoutString = self.textLayout.attributedString
+        let layoutRange = chatQuoteTextRange(in: layoutString, text: text, offset: range?.location)
+        let layoutText = layoutRange.map { (layoutString.string as NSString).substring(with: $0) } ?? text
+        if let rect = self.textLayout.rect(for: layoutText, range: layoutRange) {
             return rect.maxY
         } else {
             return super.inset(for: text, range: range)

@@ -21,6 +21,7 @@ import InputTextView
 import SwiftSignalKit
 import Postbox
 import TelegramCore
+import AppAnalytics
 
 public struct _ExportedInvitation : Equatable {
     public var link: String
@@ -368,7 +369,8 @@ private final class InviteLinksArguments {
     let newLink:()->Void
     let open:(_ExportedInvitation)->Void
     let openAdminLinks:(ExportedInvitationCreator)->Void
-    init(context: any AccountContextProtocol, shareLink: @escaping(String)->Void, copyLink: @escaping(String)->Void, revokeLink: @escaping(_ExportedInvitation)->Void, editLink:@escaping(_ExportedInvitation)->Void, newLink:@escaping()->Void, deleteLink:@escaping(_ExportedInvitation)->Void, deleteAll:@escaping()->Void, open:@escaping(_ExportedInvitation)->Void, openAdminLinks: @escaping(ExportedInvitationCreator)->Void) {
+    let showQrCode:(String)->Void
+    init(context: any AccountContextProtocol, shareLink: @escaping(String)->Void, copyLink: @escaping(String)->Void, showQrCode: @escaping(String)->Void, revokeLink: @escaping(_ExportedInvitation)->Void, editLink:@escaping(_ExportedInvitation)->Void, newLink:@escaping()->Void, deleteLink:@escaping(_ExportedInvitation)->Void, deleteAll:@escaping()->Void, open:@escaping(_ExportedInvitation)->Void, openAdminLinks: @escaping(ExportedInvitationCreator)->Void) {
         self.context = context
         self.shareLink = shareLink
         self.copyLink = copyLink
@@ -379,6 +381,7 @@ private final class InviteLinksArguments {
         self.deleteAll = deleteAll
         self.open = open
         self.openAdminLinks = openAdminLinks
+        self.showQrCode = showQrCode
     }
 }
 
@@ -449,6 +452,9 @@ private func entries(_ state: InviteLinksState, arguments: InviteLinksArguments)
                     items.append(ContextMenuItem(strings().manageLinksContextCopy, handler: {
                         arguments.copyLink(permanent.link)
                     }, itemImage: MenuAnimation.menu_copy.value))
+                    items.append(ContextMenuItem(strings().manageLinksContextQrCode, handler: {
+                        arguments.showQrCode(permanent.link)
+                    }, image: inviteLinkQrMenuIcon()))
                     if state.adminPeer?.peer.isBot == true {
                         
                     } else {
@@ -529,6 +535,9 @@ private func entries(_ state: InviteLinksState, arguments: InviteLinksArguments)
                                 items.append(ContextMenuItem(strings().manageLinksContextShare, handler: {
                                     arguments.shareLink(link.link)
                                 }, itemImage: MenuAnimation.menu_share.value))
+                                items.append(ContextMenuItem(strings().manageLinksContextQrCode, handler: {
+                                    arguments.showQrCode(link.link)
+                                }, image: inviteLinkQrMenuIcon()))
                             }
                             if !link.isPermanent {
                                 items.append(ContextMenuItem(strings().manageLinksContextEdit, handler: {
@@ -658,6 +667,8 @@ public func InviteLinksController(context: any AccountContextProtocol, peerId: P
     }, copyLink: { link in
         showModalText(for: context.window, text: strings().shareLinkCopied)
         copyToClipboard(link)
+    }, showQrCode: { link in
+        showModal(with: InviteLinkQrController(context: context, link: link, isChannel: isChannel), for: context.window)
     }, revokeLink: { [weak manager] link in
         verifyAlert_button(for: context.window, header: strings().channelRevokeLinkConfirmHeader, information: strings().channelRevokeLinkConfirmText, ok: strings().channelRevokeLinkConfirmOK, cancel: strings().modalCancel, successHandler: { _ in
             if let manager = manager {
@@ -668,7 +679,7 @@ public func InviteLinksController(context: any AccountContextProtocol, peerId: P
         })
     }, editLink: { [weak manager] link in
         showModal(with: ClosureInviteLinkController(context: context, peerId: peerId, mode: .edit(link), isChannel: isChannel, save: { [weak manager] updated in
-            let signal = manager?.editPeerExportedInvitation(link: link, title: updated.title, expireDate: updated.date == .max ? nil : updated.date + Int32(Date().timeIntervalSince1970), usageLimit: updated.count == .max ? nil : updated.count, requestNeeded: updated.requestApproval)
+            let signal = manager?.editPeerExportedInvitation(link: link, title: updated.editedTitle, expireDate: updated.editedExpireDate, usageLimit: updated.editedUsageLimit, requestNeeded: updated.editedRequestNeeded)
             if let signal = signal {
                 _ = showModalProgress(signal: signal, for: context.window).start(completed:{
                     _ = showModalSuccess(for: context.window, icon: theme.icons.successModalProgress, delay: 1.5).start()
@@ -768,6 +779,7 @@ public func InviteLinksController(context: any AccountContextProtocol, peerId: P
     }
     
     let controller = InputDataController(dataSignal: signal, title: strings().manageLinksTitleNew, removeAfterDisappear: false, hasDone: false)
+    controller.analyticsScreen = .peerInfoInviteLinks
         
     controller.onDeinit = {
         actionsDisposable.dispose()

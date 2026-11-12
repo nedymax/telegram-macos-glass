@@ -16,6 +16,7 @@ import ChatModeTypes
 import InlineStickerLayer
 import PremiumStatusUI
 import InputDataUI
+import AppAnalytics
 
 
 public enum ESearchCommand {
@@ -28,14 +29,26 @@ public enum ESearchCommand {
 
 
 
+public enum EntertainmentStickerDrag {
+    case moved(NSPoint)
+    case ended(NSPoint)
+}
+
+public enum EntertainmentDragItem {
+    case file(TelegramMediaFile)
+    case emoji(String)
+}
+
 public final class EntertainmentInteractions {
     
     public var current:EntertainmentState = .emoji
     
     public var sendEmoji:(String, CGRect?) ->Void = { _,_ in }
     public var sendAnimatedEmoji:(StickerPackItem, StarGift.UniqueGift?, StickerPackCollectionInfo?, Int32?, NSRect?) ->Void = { _, _, _, _, _ in}
+    public var sendLargeReaction:((StickerPackItem, NSRect?) ->Void)?
     public var sendSticker:(TelegramMediaFile, Bool, Bool, ItemCollectionId?) ->Void = { _, _, _, _ in}
     public var sendGIF:(TelegramMediaFile, Bool, Bool) ->Void = { _, _, _ in}
+    public var dragItem: ((EntertainmentDragItem, CGImage?, EntertainmentStickerDrag) -> Void)?
     
     public var showEntertainment:(EntertainmentState, Bool)->Void = { _,_  in}
     public var close:()->Void = {}
@@ -363,6 +376,7 @@ public class EntertainmentViewController<Context: AccountContextProtocol>: Teleg
         self.emoji = EmojiesController(context, mode: mode == .stories ? .stories : .emoji, presentation: presentation)
         self.emoji.isGlass = true
         if mode == .common || mode == .stories {
+            self.emoji.analyticsScreen = .chatInputEmoji
         }
         self.stickers = NStickersViewController(context, presentation: presentation)
         self.gifs = GifKeyboardController(context, presentation: presentation)
@@ -489,8 +503,13 @@ public class EntertainmentViewController<Context: AccountContextProtocol>: Teleg
         if gifs.isLoaded() {
             tables.append(gifs.genericView.tableView)
         }
-        for table in tables where table.contentInsets != insets {
-            table.contentInsets = insets
+        for table in tables {
+            if table.contentInsets != insets {
+                table.contentInsets = insets
+            }
+            if table.scrollerInsets.bottom != 0 {
+                table.scrollerInsets.bottom = 0
+            }
         }
     }
 

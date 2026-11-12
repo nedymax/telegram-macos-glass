@@ -189,9 +189,13 @@ public class ChatGroupedItem: ChatRowItem {
                         type = .secret
                     }
                                 
-                    showChatGallery(context: context, message: message, self.table, parameters, type: type, chatMode: self.chatInteraction.mode, chatLocation: self.chatInteraction.chatLocation, contextHolder: self.chatInteraction.contextHolder(), cachedPeerData: self.chatInteraction.presentation.cachedData)
+                    showChatGallery(context: context, message: message, self.table, parameters, type: type, chatMode: self.chatInteraction.mode, chatLocation: self.chatInteraction.chatLocation, contextHolder: self.chatInteraction.contextHolder(), cachedPeerData: self.chatInteraction.presentation.cachedData, analyticsContext: self.chatInteraction.captureAnalyticsContext())
                 }
                 
+                parameters.showMessage = { [weak self] message in
+                    self?.chatInteraction.focusMessageId(nil, .init(messageId: message.id, string: nil), .CenterEmpty)
+                }
+
                 self.parameters.append(parameters)
             case .photoOrVideo:
                 self.parameters.append(ChatMediaGalleryParameters(showMedia: { [weak self] message in
@@ -206,7 +210,7 @@ public class ChatGroupedItem: ChatRowItem {
                     if self.chatInteraction.mode.isThreadMode, self.chatInteraction.chatLocation.threadMsgId?.peerId == message.id.peerId {
                         type = .messages(self.messages)
                     }
-                    showChatGallery(context: context, message: message, self.table, self.parameters[i], type: type, chatMode: self.chatInteraction.mode, chatLocation: self.chatInteraction.chatLocation, contextHolder: self.chatInteraction.contextHolder(), cachedPeerData: self.chatInteraction.presentation.cachedData)
+                    showChatGallery(context: context, message: message, self.table, self.parameters[i], type: type, chatMode: self.chatInteraction.mode, chatLocation: self.chatInteraction.chatLocation, contextHolder: self.chatInteraction.contextHolder(), cachedPeerData: self.chatInteraction.presentation.cachedData, analyticsContext: self.chatInteraction.captureAnalyticsContext())
                     
                     }, showMessage: { [weak self] message in
                         self?.chatInteraction.focusMessageId(nil, .init(messageId: message.id, string: nil), .CenterEmpty)
@@ -299,7 +303,11 @@ public class ChatGroupedItem: ChatRowItem {
     
     public override func share() {
         if let message = message {
-            showModal(with: ChatHistoryUIHooks.shared.makeShareMessagesModalObserved(context, message, groupedMessages: layout.messages), for: context.window)
+            var origin = chatInteraction.captureAnalyticsContext(sourcePeerId: message.id.peerId)
+            for message in layout.messages { origin = origin.restricting(peerId: message.id.peerId) }
+            let presentation = origin.beginPresentation()
+            defer { presentation.end() }
+            showModal(with: ChatHistoryUIHooks.shared.makeShareMessagesModalObserved(context, message, groupedMessages: layout.messages, analyticsContext: origin), for: context.window)
         }
 
     }
@@ -393,6 +401,11 @@ public class ChatGroupedItem: ChatRowItem {
         var _width: CGFloat = 0
         switch layout.type {
         case .files:
+            let maxCaptionWidth = min(width, 360) - (hasBubble ? bubbleDefaultInnerInset : 0)
+            for layout in captionLayouts {
+                layout.layout.measure(width: maxCaptionWidth)
+                _width = max(_width, layout.layout.size.width + (hasBubble ? bubbleDefaultInnerInset : 0))
+            }
             for parameter in parameters {
                 let value = parameter.makeLabelsForWidth(min(width, 360))
                 _width = max(_width, value)

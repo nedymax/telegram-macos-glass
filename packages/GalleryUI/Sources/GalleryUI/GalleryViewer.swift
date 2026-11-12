@@ -29,6 +29,7 @@ import SecureIdUtils
 import FoundationUtils
 import ObjcUtils
 import InputDataUI
+import AppAnalytics
 
 public final class GalleryInteractions {
     public var dismiss:(NSEvent)->KeyHandlerResult = { _ in return .rejected}
@@ -207,18 +208,21 @@ fileprivate func itemFor(entry: ChatHistoryEntry, context: any AccountContextPro
     return MGalleryItem(context, .message(entry), pagerSize)
 }
 
-fileprivate func prepareEntries(from:[ChatHistoryEntry]?, to:[ChatHistoryEntry], context: any AccountContextProtocol, pagerSize:NSSize) -> Signal<UpdateTransition<MGalleryItem>, NoError> {
-    return Signal { subscriber in
-        
+fileprivate struct GalleryHistoryUpdate {
+    var entries: [ChatHistoryEntry]
+    var bounds: (earlierId: MessageIndex?, laterId: MessageIndex?)? = nil
+    var anchor: MessageIndex? = nil
+    var window: (lower: MessageIndex, upper: MessageIndex)? = nil
+    var transition: ([ChatHistoryEntry]) -> UpdateTransition<MGalleryItem>
+}
+
+fileprivate func galleryTransition(to: [ChatHistoryEntry], context: any AccountContextProtocol, pagerSize:NSSize) -> ([ChatHistoryEntry]) -> UpdateTransition<MGalleryItem> {
+    return { from in
         let (removed, inserted, updated) = proccessEntriesWithoutReverse(from, right: to, { (entry) -> MGalleryItem in
            return itemFor(entry: entry, context: context, pagerSize: pagerSize)
         })
-        
-        subscriber.putNext(UpdateTransition(deleted: removed, inserted: inserted, updated: updated))
-        subscriber.putCompletion()
-        
-        return EmptyDisposable
-    } |> runOn(Queue.mainQueue())
+        return UpdateTransition(deleted: removed, inserted: inserted, updated: updated)
+    }
 }
 
 
@@ -250,6 +254,7 @@ public class GalleryViewer: NSResponder {
     private let operationDisposable = MetaDisposable()
     public private(set) weak var delegate:InteractionContentViewProtocol?
     private let context:any AccountContextProtocol
+    private let analyticsOrigin: GalleryAnalyticsContext
     public var accountId: AccountRecordId {
         return context.account.id
     }
@@ -271,7 +276,19 @@ public class GalleryViewer: NSResponder {
     
     private var liveTranslate: ChatLiveTranslateContext?
     
-    private init(context: any AccountContextProtocol, _ delegate:InteractionContentViewProtocol? = nil, _ contentInteractions:(any GalleryContentInteractions)? = nil, type: GalleryAppearType, reversed:Bool = false, chatMode: ChatMode?, chatLocation: ChatLocation?, cachedPeerData: CachedPeerData? = nil) {
+    private init(context: any AccountContextProtocol, _ delegate:InteractionContentViewProtocol? = nil, _ contentInteractions:(any GalleryContentInteractions)? = nil, type: GalleryAppearType, reversed:Bool = false, chatMode: ChatMode?, chatLocation: ChatLocation?, cachedPeerData: CachedPeerData? = nil, analyticsContext: AnalyticsContext? = nil, analyticsMessages: [Message] = []) {
+        let analyticsOrigin = GalleryAnalyticsContext(accountContext: context, inherited: analyticsContext, peerId: chatLocation?.peerId)
+        analyticsOrigin.restrict(messages: analyticsMessages)
+        switch type {
+        case let .profile(peerId): analyticsOrigin.restrict(peerId: peerId)
+        case let .messages(messages): analyticsOrigin.restrict(messages: messages)
+        case .secret: analyticsOrigin.exclude()
+        default: break
+        }
+        self.analyticsOrigin = analyticsOrigin
+        let analyticsPresentation = analyticsOrigin.context.beginPresentation()
+        defer { analyticsPresentation.end() }
+
         self.context = context
         self.delegate = delegate
         self.type = type
@@ -406,7 +423,7 @@ public class GalleryViewer: NSResponder {
                 return false
             }
         }
-        window.set(handler: { [weak self] event in
+        window.setGalleryKeyHandler({ [weak self] event in
             guard let `self` = self else {return .rejected}
             if self.pager.selectedItem is MGalleryVideoItem || self.pager.selectedItem is MGalleryExternalVideoItem {
                 self.pager.selectedItem?.togglePlayerOrPause()
@@ -416,13 +433,13 @@ public class GalleryViewer: NSResponder {
             }
         }, with:self, for: .Space)
         
-        window.set(handler: { [weak self] event in
+        window.setGalleryKeyHandler({ [weak self] event in
             guard let `self` = self else {return .rejected}
             self.pager.toggleFullScreen()
             return .invoked
         }, with:self, for: .F)
         
-        window.set(handler: interactions.dismiss, with:self, for: .Escape)
+        window.setGalleryKeyHandler(interactions.dismiss, with:self, for: .Escape)
         
         window.closeInterceptor = { [weak self] in
             if let event = NSApp.currentEvent {
@@ -431,35 +448,35 @@ public class GalleryViewer: NSResponder {
             return true
         }
         
-        window.set(handler: interactions.next, with:self, for: .RightArrow)
-        window.set(handler: interactions.previous, with:self, for: .LeftArrow)
+        window.setGalleryKeyHandler(interactions.next, with:self, for: .RightArrow)
+        window.setGalleryKeyHandler(interactions.previous, with:self, for: .LeftArrow)
         
-        window.set(handler: { [weak self] _ -> KeyHandlerResult in
+        window.setGalleryKeyHandler({ [weak self] _ -> KeyHandlerResult in
             self?.pager.zoomOut()
             return .invoked
         }, with: self, for: .Minus)
         
-        window.set(handler: { [weak self] _ -> KeyHandlerResult in
+        window.setGalleryKeyHandler({ [weak self] _ -> KeyHandlerResult in
             self?.pager.zoomIn()
             return .invoked
         }, with: self, for: .Equal)
         
-        window.set(handler: { [weak self] _ -> KeyHandlerResult in
+        window.setGalleryKeyHandler({ [weak self] _ -> KeyHandlerResult in
             self?.pager.decreaseSpeed()
             return .invoked
         }, with: self, for: .Minus, modifierFlags: [.command, .option])
         
-        window.set(handler: { [weak self] _ -> KeyHandlerResult in
+        window.setGalleryKeyHandler({ [weak self] _ -> KeyHandlerResult in
             self?.pager.increaseSpeed()
             return .invoked
         }, with: self, for: .Equal, modifierFlags: [.command, .option])
         
-        window.set(handler: { [weak self] _ -> KeyHandlerResult in
+        window.setGalleryKeyHandler({ [weak self] _ -> KeyHandlerResult in
             self?.pager.rotateLeft()
             return .invoked
         }, with: self, for: .R, modifierFlags: [.command])
         
-        window.set(handler: { [weak self] _ -> KeyHandlerResult in
+        window.setGalleryKeyHandler({ [weak self] _ -> KeyHandlerResult in
             self?.saveAs()
             return .invoked
         }, with: self, for: .S, priority: .high, modifierFlags: [.command])
@@ -657,15 +674,19 @@ public class GalleryViewer: NSResponder {
     }
 
 
-    fileprivate convenience init(context: any AccountContextProtocol, message:Message, _ delegate:InteractionContentViewProtocol? = nil, _ contentInteractions:(any GalleryContentInteractions)? = nil, type: GalleryAppearType = .history, item: MGalleryItem? = nil, reversed: Bool = false, chatMode: ChatMode?, chatLocation: ChatLocation?, contextHolder: Atomic<ChatLocationContextHolder?> = Atomic(value: nil), cachedPeerData: CachedPeerData? = nil) {
+    fileprivate convenience init(context: any AccountContextProtocol, message:Message, _ delegate:InteractionContentViewProtocol? = nil, _ contentInteractions:(any GalleryContentInteractions)? = nil, type: GalleryAppearType = .history, item: MGalleryItem? = nil, reversed: Bool = false, chatMode: ChatMode?, chatLocation: ChatLocation?, contextHolder: Atomic<ChatLocationContextHolder?> = Atomic(value: nil), cachedPeerData: CachedPeerData? = nil, analyticsContext: AnalyticsContext? = nil) {
         
-        self.init(context: context, delegate, contentInteractions, type: type, reversed: reversed, chatMode: chatMode, chatLocation: chatLocation, cachedPeerData: cachedPeerData)
+        self.init(context: context, delegate, contentInteractions, type: type, reversed: reversed, chatMode: chatMode, chatLocation: chatLocation, cachedPeerData: cachedPeerData, analyticsContext: analyticsContext, analyticsMessages: [message])
 
         let chatMode = self.chatMode
         let chatLocation = self.chatLocation
         let previous:Atomic<[ChatHistoryEntry]> = Atomic(value:[])
         let current:Atomic<[ChatHistoryEntry]> = Atomic(value:[])
         let currentIndex:Atomic<Int?> = Atomic(value:nil)
+        let selectedMessageIndex:Atomic<MessageIndex?> = Atomic(value:nil)
+        let restoringSelection:Atomic<Bool> = Atomic(value:false)
+        let pendingLoad:Atomic<(anchor: MessageIndex, older: Bool)?> = Atomic(value:nil)
+        let loadedRange:Atomic<(lower: MessageIndex, upper: MessageIndex)?> = Atomic(value:nil)
         let request:Promise<MessageIndex> = Promise()
         let pagerSize = self.pagerSize
         let indexes:Atomic<(earlierId: MessageIndex?, laterId: MessageIndex?)> = Atomic(value:(nil, nil))
@@ -690,8 +711,18 @@ public class GalleryViewer: NSResponder {
             translate = .single(nil)
         }
         
+        let loadMore:(Bool) -> Void = { atStart in
+            let bounds = indexes.with { $0 }
+            let edge = atStart ? (reversed ? bounds.laterId : bounds.earlierId) : (reversed ? bounds.earlierId : bounds.laterId)
+            guard let edge = edge else {
+                return
+            }
+            _ = pendingLoad.swap((edge, atStart != reversed))
+            request.set(.single(edge))
+        }
+
         let signal = combineLatest(request.get() |> distinctUntilChanged, translate |> distinctUntilChanged)
-            |> mapToSignal { index, translate -> Signal<(UpdateTransition<MGalleryItem>, [ChatHistoryEntry], [ChatHistoryEntry]), NoError> in
+            |> mapToSignal { index, translate -> Signal<GalleryHistoryUpdate, NoError> in
                 
                 var type = type
                 let tags: HistoryViewInputTag? = tagsForMessage(message).flatMap { .tag($0) }
@@ -743,8 +774,6 @@ public class GalleryViewer: NSResponder {
                     return messageSignal |> map { message in
                         if let message {
                             let entries:[ChatHistoryEntry] = expandRichMediaEntries([.MessageEntry(message, MessageIndex(message), false, .list, .Full(rank: nil, rankType: .none, header: .normal), nil, ChatHistoryEntryData(nil, MessageEntryAdditionalData(), AutoplayMediaPreferences.defaultSettings))])
-                            let previous = previous.swap(entries)
-
                             var inserted: [(Int, MGalleryItem)] = []
 
                             for (i, entry) in entries.enumerated() {
@@ -770,15 +799,19 @@ public class GalleryViewer: NSResponder {
                                     }
                                 }
                             }
-                            return (UpdateTransition(deleted: [], inserted: inserted, updated: []), previous, entries)
+                            return GalleryHistoryUpdate(entries: entries, transition: { _ in
+                                return UpdateTransition(deleted: [], inserted: inserted, updated: [])
+                            })
                         } else {
-                            return (UpdateTransition(deleted: [0], inserted: [], updated: []), previous.with { $0 }, [])
+                            return GalleryHistoryUpdate(entries: [], transition: { _ in
+                                return UpdateTransition(deleted: [0], inserted: [], updated: [])
+                            })
                         }
                         
                     } |> deliverOnMainQueue
                     
                 case .history:
-                    return signal |> mapToSignal { view, _, _ -> Signal<(UpdateTransition<MGalleryItem>, [ChatHistoryEntry], [ChatHistoryEntry]), NoError> in
+                    return signal |> mapToSignal { view, _, _ -> Signal<GalleryHistoryUpdate, NoError> in
                         let entries:[ChatHistoryEntry] = expandRichMediaEntries(messageEntries(view.entries, includeHoles : false, translate: translate, contentConfig: context.contentConfig).filter { entry -> Bool in
                             switch entry {
                             case let .MessageEntry(message, _, _, _, _, _, _):
@@ -815,11 +848,11 @@ public class GalleryViewer: NSResponder {
                                 return true
                             }
                         })
-                        let previous = previous.with {$0}
-                        return prepareEntries(from: previous, to: entries, context: context, pagerSize: pagerSize) |> deliverOnMainQueue |> map { transition in
-                            _ = indexes.swap((view.earlierId, view.laterId))
-                            return (transition,previous, entries)
+                        var window: (lower: MessageIndex, upper: MessageIndex)?
+                        if let first = view.entries.first, let last = view.entries.last {
+                            window = (view.earlierId == nil ? MessageIndex.absoluteLowerBound() : first.index, view.laterId == nil ? MessageIndex.absoluteUpperBound() : last.index)
                         }
+                        return .single(GalleryHistoryUpdate(entries: entries, bounds: (view.earlierId, view.laterId), anchor: index, window: window, transition: galleryTransition(to: entries, context: context, pagerSize: pagerSize)))
                     }
                 case .recentDownloaded:
                     return recentDownloadItems(postbox: context.account.postbox) |> mapToSignal { downloaded in
@@ -836,22 +869,16 @@ public class GalleryViewer: NSResponder {
                                 return true
                             }
                         }
-                        let previous = previous.with {$0}
-                        return prepareEntries(from: previous, to: entries, context: context, pagerSize: pagerSize) |> deliverOnMainQueue |> map { transition in
-                            return (transition,previous, entries)
-                        }
+                        return .single(GalleryHistoryUpdate(entries: entries, transition: galleryTransition(to: entries, context: context, pagerSize: pagerSize)))
                         
                     }
                 case .secret:
-                    return context.account.postbox.messageView(index.id) |> mapToSignal { view -> Signal<(UpdateTransition<MGalleryItem>, [ChatHistoryEntry], [ChatHistoryEntry]), NoError> in
+                    return context.account.postbox.messageView(index.id) |> mapToSignal { view -> Signal<GalleryHistoryUpdate, NoError> in
                         var entries:[ChatHistoryEntry] = []
                         if let message = view.message, !(message.anyMedia is TelegramMediaExpiredContent) {
                             entries.append(.MessageEntry(message, MessageIndex(message), false, .list, .Full(rank: nil, rankType: .none, header: .normal), nil, ChatHistoryEntryData(nil, MessageEntryAdditionalData(), AutoplayMediaPreferences.defaultSettings)))
                         }
-                        let previous = previous.with {$0}
-                        return prepareEntries(from: previous, to: entries, context: context, pagerSize: pagerSize) |> map { transition in
-                            return (transition,previous, entries)
-                        }
+                        return .single(GalleryHistoryUpdate(entries: entries, transition: galleryTransition(to: entries, context: context, pagerSize: pagerSize)))
                     }
                 case .profile:
                     return .complete()
@@ -867,37 +894,59 @@ public class GalleryViewer: NSResponder {
                             return true
                         }
                     })
-                    let previous = previous.with {$0}
-                    return prepareEntries(from: previous, to: entries, context: context, pagerSize: pagerSize) |> deliverOnMainQueue |> map { transition in
-                        return (transition,previous, entries)
-                    }
+                    return .single(GalleryHistoryUpdate(entries: entries, transition: galleryTransition(to: entries, context: context, pagerSize: pagerSize)))
                 }
               
             }  |> deliverOnMainQueue
-            |> map { [weak self] transition, prev, new in
+            |> map { [weak self] update in
                 if let strongSelf = self {
                     
-                    _ = previous.swap(new)
+                    var entries = update.entries
+                    var transition: UpdateTransition<MGalleryItem>
+                    if let bounds = update.bounds {
+                        let known = loadedRange.with { $0 }
+                        if let window = update.window {
+                            if let known = known {
+                                entries = (previous.with { $0 }.filter { $0.index < window.lower || $0.index > window.upper } + update.entries).sorted(by: { $0.index < $1.index })
+                                let extendsEarlier = window.lower < known.lower
+                                let extendsLater = window.upper > known.upper
+                                let current = indexes.with { $0 }
+                                _ = indexes.swap((extendsEarlier ? bounds.earlierId : current.earlierId, extendsLater ? bounds.laterId : current.laterId))
+                                _ = loadedRange.swap((min(known.lower, window.lower), max(known.upper, window.upper)))
+                            } else {
+                                _ = indexes.swap(bounds)
+                                _ = loadedRange.swap(window)
+                            }
+                        } else if known == nil {
+                            _ = indexes.swap(bounds)
+                        }
+                        transition = galleryTransition(to: entries, context: context, pagerSize: pagerSize)(previous.swap(entries))
+                    } else {
+                        transition = update.transition(previous.swap(entries))
+                    }
                     
-                    let new = reversed ? new.reversed() : new
+                    let new = reversed ? entries.reversed() : entries
                     
                     _ = current.swap(new)
                     
-                    var id:MessageId = message.id
-                    let index = currentIndex.modify({$0})
-                    if let index = index, prev.count > index {
-                        id = prev[index].message!.id
-                    }
+                    let selectedMessage = selectedMessageIndex.with { $0 }
 
+                    if let pending = pendingLoad.with({ $0 }), let anchor = update.anchor, pending.anchor == anchor {
+                        _ = pendingLoad.swap(nil)
+                        if transition.inserted.isEmpty {
+                            DispatchQueue.main.async {
+                                loadMore(pending.older != reversed)
+                            }
+                        }
+                    }
                     
                     var current:Int? = currentIndex.modify({$0})
                     if current == nil || !reversed {
-                        for i in 0 ..< new.count {
-                            if let message = new[i].message {
-                                if message.id == id {
-                                    current = i
-                                }
-                            }
+                        let id = selectedMessage?.id ?? message.id
+                        if let found = new.firstIndex(where: { $0.message?.id == id }) {
+                            current = found
+                        } else if !reversed, let selectedMessage = selectedMessage, !new.isEmpty {
+                            current = new.firstIndex(where: { $0.index >= selectedMessage }) ?? new.count - 1
                         }
                     }
                     
@@ -909,9 +958,11 @@ public class GalleryViewer: NSResponder {
                     if !isEmpty {
                         
                         
-                        if let newIndex = current {                           
+                        if let newIndex = current {
+                            _ = restoringSelection.swap(true)
                             strongSelf.pager.selectedIndex.set(newIndex)
                             strongSelf.pager.set(index: newIndex, animated: false)
+                            _ = restoringSelection.swap(false)
                             if !new.isEmpty && newIndex < new.count && newIndex >= 0, new[newIndex].message?.autoremoveAttribute != nil {
                             }
                         }
@@ -925,6 +976,7 @@ public class GalleryViewer: NSResponder {
         
         self.disposable.set(signal.start())
         let reqlimit:Int = 10
+        self.pager.boundaryReached = loadMore
         self.indexDisposable.set(pager.selectedIndex.get().start(next: { [weak self] (selectedIndex) in
            
             let entries = current.modify({$0})
@@ -933,6 +985,11 @@ public class GalleryViewer: NSResponder {
             guard let `self` = self, entries.count > 0 else {return}
             
             let current = entries[selectedIndex]
+            self.analyticsOrigin.restrict(messages: current.message.map { [$0] } ?? [])
+            let isRestoring = restoringSelection.with { $0 }
+            if !isRestoring {
+                _ = selectedMessageIndex.swap(current.message.flatMap { MessageIndex($0) })
+            }
             self.updateCaptureExclusion()
             if let location = current.location {
                 let total = location.count
@@ -945,21 +1002,11 @@ public class GalleryViewer: NSResponder {
             if let message = entries[selectedIndex].message, message.containsSecretMedia {
                 _ = (context.engine.messages.markMessageContentAsConsumedInteractively(messageId: message.id) |> delay(0.5, queue: Queue.concurrentDefaultQueue())).start()
             }
-            let indexes = indexes.modify({$0})
-            
-            if let pagerIndex = currentIndex.modify({$0}) {
-                if selectedIndex < pagerIndex && pagerIndex < reqlimit {
-                    if !reversed, let earlier = indexes.earlierId {
-                        request.set(.single(earlier))
-                    } else if reversed, let later = indexes.laterId {
-                        request.set(.single(later))
-                    }
-                } else if selectedIndex > pagerIndex && pagerIndex > entries.count - reqlimit {
-                    if !reversed, let later = indexes.laterId {
-                        request.set(.single(later))
-                    } else if reversed, let earlier = indexes.earlierId {
-                        request.set(.single(earlier))
-                    }
+            if !isRestoring, let pagerIndex = currentIndex.modify({$0}) {
+                if selectedIndex < pagerIndex && selectedIndex < reqlimit {
+                    loadMore(true)
+                } else if selectedIndex > pagerIndex && selectedIndex >= entries.count - reqlimit {
+                    loadMore(false)
                 }
             }
             _ = currentIndex.swap(selectedIndex)
@@ -1084,7 +1131,7 @@ public class GalleryViewer: NSResponder {
                         }
                         
                         let limit = context.isPremium ? context.premiumLimits.saved_gifs_limit_premium : context.premiumLimits.saved_gifs_limit_default
-                        if limit >= savedGifs.count, !context.isPremium {
+                        if limit <= savedGifs.count, !context.isPremium {
                             showModalText(for: window, text: strings().chatContextFavoriteGifsLimitInfo("\(context.premiumLimits.saved_gifs_limit_premium)"), title: strings().chatContextFavoriteGifsLimitTitle, callback: { value in
                                 FeatureNavigationHooks.shared.showPremiumLimit(context, .savedGifs)
                                 self?.close()
@@ -1520,8 +1567,9 @@ public class GalleryViewer: NSResponder {
     }
 
     public func showMessage() -> Void {
+        let message = self.pager.selectedItem?.entry.message
         close()
-        if let message = self.pager.selectedItem?.entry.message {
+        if let message = message {
             contentInteractions?.showMessage(message)
         }
     }
@@ -1544,6 +1592,8 @@ public class GalleryViewer: NSResponder {
         let generation = presentationGeneration
         let messages = pager.thumbsControl.items.compactMap { $0.entry.message }
         if let message = self.pager.selectedItem?.entry.message {
+            analyticsOrigin.restrict(messages: [message])
+            let origin = analyticsOrigin.context
             if message.groupInfo != nil, !messages.isEmpty {
                 var items:[ContextMenuItem] = []
                 
@@ -1561,7 +1611,7 @@ public class GalleryViewer: NSResponder {
                 
                 items.append(ContextMenuItem(thisTitle, handler: { [weak self] in
                     guard let self, viewer === self, self.presentationGeneration == generation else { return }
-                    GalleryHooks.shared.showShareObserved(self.context, message, nil, self.window)
+                    GalleryHooks.shared.showShareObserved(self.context, message, nil, self.window, analyticsContext: origin)
                 }, itemImage: MenuAnimation.menu_share.value))
                 
                 let allTitle: String
@@ -1577,7 +1627,8 @@ public class GalleryViewer: NSResponder {
                 
                 items.append(ContextMenuItem(allTitle, handler: { [weak self] in
                     guard let self, viewer === self, self.presentationGeneration == generation else { return }
-                    GalleryHooks.shared.showShareObserved(self.context, message, messages, self.window)
+                    self.analyticsOrigin.restrict(messages: messages)
+                    GalleryHooks.shared.showShareObserved(self.context, message, messages, self.window, analyticsContext: origin)
                 }, itemImage: MenuAnimation.menu_share.value))
                 
                 let menu = ContextMenu(presentation: .current(darkPalette), betterInside: true)
@@ -1588,7 +1639,7 @@ public class GalleryViewer: NSResponder {
                     AppMenu.show(menu: menu, event: event, for: control)
                 }
             } else {
-                GalleryHooks.shared.showShareObserved(self.context, message, nil, self.window)
+                GalleryHooks.shared.showShareObserved(self.context, message, nil, self.window, analyticsContext: origin)
             }
         }
     }
@@ -1628,11 +1679,14 @@ public class GalleryViewer: NSResponder {
     fileprivate func show(_ animated: Bool = true, _ ignoreStableId:AnyHashable? = nil) -> Void {
         presentationGeneration += 1
         viewer = self
+        analyticsOrigin.restrict(messages: pager.selectedItem?.entry.message.map { [$0] } ?? [])
+        analyticsOrigin.begin()
         NotificationCenter.default.removeObserver(self)
         NotificationCenter.default.addObserver(self, selector: #selector(windowDidBecomeKey), name: NSWindow.didBecomeKeyNotification, object: window)
         NotificationCenter.default.addObserver(self, selector: #selector(windowDidResignKey), name: NSWindow.didResignKeyNotification, object: window)
         context.window.resignFirstResponder()
         self.window.makeKeyAndOrderFront(nil)
+        Analytics.shared.screens.showStandalone(.mediaViewer, owner: self, context: analyticsOrigin.context)
         //window.makeFirstResponder(self)
         //closePipVideo()
        // backgroundView.alphaValue = 0
@@ -1687,10 +1741,12 @@ public class GalleryViewer: NSResponder {
     }
     
     public func close(_ animated:Bool = false) -> Void {
+        Analytics.shared.screens.hideStandalone(owner: self)
         disposable.dispose()
         readyDispose.set(nil)
         didSetReady = false
         NotificationCenter.default.removeObserver(self)
+        (pager.selectedItem as? MGalleryVideoItem)?.deactivateMediaControls()
         if animated {
             let presentationGeneration = self.presentationGeneration
             backgroundView._change(opacity: 0, animated: true)
@@ -1712,6 +1768,7 @@ public class GalleryViewer: NSResponder {
                 }
                 self.removeCaptureExclusion()
                 self.window.orderOut(nil)
+                self.analyticsOrigin.end()
                 viewer = nil
                 playPipIfNeeded()
             }, addAccesoryOnCopiedView: { [weak self] stableId, view in
@@ -1723,6 +1780,7 @@ public class GalleryViewer: NSResponder {
             })
         } else {
             window.orderOut(nil)
+            analyticsOrigin.end()
             self.removeCaptureExclusion()
             if viewer === self {
                 viewer = nil
@@ -1737,6 +1795,8 @@ public class GalleryViewer: NSResponder {
     }
     
     public func clean() {
+        Analytics.shared.screens.hideStandalone(owner: self)
+        analyticsOrigin.end()
         removeCaptureExclusion()
         indexDisposable.dispose()
         disposable.dispose()
@@ -1748,7 +1808,9 @@ public class GalleryViewer: NSResponder {
     }
 
     private func updateCaptureExclusion() {
+        analyticsOrigin.restrict(messages: pager.selectedItem?.entry.message.map { [$0] } ?? [])
         if viewer === self {
+            Analytics.shared.screens.showStandalone(.mediaViewer, owner: self, context: analyticsOrigin.context)
         }
         let isProtected = pager.selectedItem?.entry.isProtected == true
             || pager.selectedItem?.entry.message?.isCopyProtected(cachedData: cachedPeerData) == true
@@ -1777,11 +1839,14 @@ public func closeGalleryViewer(_ animated: Bool) {
     viewer?.close(animated)
 }
 
-
 public func showChatGallery(context: any AccountContextProtocol, message:Message, _ delegate:InteractionContentViewProtocol? = nil, _ contentInteractions:(any GalleryContentInteractions)? = nil, type: GalleryAppearType = .history, reversed: Bool = false, chatMode: ChatMode?, chatLocation: ChatLocation?, contextHolder: Atomic<ChatLocationContextHolder?> = Atomic(value: nil), cachedPeerData: CachedPeerData? = nil) {
+    showChatGallery(context: context, message: message, delegate, contentInteractions, type: type, reversed: reversed, chatMode: chatMode, chatLocation: chatLocation, contextHolder: contextHolder, cachedPeerData: cachedPeerData, analyticsContext: nil)
+}
+
+public func showChatGallery(context: any AccountContextProtocol, message:Message, _ delegate:InteractionContentViewProtocol? = nil, _ contentInteractions:(any GalleryContentInteractions)? = nil, type: GalleryAppearType = .history, reversed: Bool = false, chatMode: ChatMode?, chatLocation: ChatLocation?, contextHolder: Atomic<ChatLocationContextHolder?> = Atomic(value: nil), cachedPeerData: CachedPeerData? = nil, analyticsContext: AnalyticsContext?) {
     if viewer == nil {
         viewer?.clean()
-        let gallery = GalleryViewer(context: context, message: message, delegate, contentInteractions, type: type, reversed: reversed, chatMode: chatMode, chatLocation: chatLocation, contextHolder: contextHolder, cachedPeerData: cachedPeerData)
+        let gallery = GalleryViewer(context: context, message: message, delegate, contentInteractions, type: type, reversed: reversed, chatMode: chatMode, chatLocation: chatLocation, contextHolder: contextHolder, cachedPeerData: cachedPeerData, analyticsContext: analyticsContext)
         gallery.show()
     }
 }

@@ -161,18 +161,18 @@ public class Sender: NSObject {
         return preview
     }
 
-    public static func enqueue(input:ChatTextInputState, context: any AccountContextProtocol, peerId:PeerId, replyId:EngineMessageReplySubject?, threadId: Int64?, replyStoryId: StoryId? = nil, disablePreview:Bool = false, linkBelowMessage: Bool = false, largeMedia: Bool? = nil, silent: Bool = false, atDate:Date? = nil, repeatPeriod: Int32? = nil, sendAsPeerId: PeerId? = nil, mediaPreview: TelegramMediaWebpage? = nil, emptyHandler:(()->Void)? = nil, customChatContents: ChatCustomContentsProtocol? = nil, messageEffect: AvailableMessageEffects.MessageEffect? = nil, sendPaidMessageStars: StarsAmount? = nil, suggestPost: ChatInterfaceState.ChannelSuggestPost? = nil) -> Signal<[MessageId?],NoError> {
-        return enqueue(input: input, context: context, peerId: peerId, replyId: replyId, threadId: threadId, replyStoryId: replyStoryId, disablePreview: disablePreview, linkBelowMessage: linkBelowMessage, largeMedia: largeMedia, silent: silent, atDate: atDate, repeatPeriod: repeatPeriod, sendAsPeerId: sendAsPeerId, mediaPreview: mediaPreview, emptyHandler: emptyHandler, customChatContents: customChatContents, messageEffect: messageEffect, sendPaidMessageStars: sendPaidMessageStars, suggestPost: suggestPost, observedResult: nil)
+    public static func enqueue(input:ChatTextInputState, context: any AccountContextProtocol, peerId:PeerId, replyId:EngineMessageReplySubject?, threadId: Int64?, replyStoryId: StoryId? = nil, disablePreview:Bool = false, linkBelowMessage: Bool = false, largeMedia: Bool? = nil, silent: Bool = false, atDate:Date? = nil, repeatPeriod: Int32? = nil, sendAsPeerId: PeerId? = nil, mediaPreview: TelegramMediaWebpage? = nil, emptyHandler:(()->Void)? = nil, customChatContents: ChatCustomContentsProtocol? = nil, messageEffect: AvailableMessageEffects.MessageEffect? = nil, sendPaidMessageStars: StarsAmount? = nil, suggestPost: ChatInterfaceState.ChannelSuggestPost? = nil, ephemeralBotPeerId: PeerId? = nil) -> Signal<[MessageId?],NoError> {
+        return enqueue(input: input, context: context, peerId: peerId, replyId: replyId, threadId: threadId, replyStoryId: replyStoryId, disablePreview: disablePreview, linkBelowMessage: linkBelowMessage, largeMedia: largeMedia, silent: silent, atDate: atDate, repeatPeriod: repeatPeriod, sendAsPeerId: sendAsPeerId, mediaPreview: mediaPreview, emptyHandler: emptyHandler, customChatContents: customChatContents, messageEffect: messageEffect, sendPaidMessageStars: sendPaidMessageStars, suggestPost: suggestPost, ephemeralBotPeerId: ephemeralBotPeerId, observedResult: nil)
     }
 
-    public static func enqueue(input:ChatTextInputState, context: any AccountContextProtocol, peerId:PeerId, replyId:EngineMessageReplySubject?, threadId: Int64?, replyStoryId: StoryId? = nil, disablePreview:Bool = false, linkBelowMessage: Bool = false, largeMedia: Bool? = nil, silent: Bool = false, atDate:Date? = nil, repeatPeriod: Int32? = nil, sendAsPeerId: PeerId? = nil, mediaPreview: TelegramMediaWebpage? = nil, emptyHandler:(()->Void)? = nil, customChatContents: ChatCustomContentsProtocol? = nil, messageEffect: AvailableMessageEffects.MessageEffect? = nil, sendPaidMessageStars: StarsAmount? = nil, suggestPost: ChatInterfaceState.ChannelSuggestPost? = nil, observedResult: ((Int, [MessageId?]) -> Void)?) -> Signal<[MessageId?],NoError> {
+    public static func enqueue(input:ChatTextInputState, context: any AccountContextProtocol, peerId:PeerId, replyId:EngineMessageReplySubject?, threadId: Int64?, replyStoryId: StoryId? = nil, disablePreview:Bool = false, linkBelowMessage: Bool = false, largeMedia: Bool? = nil, silent: Bool = false, atDate:Date? = nil, repeatPeriod: Int32? = nil, sendAsPeerId: PeerId? = nil, mediaPreview: TelegramMediaWebpage? = nil, emptyHandler:(()->Void)? = nil, customChatContents: ChatCustomContentsProtocol? = nil, messageEffect: AvailableMessageEffects.MessageEffect? = nil, sendPaidMessageStars: StarsAmount? = nil, suggestPost: ChatInterfaceState.ChannelSuggestPost? = nil, ephemeralBotPeerId: PeerId? = nil, observedResult: ((Int, [MessageId?]) -> Void)?) -> Signal<[MessageId?],NoError> {
         
         var inset:Int = 0
         let dynamicEmojiOrder = context.stickerSettings.dynamicPackOrder
         
         var input:ChatTextInputState = input
         
-        let emojis = Array(input.inputText.fixed.emojiString).map { String($0) }.compactMap {!$0.isEmpty ? $0 : nil}
+        let emojiText = input.inputText.fixed
         if input.attributes.isEmpty {
             input = ChatTextInputState(inputText: input.inputText.trimmed)
         }
@@ -263,11 +263,34 @@ public class Sender: NSObject {
             
             if !mapped.isEmpty {
                 let inlineMedia = input.inlineMedia.map { $0.key }
-                return observe(enqueueMessages(account: context.account, peerId: peerId, messages: mapped) |> mapToSignal { value in
+                let preparedMessages: Signal<[EnqueueMessage], NoError>
+                if atDate == nil, suggestPost == nil, replyStoryId == nil {
+                    if let ephemeralBotPeerId {
+                        preparedMessages = .single(ephemeralBotCommand(botPeerId: ephemeralBotPeerId, text: input.inputText).apply(to: mapped))
+                    } else if mayContainTypedEphemeralBotCommand(input.inputText) {
+                        let text = input.inputText
+                        preparedMessages = context.engine.peers.peerCommands(id: peerId) |> take(1) |> map { commands in
+                            return resolveEphemeralBotCommand(text: text, peerCommands: commands)?.apply(to: mapped) ?? mapped
+                        }
+                    } else {
+                        preparedMessages = .single(mapped)
+                    }
+                } else {
+                    preparedMessages = .single(mapped)
+                }
+                return observe(preparedMessages |> mapToSignal { messages in
+                    return enqueueMessages(account: context.account, peerId: peerId, messages: messages)
+                } |> mapToSignal { value in
+                    let emojis = emojiText.recentEmojiCandidates
+                    var saves: [Signal<Void, NoError>] = []
                     if !emojis.isEmpty {
-                        let es = saveUsedEmoji(emojis, postbox: context.account.postbox)
-                        let aes = saveAnimatedUsedEmoji(inlineMedia, postbox: context.account.postbox)
-                        return combineLatest(es, aes) |> map { _ in
+                        saves.append(saveUsedEmoji(emojis, postbox: context.account.postbox))
+                    }
+                    if !inlineMedia.isEmpty {
+                        saves.append(saveAnimatedUsedEmoji(inlineMedia, postbox: context.account.postbox))
+                    }
+                    if !saves.isEmpty {
+                        return combineLatest(saves) |> map { _ in
                             return value
                         }
                     }
@@ -463,12 +486,13 @@ public class Sender: NSObject {
             let asset = AVURLAsset(url: URL(fileURLWithPath: path))
             let video = asset.tracks(withMediaType: AVMediaType.video).first
             let audio = asset.tracks(withMediaType: AVMediaType.audio).first
+            let isEditedPhoto = EditedPhotoVideos.shared.contains(path: path)
             if let video = video {
                 var size = video.naturalSize.applying(video.preferredTransform)
                 size = NSMakeSize(floor(abs(size.width)), floor(abs(size.height)))
                 attrs.append(TelegramMediaFileAttribute.Video(duration: Double(CMTimeGetSeconds(asset.duration)), size: PixelDimensions(size), flags: [.supportsStreaming], preloadSize: nil, coverTime: nil, videoCodec: nil))
                 attrs.append(TelegramMediaFileAttribute.FileName(fileName: path.nsstring.lastPathComponent.nsstring.deletingPathExtension.appending(".mp4")))
-                if !inCollage {
+                if !inCollage, !isEditedPhoto {
                     if audio == nil, let size = fileSize(path), size < Int32(10 * 1024 * 1024), mime.hasSuffix("mp4") {
                         attrs.append(TelegramMediaFileAttribute.Animated)
                     }
@@ -477,7 +501,7 @@ public class Sender: NSObject {
                 if !mime.hasSuffix("mp4") {
                     attrs.append(.hintFileIsLarge)
                 }
-                if audio == nil {
+                if audio == nil, !isEditedPhoto {
                     attrs.append(.Animated)
                 }
                 return attrs

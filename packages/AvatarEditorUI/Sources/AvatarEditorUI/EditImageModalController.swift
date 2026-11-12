@@ -1,3 +1,4 @@
+import AppAnalytics
 import Cocoa
 import TGUIKit
 import SwiftSignalKit
@@ -767,16 +768,18 @@ public class EditImageModalController: ModalViewController {
     private let closedDisposable = DisposableSet()
     private let context: any AccountContextProtocol
     private let canCutOut: Bool
+    private let allowsAnimation: Bool
     
     public var onClose: () -> Void = {}
     public var onCancelled: (() -> Void)?
     private let confirm: ((Signal<URL, NoError>, @escaping()->Void)->Void)?
     
-    public init?(_ path: URL, context: any AccountContextProtocol, defaultData: EditedImageData? = nil, settings: EditControllerSettings = .plain, doneString: String? = nil, confirm: ((Signal<URL, NoError>, @escaping()->Void)->Void)? = nil, canCutOut: Bool = false) {
+    public init?(_ path: URL, context: any AccountContextProtocol, defaultData: EditedImageData? = nil, settings: EditControllerSettings = .plain, doneString: String? = nil, confirm: ((Signal<URL, NoError>, @escaping()->Void)->Void)? = nil, canCutOut: Bool = false, allowsAnimation: Bool = false) {
         self.canReset = defaultData != nil
         self.context = context
         self.confirm = confirm
         self.canCutOut = canCutOut
+        self.allowsAnimation = allowsAnimation
         self.doneString = doneString
         let initial = EditedImageData(originalUrl: path, selectedRect: .zero, dimensions: .none, isHorizontalFlipped: false, paintings: [], images: [])
         editState = Atomic(value: defaultData ?? initial)
@@ -795,6 +798,8 @@ public class EditImageModalController: ModalViewController {
     
     public override func close(animationType: ModalAnimationCloseBehaviour = .common) {
         guard !hasClosed else { return }
+        let analyticsPresentation = (analyticsContext ?? Analytics.shared.unresolvedContext()).beginPresentation()
+        defer { analyticsPresentation.end() }
         hasClosed = true
         markAsClosed = true
         onCancelled = nil
@@ -827,6 +832,8 @@ public class EditImageModalController: ModalViewController {
 
     private func cancelEditing() {
         guard !hasClosed else { return }
+        let analyticsPresentation = (analyticsContext ?? Analytics.shared.unresolvedContext()).beginPresentation()
+        defer { analyticsPresentation.end() }
         let onCancelled = !markAsClosed ? self.onCancelled : nil
         self.onCancelled = nil
         markAsClosed = true
@@ -844,7 +851,7 @@ public class EditImageModalController: ModalViewController {
         guard !markAsClosed else { return .invoked }
         
         let currentData = self.editState.modify {$0}
-        let dataSignal = EditedImageData.generateNewUrl(data: currentData, selectedRect: self.genericView.selectedRect) |> map { ($0, $0 == currentData.originalUrl ? nil : currentData)}
+        let dataSignal = EditedImageData.generateNewUrl(data: currentData, selectedRect: self.genericView.selectedRect, allowsAnimation: allowsAnimation) |> map { ($0, $0 == currentData.originalUrl ? nil : currentData)}
         
         let promise: Promise<(URL, EditedImageData?)> = Promise()
         promise.set(dataSignal)
@@ -949,6 +956,7 @@ public class EditImageModalController: ModalViewController {
             return
         }
         genericView.hideElements(true)
+        let analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
         _ = (self.editValue.get() |> take(1)).startStandalone(next: { [weak self] data in
             guard let self else {
                 return
@@ -985,6 +993,7 @@ public class EditImageModalController: ModalViewController {
             }, closeHandler: { [weak self] in
                 self?.genericView.hideElements(false)
             })
+            editor.analyticsContext = analyticsContext
             showModal(with: editor, for: window, animated: false, animationType: .alpha)
         })
         
@@ -1009,6 +1018,7 @@ public class EditImageModalController: ModalViewController {
             }
             self.genericView.hideElements(false)
         })
+        editor.analyticsContext = self.analyticsContext ?? Analytics.shared.unresolvedContext()
         showModal(with: editor, for: window, animated: false, animationType: .alpha)
     }
     

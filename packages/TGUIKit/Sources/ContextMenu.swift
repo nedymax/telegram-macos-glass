@@ -172,10 +172,13 @@ public final class ContextMenu : NSMenu, NSMenuDelegate {
     
     public var loadMore: (()->Void)? = nil
 
-    @objc dynamic internal var _items:[NSMenuItem] = [] {
-        didSet {
-            self.removeAllItems()
-            for item in _items {
+    @objc dynamic internal var _items:[NSMenuItem] {
+        get {
+            return super.items
+        }
+        set {
+            super.removeAllItems()
+            for item in newValue {
                 super.addItem(item)
             }
         }
@@ -186,7 +189,39 @@ public final class ContextMenu : NSMenu, NSMenuDelegate {
     }
     
     public override func addItem(_ newItem: NSMenuItem) {
-        _items.append(newItem)
+        willChangeValue(forKey: #keyPath(ContextMenu._items))
+        super.addItem(newItem)
+        didChangeValue(forKey: #keyPath(ContextMenu._items))
+    }
+
+    public var asyncItemsProvider: ((@escaping ([NSMenuItem]) -> Void) -> Disposable)? {
+        didSet {
+            if System.legacyMenu {
+                loadAsyncItems()
+            }
+        }
+    }
+
+    private let asyncItemsDisposable = MetaDisposable()
+    private(set) var isLoadingAsyncItems = false
+    var asyncItemsLoaded: (() -> Void)?
+
+    func loadAsyncItems() {
+        guard let asyncItemsProvider else {
+            return
+        }
+        self.asyncItemsProvider = nil
+        self.isLoadingAsyncItems = true
+        asyncItemsDisposable.set(asyncItemsProvider({ [weak self] items in
+            guard let self else {
+                return
+            }
+            self.isLoadingAsyncItems = false
+            self.items = items
+            let loaded = self.asyncItemsLoaded
+            self.asyncItemsLoaded = nil
+            loaded?()
+        }))
     }
     
     public override var items: [NSMenuItem] {
@@ -241,6 +276,7 @@ public final class ContextMenu : NSMenu, NSMenuDelegate {
     }
     deinit {
         NotificationCenter.default.removeObserver(self)
+        asyncItemsDisposable.dispose()
     }
     
 }

@@ -22,6 +22,7 @@ import SwiftSignalKit
 import Postbox
 import TelegramCore
 import InlineStickerLayer
+import AppAnalytics
 
 private final class SubscriptionFeeRowItem: GeneralRowItem {
     private let pricing: StarsSubscriptionPricing
@@ -141,7 +142,8 @@ private final class ExportInvitationArguments {
     let openProfile:(PeerId)->Void
     let revokeLink: (_ExportedInvitation)->Void
     let editLink:(_ExportedInvitation)->Void
-    init(context: (joined: PeerInvitationImportersContext, requested: PeerInvitationImportersContext), accountContext: any AccountContextProtocol, copyLink: @escaping(String)->Void, shareLink: @escaping(String)->Void, openProfile:@escaping(PeerId)->Void, revokeLink: @escaping(_ExportedInvitation)->Void, editLink: @escaping(_ExportedInvitation)->Void) {
+    let showQrCode:(String)->Void
+    init(context: (joined: PeerInvitationImportersContext, requested: PeerInvitationImportersContext), accountContext: any AccountContextProtocol, copyLink: @escaping(String)->Void, shareLink: @escaping(String)->Void, showQrCode: @escaping(String)->Void, openProfile:@escaping(PeerId)->Void, revokeLink: @escaping(_ExportedInvitation)->Void, editLink: @escaping(_ExportedInvitation)->Void) {
         self.context = context
         self.accountContext = accountContext
         self.copyLink = copyLink
@@ -149,6 +151,7 @@ private final class ExportInvitationArguments {
         self.openProfile = openProfile
         self.revokeLink = revokeLink
         self.editLink = editLink
+        self.showQrCode = showQrCode
     }
 }
 
@@ -194,6 +197,9 @@ private func entries(_ state: State, admin: Peer?, invitation: _ExportedInvitati
                     items.append(ContextMenuItem(strings().manageLinksContextShare, handler: {
                         arguments.shareLink(invitation.link)
                     }, itemImage: MenuAnimation.menu_share.value))
+                    items.append(ContextMenuItem(strings().manageLinksContextQrCode, handler: {
+                        arguments.showQrCode(invitation.link)
+                    }, image: inviteLinkQrMenuIcon()))
                 }
                 if !invitation.isPermanent {
                     items.append(ContextMenuItem(strings().manageLinksContextEdit, handler: {
@@ -357,6 +363,8 @@ public func ExportedInvitationController(invitation: _ExportedInvitation, peerId
         copyToClipboard(link)
     }, shareLink: { link in
         InviteLinksHooks.shared.shareLink(accountContext, link, accountContext.window)
+    }, showQrCode: { link in
+        showModal(with: InviteLinkQrController(context: accountContext, link: link, isChannel: isChannel), for: accountContext.window)
     }, openProfile: { peerId in
         getModalController?()?.close()
         InviteLinksHooks.shared.openPeerInfo(accountContext, peerId)
@@ -370,7 +378,7 @@ public func ExportedInvitationController(invitation: _ExportedInvitation, peerId
     }, editLink: { [weak manager] link in
         getModalController?()?.close()
         showModal(with: ClosureInviteLinkController(context: accountContext, peerId: peerId, mode: .edit(link), isChannel: isChannel, save: { [weak manager] updated in
-            let signal = manager?.editPeerExportedInvitation(link: link, title: updated.title, expireDate: updated.date == .max ? 0 : updated.date + Int32(Date().timeIntervalSince1970), usageLimit: updated.count == .max ? 0 : updated.count)
+            let signal = manager?.editPeerExportedInvitation(link: link, title: updated.editedTitle, expireDate: updated.editedExpireDate, usageLimit: updated.editedUsageLimit, requestNeeded: updated.editedRequestNeeded)
             if let signal = signal {
                 _ = showModalProgress(signal: signal, for: accountContext.window).start()
             }
@@ -403,6 +411,7 @@ public func ExportedInvitationController(invitation: _ExportedInvitation, peerId
 
     
     let controller = InputDataController(dataSignal: dataSignal, title: invitation.title ?? strings().exportedInvitationTitle)
+    controller.analyticsScreen = .peerInfoInviteLinksLink
     
     controller.leftModalHeader = ModalHeaderData(image: theme.icons.modalClose, handler: {
         getModalController?()?.close()

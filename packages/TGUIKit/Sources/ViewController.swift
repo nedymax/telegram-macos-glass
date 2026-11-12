@@ -468,6 +468,8 @@ public enum ViewControllerLifecycleHooks {
 
 open class ViewController : NSObject {
     
+    public var analyticsScreenId: String?
+    public var analyticsPeerType: String?
     
     public struct StakeSettings {
         
@@ -538,6 +540,12 @@ open class ViewController : NSObject {
     /// fill their container edge-to-edge (e.g. `ChatController`) assign `.zero`
     /// to this property in their init.
     public var insets: NSEdgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+
+    public private(set) var containerContentInsets: NSEdgeInsets = NSEdgeInsets()
+
+    open func updateContainerContentInsets(_ insets: NSEdgeInsets, transition: ContainedViewLayoutTransition) {
+        containerContentInsets = insets
+    }
 
     /// When this controller is placed in a `SplitView` that grants it the full
     /// container width (rather than its logical pane width), `slotLeadingInset`
@@ -1389,6 +1397,7 @@ open class ModalController : ModalViewController {
     public init(_ controller: NavigationViewController) {
         self.controller = controller
         super.init(frame: controller._frameRect)
+        bar = .init(height: 0)
     }
 
     open override var handleEvents: Bool {
