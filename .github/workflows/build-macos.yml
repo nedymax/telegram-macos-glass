@@ -25,7 +25,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 360
     concurrency:
-      group: build-macos-${{ github.ref }}-xcode${{ matrix.xcode }}
+      group: build-macos-${{ github.ref }}-${{ inputs.checkout_ref }}-xcode${{ matrix.xcode }}
       cancel-in-progress: false
     strategy:
       fail-fast: false
