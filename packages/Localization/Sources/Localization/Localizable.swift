@@ -10711,6 +10711,14 @@ public final class L10n {
   }
   /// Power saving mode can be turned on automatically based on battery level.
   public static var liteModeLowPowerInfoFull: String  { return L10n.tr("Localizable", "LiteMode.LowPower.InfoFull") }
+  /// Low Power Mode
+  public static var liteModeControllerLowPowerMode: String  { return L10n.tr("Localizable", "LiteMode.Controller.LowPowerMode") }
+  /// Off
+  public static var liteModeControllerOff: String  { return L10n.tr("Localizable", "LiteMode.Controller.Off") }
+  /// Turns on when your battery is below %1$@
+  public static func liteModeControllerTurnsOnBelow(_ p1: String) -> String {
+    return L10n.tr("Localizable", "LiteMode.Controller.TurnsOnBelow", p1)
+  }
   /// Allow Comments
   public static var liveStreamAllowComments: String  { return L10n.tr("Localizable", "LiveStream.AllowComments") }
   /// Allow Screenshots

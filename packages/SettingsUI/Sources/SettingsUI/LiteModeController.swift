@@ -99,13 +99,13 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
     sectionId += 1
     
     entries.append(InputDataEntry.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_low_power, equatable: InputDataEquatable(state.liteMode), comparable: nil, item: { initialSize, stableId in
-        let sizes:[Int32] = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-        let offTitle = "Off" //TODOLANG
+        let sizes:[Int32] = [10, 40, 70, 100]
+        let offTitle = strings().liteModeControllerOff
         let titles = sizes.map { $0 == 100 ? offTitle : "\($0)%" }
-        let header = strings().liteModeLowPower.lowercased()
-        let title = header.prefix(1).uppercased() + header.dropFirst()
-        let percent = state.liteMode.lowBatteryPercent
-        let subtitle = percent == 100 ? offTitle : "Turns on below \(percent)%" //TODOLANG
+        let title = strings().liteModeControllerLowPowerMode
+        let stored = state.liteMode.lowBatteryPercent
+        let percent = sizes.min(by: { abs($0 - stored) < abs($1 - stored) }) ?? stored
+        let subtitle = percent == 100 ? offTitle : strings().liteModeControllerTurnsOnBelow("\(percent)%")
         return SelectSizeRowItem(initialSize, stableId: stableId, current: percent, sizes: sizes, hasMarkers: false, titles: titles, title: title, subtitle: subtitle, viewType: .singleItem, selectAction: { index in
             arguments.toggleLowPower(sizes[index])
         })

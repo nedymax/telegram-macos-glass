@@ -296,6 +296,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
     private var availableRects:[NSRect] = []
     private let containerView = GeneralRowContainerView(frame: NSZeroRect)
     private let thumbView = View()
+    private let trackView = NativeSliderTrackView(frame: .zero)
     private var nativeLens: LiquidGlassLensView?
     private var dragPosition: CGFloat?
     private var tracking = false
@@ -324,6 +325,20 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         thumbView.layer?.shadowOffset = NSMakeSize(0, 1)
         thumbView.layer?.shadowPath = CGPath(roundedRect: SelectSizeRowView.thumbSize.bounds, cornerWidth: SelectSizeRowView.thumbSize.height / 2, cornerHeight: SelectSizeRowView.thumbSize.height / 2, transform: nil)
         containerView.addSubview(thumbView)
+        trackView.isEventLess = true
+        trackView.render = { [weak self] ctx in
+            self?.drawNativeTrack(ctx)
+        }
+        containerView.addSubview(trackView, positioned: .below, relativeTo: thumbView)
+    }
+
+    private func redrawContent() {
+        containerView.needsDisplay = true
+        trackView.needsDisplay = true
+    }
+
+    private var trackSources: [LiquidGlassLensContentSource] {
+        return trackView.superview === nativeLens?.contentView ? [LiquidGlassLensContentSource(view: trackView)] : []
     }
 
     public override func hitTest(_ point: NSPoint) -> NSView? {
@@ -459,13 +474,13 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         positionAnimator = DisplayLinkAnimator(duration: SelectSizeRowView.settleDuration, from: from, to: target, timingFunction: CAMediaTimingFunction(controlPoints: 0.5, 1.0 + 0.4 / 3.0, 1.0, 1.0), update: { [weak self] value in
             guard let self else { return }
             self.shownPosition = value
-            self.containerView.needsDisplay = true
+            self.redrawContent()
             self.updateThumb(lens: nil)
         }, completion: { [weak self] in
             guard let self else { return }
             self.positionAnimator = nil
             self.shownPosition = nil
-            self.containerView.needsDisplay = true
+            self.redrawContent()
             self.updateThumb(lens: nil)
         })
     }
@@ -482,15 +497,21 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
                 nativeLens.reset()
                 nativeLens.removeFromSuperview()
                 self.nativeLens = nil
+                containerView.addSubview(trackView, positioned: .below, relativeTo: thumbView)
+                trackView.frame = containerView.bounds
             }
             thumbView.layer?.opacity = 1
             return
         }
         if lifted, nativeLens == nil, let lens = LiquidGlassLensView.make() {
             lens.frame = containerView.bounds
-            containerView.addSubview(lens)
+            containerView.addSubview(lens, positioned: .below, relativeTo: thumbView)
             nativeLens = lens
-            lens.update(lensFrame: from, interactionProgress: 0, appearance: theme.appearance, backingScale: backingScaleFactor, animation: .immediate, contentSources: [])
+            if (item as? SelectSizeRowItem)?.isNative == true {
+                lens.contentView.addSubview(trackView)
+                trackView.frame = containerView.bounds
+            }
+            lens.update(lensFrame: from, interactionProgress: 0, appearance: theme.appearance, backingScale: backingScaleFactor, animation: .immediate, contentSources: trackSources)
         }
         guard let nativeLens else {
             thumbView.layer?.opacity = 1
@@ -499,7 +520,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         nativeLens.frame = containerView.bounds
         let size = knobSize == NativeSliderGeometry.knobSize ? NativeSliderGeometry.liftedKnobSize : SelectSizeRowView.liftedThumbSize
         let frame = lifted ? NSMakeRect(rest.midX - size.width / 2, rest.midY - size.height / 2, size.width, size.height) : rest
-        nativeLens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: theme.appearance, backingScale: backingScaleFactor, animation: animation, contentSources: [])
+        nativeLens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: theme.appearance, backingScale: backingScaleFactor, animation: animation, contentSources: trackSources)
         let opacity: Float = lifted && nativeLens.hasActiveSurface ? 0 : 1
         if thumbView.layer?.opacity != opacity {
             let previous = thumbView.layer?.presentation()?.opacity ?? thumbView.layer?.opacity ?? 1
@@ -555,7 +576,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         lifted = liftsOnPress
         setDragPosition(at: point.x, item: item, metrics: metrics)
         animatePosition(from: from)
-        containerView.needsDisplay = true
+        redrawContent()
         updateThumb(lens: .spring(duration: 0.4))
     }
 
@@ -566,7 +587,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         }
         stopPositionAnimation()
         setDragPosition(at: containerView.convert(event.locationInWindow, from: nil).x, item: item, metrics: metrics)
-        containerView.needsDisplay = true
+        redrawContent()
         updateThumb(lens: .immediate)
     }
 
@@ -582,7 +603,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         dragPosition = nil
         item.current = item.sizes[index]
         animatePosition(from: from)
-        containerView.needsDisplay = true
+        redrawContent()
         updateThumb(lens: .spring(duration: 0.4))
         pendingSelect?.cancel()
         pendingSelect = nil
@@ -745,44 +766,6 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
                 node.1.draw(large, in: ctx, backingScaleFactor: backingScaleFactor, backgroundColor: backgroundColor)
             }
 
-            let track = geometry.trackRect
-            let radius = track.height / 2
-            let fillX = geometry.centers.isEmpty ? track.minX : min(max(geometry.centers[0] + (geometry.centers.count > 1 ? (geometry.centers[1] - geometry.centers[0]) : 0) * current, track.minX), track.maxX)
-            let trackColor = theme.colors.text.withAlphaComponent(0.13)
-
-            func segment(_ from: CGFloat, _ to: CGFloat, dotted: Bool) {
-                guard to > from else { return }
-                let rect = NSMakeRect(from, track.minY, to - from, track.height)
-                if dotted {
-                    let dash: CGFloat = 6
-                    var x = rect.minX
-                    while x < rect.maxX {
-                        let w = min(dash, rect.maxX - x)
-                        ctx.addPath(CGPath(roundedRect: NSMakeRect(x, rect.minY, w, rect.height), cornerWidth: min(radius, w / 2), cornerHeight: radius, transform: nil))
-                        x += dash + 3
-                    }
-                } else {
-                    ctx.addPath(CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
-                }
-                ctx.fillPath()
-            }
-
-            for (filled, color) in [(false, trackColor), (true, theme.colors.accent)] {
-                ctx.setFillColor(color.cgColor)
-                let limit = filled ? fillX : track.maxX
-                if item.dottedIndexes.isEmpty {
-                    segment(track.minX, limit, dotted: false)
-                } else {
-                    var x = track.minX
-                    for i in 1 ..< max(1, item.sizes.count) {
-                        let end = i == item.sizes.count - 1 ? track.maxX : geometry.centers[i]
-                        segment(x, min(end, limit), dotted: item.dottedIndexes.contains(i))
-                        x = end
-                        if x >= limit { break }
-                    }
-                }
-            }
-
             ctx.setFillColor(theme.colors.grayText.cgColor)
             for center in geometry.centers {
                 ctx.fillEllipse(in: NSMakeRect(center - NativeSliderGeometry.tickSize / 2, geometry.controlY + NativeSliderGeometry.tickOffset, NativeSliderGeometry.tickSize, NativeSliderGeometry.tickSize))
@@ -811,6 +794,53 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         
     }
     
+
+    private func drawNativeTrack(_ ctx: CGContext) {
+        guard let item = item as? SelectSizeRowItem, item.isNative, !item.sizes.isEmpty else {
+            return
+        }
+        let geometry = item.nativeGeometry(width: containerView.frame.width)
+        let current = renderedPosition
+        let track = geometry.trackRect
+        let radius = track.height / 2
+        let fillX = geometry.centers.isEmpty ? track.minX : min(max(geometry.centers[0] + (geometry.centers.count > 1 ? (geometry.centers[1] - geometry.centers[0]) : 0) * current, track.minX), track.maxX)
+        let trackColor = theme.colors.text.withAlphaComponent(0.13)
+
+        func segment(_ from: CGFloat, _ to: CGFloat, dotted: Bool) {
+            guard to > from else { return }
+            let rect = NSMakeRect(from, track.minY, to - from, track.height)
+            if dotted {
+                let dash: CGFloat = 6
+                var x = rect.minX
+                while x < rect.maxX {
+                    let w = min(dash, rect.maxX - x)
+                    ctx.addPath(CGPath(roundedRect: NSMakeRect(x, rect.minY, w, rect.height), cornerWidth: min(radius, w / 2), cornerHeight: radius, transform: nil))
+                    x += dash + 3
+                }
+            } else {
+                ctx.addPath(CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
+            }
+            ctx.fillPath()
+        }
+
+        for (filled, color) in [(false, trackColor), (true, theme.colors.accent)] {
+            ctx.setFillColor(color.cgColor)
+            let limit = filled ? fillX : track.maxX
+            if item.dottedIndexes.isEmpty {
+                segment(track.minX, limit, dotted: false)
+            } else {
+                var x = track.minX
+                for i in 1 ..< max(1, item.sizes.count) {
+                    let end = i == item.sizes.count - 1 ? track.maxX : geometry.centers[i]
+                    segment(x, min(end, limit), dotted: item.dottedIndexes.contains(i))
+                    x = end
+                    if x >= limit { break }
+                }
+            }
+        }
+
+    }
+
     public override var backdorColor: NSColor {
         return theme.colors.background
     }
@@ -823,9 +853,13 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         switch item.viewType {
         case .legacy:
             self.containerView.frame = bounds
+            trackView.isHidden = true
         case let .modern(position, _):
             self.containerView.frame = NSMakeRect(floorToScreenPixels(backingScaleFactor, (frame.width - item.blockWidth) / 2), item.inset.top, item.blockWidth, frame.height - item.inset.bottom - item.inset.top)
             self.containerView.setCorners(position.corners)
+            trackView.isHidden = false
+            trackView.frame = containerView.bounds
+            nativeLens?.frame = containerView.bounds
         }
         updateThumb(lens: .immediate)
     }
@@ -870,7 +904,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
             }
         }
         needsLayout = true
-        containerView.needsDisplay = true
+        redrawContent()
     }
     
     public required init?(coder: NSCoder) {
@@ -883,3 +917,12 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
 
 
 
+
+private final class NativeSliderTrackView: View {
+    var render: ((CGContext) -> Void)?
+
+    override func draw(_ layer: CALayer, in ctx: CGContext) {
+        super.draw(layer, in: ctx)
+        render?(ctx)
+    }
+}
