@@ -55,3 +55,34 @@ public enum SettingsCheckbox {
         return image
     }
 }
+
+public enum SettingsPopUpIndicator {
+    public static let size: CGFloat = 20
+
+    private static var cache: [String: CGImage] = [:]
+
+    public static var image: CGImage {
+        let key = "\(theme.colors.isDark)-\(System.backingScale)"
+        if let image = cache[key] {
+            return image
+        }
+        let image = generateImage(NSMakeSize(size, size), rotatedContext: { size, ctx in
+            ctx.clear(CGRect(origin: .zero, size: size))
+            ctx.setFillColor(theme.colors.text.withAlphaComponent(0.1).cgColor)
+            ctx.fillEllipse(in: CGRect(origin: .zero, size: size))
+            ctx.setStrokeColor(theme.colors.text.withAlphaComponent(0.75).cgColor)
+            ctx.setLineWidth(1.4)
+            ctx.setLineCap(.round)
+            ctx.setLineJoin(.round)
+            ctx.move(to: CGPoint(x: 7, y: 8.5))
+            ctx.addLine(to: CGPoint(x: 10, y: 5.5))
+            ctx.addLine(to: CGPoint(x: 13, y: 8.5))
+            ctx.move(to: CGPoint(x: 7, y: 11.5))
+            ctx.addLine(to: CGPoint(x: 10, y: 14.5))
+            ctx.addLine(to: CGPoint(x: 13, y: 11.5))
+            ctx.strokePath()
+        })!
+        cache[key] = image
+        return image
+    }
+}

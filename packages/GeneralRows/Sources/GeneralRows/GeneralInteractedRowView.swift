@@ -142,6 +142,8 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                 let textColor: NSColor
                 if case let .contextColored(_, color) = item.type {
                     textColor = color
+                } else if case .contextSelector = item.type, item.settingsPresentation != nil {
+                    textColor = item.customTheme?.textColor ?? theme.colors.text
                 } else {
                     textColor = item.customTheme?.grayTextColor ?? theme.colors.grayText
                 }
@@ -246,8 +248,13 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                 nextView.isHidden = false
                                 
                 let color = (item.customTheme?.grayTextColor ?? theme.colors.grayText).withAlphaComponent(0.5)
-                nextImage = item.isSelected ? nil : TelegramThemeHooks.shared.image(.iconGeneralNext).precomposed(color)
-                nextView.frame.size = nextImage?.backingSize ?? nextView.frame.size
+                if case .contextSelector = item.type, item.settingsPresentation != nil {
+                    nextImage = SettingsPopUpIndicator.image
+                    nextView.frame.size = NSMakeSize(SettingsPopUpIndicator.size, SettingsPopUpIndicator.size)
+                } else {
+                    nextImage = item.isSelected ? nil : TelegramThemeHooks.shared.image(.iconGeneralNext).precomposed(color)
+                    nextView.frame.size = nextImage?.backingSize ?? nextView.frame.size
+                }
             }
             
             nextView.opacity = item.enabled ? 1.0 : 0.7
@@ -535,6 +542,14 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
 
                         for item in items {
                             menu.addItem(item)
+                        }
+                        if item.settingsPresentation != nil, case let .contextSelector(value, _) = item.type, let window = textView.window {
+                            let selected = items.firstIndex(where: { $0.title == value })
+                            for (index, menuItem) in items.enumerated() {
+                                menuItem.state = index == selected ? .on : .off
+                            }
+                            menu.popUpSelectedIndex = selected
+                            menu.popUpAnchor = window.convertToScreen(textView.convert(textView.bounds, to: nil))
                         }
                         AppMenu.show(menu: menu, event: event, for: textView)
                     }
