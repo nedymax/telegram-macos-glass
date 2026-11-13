@@ -86,3 +86,44 @@ public enum SettingsPopUpIndicator {
         return image
     }
 }
+
+public enum SettingsRadio {
+    private static var cache: [String: CGImage] = [:]
+
+    public static var selected: CGImage {
+        let color = theme.colors.accent.usingColorSpace(.sRGB) ?? theme.colors.accent
+        let key = "on-\(color.redComponent)-\(color.greenComponent)-\(color.blueComponent)-\(System.backingScale)"
+        if let image = cache[key] {
+            return image
+        }
+        let size = SettingsCheckbox.size
+        let image = generateImage(NSMakeSize(size, size), rotatedContext: { size, ctx in
+            ctx.clear(CGRect(origin: .zero, size: size))
+            ctx.setFillColor(color.cgColor)
+            ctx.fillEllipse(in: CGRect(origin: .zero, size: size))
+            ctx.setFillColor(NSColor.white.cgColor)
+            ctx.fillEllipse(in: CGRect(x: (size.width - 6) / 2, y: (size.height - 6) / 2, width: 6, height: 6))
+        })!
+        cache[key] = image
+        return image
+    }
+
+    public static var unselected: CGImage {
+        let key = "off-\(theme.colors.isDark)-\(System.backingScale)"
+        if let image = cache[key] {
+            return image
+        }
+        let size = SettingsCheckbox.size
+        let image = generateImage(NSMakeSize(size, size), rotatedContext: { size, ctx in
+            ctx.clear(CGRect(origin: .zero, size: size))
+            let rect = CGRect(origin: .zero, size: size).insetBy(dx: 0.5, dy: 0.5)
+            ctx.setFillColor(theme.colors.text.withAlphaComponent(0.06).cgColor)
+            ctx.fillEllipse(in: rect)
+            ctx.setStrokeColor(theme.colors.text.withAlphaComponent(0.28).cgColor)
+            ctx.setLineWidth(1)
+            ctx.strokeEllipse(in: rect)
+        })!
+        cache[key] = image
+        return image
+    }
+}

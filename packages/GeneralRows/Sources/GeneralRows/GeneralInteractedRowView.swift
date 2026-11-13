@@ -78,11 +78,17 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                 switchView?.removeFromSuperview()
                 switchView = nil
             }
+            var leftSelection: (value: Bool, radio: Bool)?
             if case let .selectableLeft(value) = item.type {
+                leftSelection = (value, false)
+            } else if item.settingsPresentation != nil, case let .selectable(value) = item.type {
+                leftSelection = (value, true)
+            }
+            if let (value, radio) = leftSelection {
                 
                 let settingsCheckbox = item.settingsPresentation != nil && item.customTheme == nil
-                let unselected: CGImage = settingsCheckbox ? SettingsCheckbox.unselected : (item.customTheme?.unselectedImage ?? theme.icons.chatToggleUnselected)
-                let selected: CGImage = settingsCheckbox ? SettingsCheckbox.selected() : (item.customTheme?.selectedImage ?? theme.icons.chatToggleSelected)
+                let unselected: CGImage = radio ? SettingsRadio.unselected : settingsCheckbox ? SettingsCheckbox.unselected : (item.customTheme?.unselectedImage ?? theme.icons.chatToggleUnselected)
+                let selected: CGImage = radio ? SettingsRadio.selected : settingsCheckbox ? SettingsCheckbox.selected() : (item.customTheme?.selectedImage ?? theme.icons.chatToggleSelected)
 
                 let current: SelectingControl
                 if let view = self.selectLeftControl {
@@ -102,7 +108,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
                 }
                 current.update(unselectedImage: unselected, selectedImage: selected, selected: value, animated: animated)
                 
-                current.userInteractionEnabled = item.switchAction != nil
+                current.userInteractionEnabled = !radio && item.switchAction != nil
                 
                 
                 current.layer?.opacity = item.enabled ? 1 : 0.7
@@ -214,7 +220,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
             }
             textView?.backgroundColor = backdorColor
             
-            if case let .selectable(value) = item.type {
+            if case let .selectable(value) = item.type, item.settingsPresentation == nil {
                 nextView.isHidden = !value
                 
                 nextImage = GeneralRowsHooks.shared.checkSelectedImage(item.customTheme?.accentColor ?? theme.colors.accent, item.customTheme?.underSelectedColor ?? theme.colors.underSelectedColor)
@@ -367,7 +373,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
         var textXAdditional:CGFloat = 0
         guard let item = item as? GeneralInteractedRowItem else {return 0}
         if let inset = item.settingsTextInset {
-            return inset + (selectLeftControl != nil ? 38 : 0)
+            return inset + (selectLeftControl != nil ? (item.settingsPresentation != nil ? SettingsCheckbox.size + 8 : 38) : 0)
         }
         let t = item.isSelected ? item.activeThumb : item.thumb
         if let thumb = t {
@@ -378,7 +384,7 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
             }
         }
         if let _ = self.selectLeftControl {
-            textXAdditional += 24 + 14
+            textXAdditional += item.settingsPresentation != nil ? SettingsCheckbox.size + 8 : 24 + 14
         }
         return textXAdditional
     }
