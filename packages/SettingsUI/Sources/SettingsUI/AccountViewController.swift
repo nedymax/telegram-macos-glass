@@ -616,9 +616,6 @@ private func accountInfoEntries<Context: AccountContextProtocol>(peerView:PeerVi
         }
     }
 
-    entries.append(.whiteSpace(index: index, height: 10))
-    index += 1
-
     for bot in attachMenuBots {
         if #available(macOS 10.15, *), SettingsHooks.shared.walletHooks.hasWallet(context), context.account.testingEnvironment, bot.peer.addressName?.lowercased() == "wallet" {
             continue
@@ -644,10 +641,9 @@ private func accountInfoEntries<Context: AccountContextProtocol>(peerView:PeerVi
         entries.append(.proxy(index: index, viewType: .singleItem, status: status))
         index += 1
         
+        entries.append(.whiteSpace(index: index, height: 10))
+        index += 1
     }
-    
-    entries.append(.whiteSpace(index: index, height: 10))
-    index += 1
     
     entries.append(.general(index: index, viewType: .singleItem))
     index += 1

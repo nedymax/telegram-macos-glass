@@ -166,8 +166,7 @@ open class GeneralTextRowItem: GeneralRowItem {
         if isHeader {
             let string = text.string
             if string.rangeOfCharacter(from: .lowercaseLetters) == nil {
-                let lowered = string.lowercased()
-                text.replaceCharacters(in: text.range, with: lowered.prefix(1).uppercased() + lowered.dropFirst())
+                text.replaceCharacters(in: text.range, with: string.settingsTitleCase)
             }
             text.addAttribute(.foregroundColor, value: theme.colors.text, range: text.range)
         }

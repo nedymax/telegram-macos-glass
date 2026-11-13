@@ -64,3 +64,25 @@ public extension String {
         return lowered.prefix(1).uppercased() + lowered.dropFirst()
     }
 }
+
+public extension String {
+    var settingsTitleCase: String {
+        guard rangeOfCharacter(from: .lowercaseLetters) == nil else {
+            return self
+        }
+        guard rangeOfCharacter(from: CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZ")) != nil else {
+            return settingsSentenceCase
+        }
+        let minor: Set<String> = ["a", "an", "and", "as", "at", "but", "by", "for", "in", "nor", "of", "on", "or", "the", "to", "with"]
+        var result: [String] = []
+        for (index, word) in lowercased().split(separator: " ", omittingEmptySubsequences: false).enumerated() {
+            let word = String(word)
+            if index > 0, minor.contains(word) {
+                result.append(word)
+            } else {
+                result.append(word.prefix(1).uppercased() + word.dropFirst())
+            }
+        }
+        return result.joined(separator: " ")
+    }
+}
