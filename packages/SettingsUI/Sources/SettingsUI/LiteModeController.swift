@@ -86,27 +86,18 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
     entries.append(.sectionId(sectionId, type: .normal))
     sectionId += 1
     
-    entries.append(.general(sectionId: sectionId, index: index, value: .none, error:  nil, identifier: _id_enabled, data: .init(name: strings().liteModeEnableText, color: theme.colors.text, type: .switchable(state.liteMode.enabled), viewType: .singleItem, action: arguments.toggleEnabled)))
-    index += 1
-    
-    entries.append(.desc(sectionId: sectionId, index: index, text: .plain(strings().liteModeInfo), data: .init(color: theme.colors.listGrayText, viewType: .textBottomItem)))
+    entries.append(.general(sectionId: sectionId, index: index, value: .none, error:  nil, identifier: _id_enabled, data: .init(name: strings().liteModeEnableText, color: theme.colors.text, type: .switchable(state.liteMode.enabled), viewType: .firstItem, description: strings().liteModeInfo, action: arguments.toggleEnabled)))
     index += 1
 
-    
-    // entries
-    
-    entries.append(.sectionId(sectionId, type: .normal))
-    sectionId += 1
-    
     entries.append(InputDataEntry.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_low_power, equatable: InputDataEquatable(state.liteMode), comparable: nil, item: { initialSize, stableId in
         let sizes:[Int32] = [10, 40, 70, 100]
         let offTitle = strings().liteModeControllerOff
         let titles = sizes.map { $0 == 100 ? offTitle : "\($0)%" }
-        let title = strings().liteModeControllerLowPowerMode
+        let title = strings().liteModeControllerTurnOnAutomatically
         let stored = state.liteMode.lowBatteryPercent
         let percent = sizes.min(by: { abs($0 - stored) < abs($1 - stored) }) ?? stored
-        let subtitle = percent == 100 ? offTitle : strings().liteModeControllerTurnsOnBelow("\(percent)%")
-        return SelectSizeRowItem(initialSize, stableId: stableId, current: percent, sizes: sizes, hasMarkers: false, titles: titles, title: title, subtitle: subtitle, viewType: .singleItem, selectAction: { index in
+        let subtitle = percent == 100 ? offTitle : strings().liteModeControllerBatteryBelow("\(percent)%")
+        return SelectSizeRowItem(initialSize, stableId: stableId, current: percent, sizes: sizes, hasMarkers: false, titles: titles, title: title, subtitle: subtitle, viewType: .lastItem, selectAction: { index in
             arguments.toggleLowPower(sizes[index])
         })
     }))
