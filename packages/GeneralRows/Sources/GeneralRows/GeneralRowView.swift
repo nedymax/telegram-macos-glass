@@ -136,7 +136,7 @@ open class GeneralRowContainerView : Control, MorphCornerProviding {
         case .some:
             settingsCornerRadius = SettingsRowMetrics.cardCornerRadius
         case nil:
-            settingsCornerRadius = nil
+            settingsCornerRadius = (item as? GeneralRowItem)?.usesSettingsCorners == true ? SettingsRowMetrics.cardCornerRadius : nil
         }
     }
     // The visible rounding is drawn by `maskLayer`, not `layer.cornerRadius`, so report it for the morph.

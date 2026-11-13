@@ -312,3 +312,14 @@ public class PeerMediaRowView : GeneralContainableRowView, Notifable {
         contentView.removeAllSubviews()
     }
 }
+
+public let PeerMediaSettingsThumbCornerRadius: CGFloat = 9
+
+extension NSView {
+    func applyPeerMediaThumbCorners(_ item: GeneralRowItem, fallback: CGFloat) {
+        let settings = item.settingsPresentation != nil
+        layer?.masksToBounds = true
+        layer?.cornerRadius = settings ? PeerMediaSettingsThumbCornerRadius : fallback
+        layer?.cornerCurve = settings ? .continuous : .circular
+    }
+}
