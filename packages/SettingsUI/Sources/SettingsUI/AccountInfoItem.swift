@@ -510,7 +510,7 @@ private class AccountInfoView : GeneralContainableRowView {
         let compact = (item as? AccountInfoItem)?.compact ?? false
         let avatarSize: CGFloat = compact ? 40 : 60
         avatarContainer.setFrameSize(NSMakeSize(avatarSize, avatarSize))
-        avatarContainer.centerY(x: compact ? containerView.frame.minX + 8 : 16)
+        avatarContainer.centerY(x: compact ? SettingsRowMetrics.sidebarContentInset : 16)
         if storyStateView == nil, avatarView.frame.size != avatarContainer.frame.size {
             avatarView.frame = avatarContainer.bounds
         }
