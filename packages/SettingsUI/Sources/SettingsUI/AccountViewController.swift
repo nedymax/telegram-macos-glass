@@ -318,7 +318,7 @@ private enum AccountInfoEntry<Context: AccountContextProtocol> : TableItemListNo
     func item(_ arguments: AccountInfoArguments<Context>, initialSize: NSSize) -> TableRowItem {
         switch self {
         case let .info(_, viewType, peer, storyStats):
-            return AccountInfoItem(initialSize, stableId: stableId, viewType: viewType, inset: NSEdgeInsets(left: 12, right: 12), context: arguments.context, peer: peer.peer as! TelegramUser, storyStats: storyStats, action: {
+            return AccountInfoItem(initialSize, stableId: stableId, viewType: viewType, inset: NSEdgeInsets(left: 12, right: 12), context: arguments.context, peer: peer.peer as! TelegramUser, storyStats: storyStats, compact: true, action: {
                 let first: Atomic<Bool> = Atomic(value: true)
                 EditAccountInfoController(context: arguments.context, f: { controller in
                     arguments.presentController(controller, first.swap(false))
@@ -364,9 +364,9 @@ private enum AccountInfoEntry<Context: AccountContextProtocol> : TableItemListNo
                 return .single(items)
             }, alwaysHighlight: true, badgeNode: SettingsHooks.shared.makeAccountBadgeNode(info.account, arguments.context), compactText: true, highlightVerified: true, customTheme: .initialize(theme, background: .clear))
         case let .addAccount(_, accounts, viewType):
-            return GeneralInteractedRowItem(initialSize, stableId: stableId, name: strings().accountSettingsAddAccount, nameStyle: ControlStyle(font: .normal(.title), foregroundColor: theme.colors.accentIcon), type: .none, viewType: viewType, action: {
+            return GeneralInteractedRowItem(initialSize, stableId: stableId, name: strings().accountSettingsAddAccount, icon: sidebarAddAccountIcon(), type: .none, viewType: viewType, action: {
                 arguments.addAccount(accounts)
-            }, thumb: GeneralThumbAdditional(thumb: theme.icons.account_add_account, textInset: 35, thumbInset: 0), inset:NSEdgeInsets(left: 12, right: 12), customTheme: .initialize(theme, background: .clear))
+            }, inset:NSEdgeInsets(left: 12, right: 12), customTheme: .initialize(theme, background: .clear))
         case let .general(_, viewType):
             return GeneralInteractedRowItem(initialSize, stableId: stableId, name: strings().accountSettingsGeneral, icon: theme.icons.settingsGeneral, activeIcon: theme.icons.settingsGeneralActive, type: .next, viewType: viewType, action: {
                 arguments.presentController(GeneralSettingsViewController(arguments.context), true)
@@ -545,14 +545,6 @@ private func accountInfoEntries<Context: AccountContextProtocol>(peerView:PeerVi
        
     }
     
-    if let peer = peerViewMainPeer(peerView) {
-        if context.isPremium {
-            entries.append(.setStatus(index: index, viewType: .singleItem, PeerEquatable(peer)))
-            index += 1
-        }
-        entries.append(.setProfileColor(index: index, viewType: .singleItem, PeerEquatable(peer)))
-        index += 1
-    }
     
     
     var has2fa = has2fa
@@ -782,6 +774,7 @@ public final class AccountControllerView : Control {
         textView.isSelectable = false
 
         statusContainer.addSubview(edit)
+        edit.isHidden = true
         statusContainer.addSubview(textView)
         edit.scaleOnClick = true
         qrCode.scaleOnClick = true
@@ -1432,3 +1425,20 @@ open class AccountViewController<Context: AccountContextProtocol> : TelegramGene
 
 }
 
+
+
+private func sidebarAddAccountIcon() -> CGImage {
+    return generateImage(NSMakeSize(20, 20), rotatedContext: { size, ctx in
+        ctx.clear(CGRect(origin: .zero, size: size))
+        ctx.setFillColor(theme.colors.text.withAlphaComponent(0.12).cgColor)
+        ctx.fillEllipse(in: CGRect(origin: .zero, size: size))
+        ctx.setStrokeColor(theme.colors.text.withAlphaComponent(0.75).cgColor)
+        ctx.setLineWidth(1.5)
+        ctx.setLineCap(.round)
+        ctx.move(to: CGPoint(x: 10, y: 6))
+        ctx.addLine(to: CGPoint(x: 10, y: 14))
+        ctx.move(to: CGPoint(x: 6, y: 10))
+        ctx.addLine(to: CGPoint(x: 14, y: 10))
+        ctx.strokePath()
+    })!
+}
