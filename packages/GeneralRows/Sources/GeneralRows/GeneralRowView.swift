@@ -74,6 +74,7 @@ open class GeneralContainableRowView : TableRowView {
     open override func layout() {
         super.layout()
         self.updateLayout(size: self.frame.size, transition: .immediate)
+        applySettingsTextSmoothing((item as? GeneralRowItem)?.settingsPresentation != nil)
     }
     
     open override func updateLayout(size: NSSize, transition: ContainedViewLayoutTransition) {
@@ -306,6 +307,7 @@ open class GeneralRowView: TableRowView,ViewDisplayDelegate {
     open override func layout() {
         
         guard let item = item as? GeneralRowItem else {return}
+        applySettingsTextSmoothing(item.settingsPresentation != nil)
 
         let minX = (frame.width - item.blockWidth) / 2
         
@@ -336,4 +338,15 @@ open class GeneralRowView: TableRowView,ViewDisplayDelegate {
         }
     }
     
+}
+
+extension NSView {
+    func applySettingsTextSmoothing(_ enabled: Bool) {
+        for subview in subviews {
+            if let textView = subview as? TextView {
+                textView.smoothFonts = enabled
+            }
+            subview.applySettingsTextSmoothing(enabled)
+        }
+    }
 }
