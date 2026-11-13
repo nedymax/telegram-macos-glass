@@ -706,7 +706,7 @@ private func storageUsageControllerEntries<Context: AccountContextProtocol>(stat
                 entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_category(item.category.hashValue), equatable: InputDataEquatable(item), comparable: nil, item: { initialSize, stableId in
                     
                     let nameAttr: NSMutableAttributedString = .init()
-                    _ = nameAttr.append(string: item.name, color: theme.colors.text, font: .normal(.title))
+                    _ = nameAttr.append(string: item.name, color: theme.colors.text, font: .normal(SettingsRowMetrics.titleSize))
                     
                     if item.selected {
                         _ = nameAttr.append(string: " ")
@@ -716,11 +716,11 @@ private func storageUsageControllerEntries<Context: AccountContextProtocol>(stat
                         if percent < 0.1 {
                             formatted = "<0.1%"
                         }
-                        _ = nameAttr.append(string: formatted, color: theme.colors.grayText, font: .normal(.title))
+                        _ = nameAttr.append(string: formatted, color: theme.colors.grayText, font: .normal(SettingsRowMetrics.titleSize))
                     }
                     
                     
-                    let subAttr: NSAttributedString = .initialize(string: String.prettySized(with: item.categoryData.size, round: true), color: theme.colors.grayText, font: .normal(.title))
+                    let subAttr: NSAttributedString = .initialize(string: String.prettySized(with: item.categoryData.size, round: true), color: theme.colors.grayText, font: .normal(SettingsRowMetrics.titleSize))
                     
                     let canToggle: Bool = true
                     return StorageUsageCategoryItem(initialSize, stableId: stableId, category: item.category, name: nameAttr, subString: subAttr, color: item.color, selected: item.selected, itemCategory: item.categoryItem, viewType: item.viewType, action: { action in
