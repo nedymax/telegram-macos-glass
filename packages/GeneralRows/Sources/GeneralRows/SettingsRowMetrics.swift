@@ -54,3 +54,13 @@ public enum SettingsRowMetrics {
         }
     }
 }
+
+public extension String {
+    var settingsSentenceCase: String {
+        guard rangeOfCharacter(from: .lowercaseLetters) == nil else {
+            return self
+        }
+        let lowered = lowercased()
+        return lowered.prefix(1).uppercased() + lowered.dropFirst()
+    }
+}
