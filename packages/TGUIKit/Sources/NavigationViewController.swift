@@ -942,6 +942,9 @@ open class NavigationViewController: ViewController, CALayerDelegate,CAAnimation
         }
 
         controller.navigationController = self
+        if self.controller.isSettingsScreen, controller.acceptsSettingsLayout {
+            controller.isSettingsScreen = true
+        }
         controller.loadViewIfNeeded(self.bounds)
         self.controller.readyToDetach()
         self.pushDisposable.set((controller.ready.get() |> take(1)).start(next: {[weak self] _ in

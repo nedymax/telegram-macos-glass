@@ -695,6 +695,10 @@ extension InputDataController : PeerMediaSearchable {
 public class InputDataController: GenericViewController<InputDataView> {
     private let settingsLayout: Bool
 
+    public override var acceptsSettingsLayout: Bool {
+        return true
+    }
+
     private var appliedContainerBottomInset: CGFloat = 0
 
     public override func updateContainerContentInsets(_ insets: NSEdgeInsets, transition: ContainedViewLayoutTransition) {
@@ -806,6 +810,7 @@ public class InputDataController: GenericViewController<InputDataView> {
         self.getBackgroundColor = getBackgroundColor
         self.isFlipped = isFlipped
         super.init()
+        self.isSettingsScreen = settingsLayout
         values.set(dataSignal)
     }
     
@@ -1026,7 +1031,7 @@ public class InputDataController: GenericViewController<InputDataView> {
         
         let onMainQueue: Atomic<Bool> = Atomic(value: !prepareAllItems)
         
-        let settingsLayout = self.settingsLayout
+        let settingsLayout = self.settingsLayout || self.isSettingsScreen
         let hasModalHeader: () -> Bool = { [weak self] in
             guard let self else {
                 return false

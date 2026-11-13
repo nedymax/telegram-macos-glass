@@ -1055,6 +1055,7 @@ open class AccountViewController<Context: AccountContextProtocol> : TelegramGene
         let arguments = AccountInfoArguments(context: context, storyList: PeerStoryListContext(account: context.account, peerId: context.peerId, isArchived: false, folderId: nil), presentController: { [weak self] controller, main in
             guard let navigation = self?.navigation as? MajorNavigationController else {return}
             guard let singleLayout = self?.context.layout else {return}
+            controller.isSettingsScreen = true
             navigation.push(controller, !main || singleLayout == .single, clearStack: main)
         }, openFaq: {
             SettingsHooks.shared.openFaq(context)
