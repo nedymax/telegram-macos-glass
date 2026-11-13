@@ -351,6 +351,34 @@ final class MainController_View: View {
         bgView.layer?.cornerRadius = radius
         contentView.layer?.cornerRadius = radius
         glassView?.cornerRadius = radius
+        materialView?.cornerRadius = radius
+    }
+
+    private var materialView: SidebarMaterialView?
+
+    private var materialOverWallpaper = false
+
+    @objc private func updateWindowMaterial() {
+        let overWallpaper = SidebarWindowMaterial.overWallpaper
+        if let materialView, !System.windowMaterialActive || overWallpaper != materialOverWallpaper {
+            materialView.removeFromSuperview()
+            self.materialView = nil
+        }
+        if System.windowMaterialActive, materialView == nil {
+            let view = SidebarMaterialView(frame: bounds, material: overWallpaper ? .sidebar : nil)
+            view.tintColor = presentation.colors.background
+            view.cornerRadius = currentCornerRadius
+            addSubview(view, positioned: .below, relativeTo: contentView)
+            materialView = view
+            materialOverWallpaper = overWallpaper
+        }
+        bgView.isHidden = System.windowMaterialActive
+        glassView?.isHidden = System.windowMaterialActive
+        needsLayout = true
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     required init(frame frameRect: NSRect) {
@@ -386,6 +414,8 @@ final class MainController_View: View {
             trailingSeparator.isHidden = !showsTrailingSeparator
             addSubview(trailingSeparator)
         }
+        NotificationCenter.default.addObserver(self, selector: #selector(updateWindowMaterial), name: systemWindowMaterialDidChange, object: nil)
+        updateWindowMaterial()
     }
 
     func addContentView(_ view: NSView) {
@@ -400,6 +430,7 @@ final class MainController_View: View {
         super.updateLocalizationAndTheme(theme: theme)
         bgView.backgroundColor = theme.colors.background
         glassView?.customTint = theme.colors.background
+        materialView?.tintColor = theme.colors.background
         trailingSeparator?.backgroundColor = theme.colors.border
     }
 
@@ -410,6 +441,9 @@ final class MainController_View: View {
 
     func updateLayout(size: NSSize, transition: ContainedViewLayoutTransition) {
         transition.updateFrame(view: bgView, frame: CGRect(origin: .zero, size: size))
+        if let materialView {
+            transition.updateFrame(view: materialView, frame: CGRect(origin: .zero, size: size))
+        }
         transition.updateFrame(view: contentView, frame: CGRect(origin: .zero, size: size))
         if let glassView {
             transition.updateFrame(view: glassView, frame: CGRect(origin: .zero, size: size))

@@ -87,6 +87,16 @@ private final class LeftSidebarArguments {
 }
 
 
+public enum SidebarWindowMaterial {
+    public static var overWallpaper: Bool = false {
+        didSet {
+            if overWallpaper != oldValue {
+                NotificationCenter.default.post(name: systemWindowMaterialDidChange, object: nil)
+            }
+        }
+    }
+}
+
 public final class LeftSidebarView: View {
     fileprivate let tableView = TableView()
     fileprivate var environment: SidebarUIEnvironment?
@@ -94,6 +104,36 @@ public final class LeftSidebarView: View {
 
     private let glassView: LiquidGlassView?
     private let trailingSeparator: View?
+    private var materialView: SidebarMaterialView?
+
+    private var materialOverWallpaper = false
+
+    @objc private func updateWindowMaterial() {
+        let overWallpaper = SidebarWindowMaterial.overWallpaper
+        if let materialView, !System.windowMaterialActive || overWallpaper != materialOverWallpaper {
+            materialView.removeFromSuperview()
+            self.materialView = nil
+        }
+        if System.windowMaterialActive, materialView == nil {
+            let view = SidebarMaterialView(frame: bounds, material: overWallpaper ? .sidebar : nil)
+            view.cornerRadius = System.edgeToEdgeSidebar ? 0 : LeftSidebarView.glassCornerRadius
+            addSubview(view, positioned: .below, relativeTo: tableView)
+            materialView = view
+            materialOverWallpaper = overWallpaper
+        }
+        glassView?.isHidden = System.windowMaterialActive
+        updateBackground(theme)
+        needsLayout = true
+    }
+
+    private func updateBackground(_ theme: TelegramPresentationTheme) {
+        backgroundColor = System.edgeToEdgeSidebar && !System.windowMaterialActive ? theme.colors.background : .clear
+        materialView?.tintColor = theme.colors.background
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
 
     /// 20pt on macOS 26+ to match the liquid-glass look (on macOS 27 the
     /// window radius is raised to 28pt through private API, keeping this
@@ -137,15 +177,15 @@ public final class LeftSidebarView: View {
         edit.scaleOnClick = true
         edit.setAccessibilityLabel(strings().chatListFilterEditFilters)
 
+        NotificationCenter.default.addObserver(self, selector: #selector(updateWindowMaterial), name: systemWindowMaterialDidChange, object: nil)
+        updateWindowMaterial()
         updateLocalizationAndTheme(theme: theme)
     }
 
     public override func updateLocalizationAndTheme(theme: PresentationTheme) {
         super.updateLocalizationAndTheme(theme: theme)
         let theme = theme as! TelegramPresentationTheme
-        if System.edgeToEdgeSidebar {
-            backgroundColor = theme.colors.background
-        }
+        updateBackground(theme)
         trailingSeparator?.backgroundColor = theme.colors.border
         edit.set(image: theme.icons.folders_sidebar_edit, for: .Normal)
         edit.borderColor = theme.colors.grayIcon.withAlphaComponent(0.1)
@@ -174,6 +214,7 @@ public final class LeftSidebarView: View {
             glassView.frame = bounds
             glassView.updateLayout(size: bounds.size, transition: .immediate)
         }
+        materialView?.frame = bounds
         trailingSeparator?.frame = NSMakeRect(frame.width - .borderSize, 0, .borderSize, frame.height)
         tableView.frame = NSMakeRect(0, 0, frame.width, frame.height - 50)
         edit.frame = NSMakeRect(0, frame.height - 50, frame.width, 50)
