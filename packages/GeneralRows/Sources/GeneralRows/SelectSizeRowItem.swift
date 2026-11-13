@@ -24,6 +24,7 @@ struct NativeSliderGeometry {
 
     static let knobSize = NSMakeSize(20, 16)
     static let liftedKnobSize = NSMakeSize(30, 22)
+    static let endFillFraction: CGFloat = 0.05
     static let trackHeight: CGFloat = 6
     static let tickSize: CGFloat = 2
     static let tickOffset: CGFloat = 14
@@ -337,8 +338,11 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         trackView.needsDisplay = true
     }
 
-    private var trackSources: [LiquidGlassLensContentSource] {
-        return trackView.superview === nativeLens?.contentView ? [LiquidGlassLensContentSource(view: trackView)] : []
+    private func trackSources(_ lensFrame: NSRect) -> [LiquidGlassLensContentSource] {
+        guard trackView.superview === nativeLens?.contentView else {
+            return []
+        }
+        return [LiquidGlassLensContentSource(view: trackView, magnificationCenter: NSMakePoint(lensFrame.midX, lensFrame.midY))]
     }
 
     public override func hitTest(_ point: NSPoint) -> NSView? {
@@ -511,7 +515,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
                 lens.contentView.addSubview(trackView)
                 trackView.frame = containerView.bounds
             }
-            lens.update(lensFrame: from, interactionProgress: 0, appearance: theme.appearance, backingScale: backingScaleFactor, animation: .immediate, contentSources: trackSources)
+            lens.update(lensFrame: from, interactionProgress: 0, appearance: theme.appearance, backingScale: backingScaleFactor, animation: .immediate, contentSources: trackSources(from))
         }
         guard let nativeLens else {
             thumbView.layer?.opacity = 1
@@ -520,7 +524,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         nativeLens.frame = containerView.bounds
         let size = knobSize == NativeSliderGeometry.knobSize ? NativeSliderGeometry.liftedKnobSize : SelectSizeRowView.liftedThumbSize
         let frame = lifted ? NSMakeRect(rest.midX - size.width / 2, rest.midY - size.height / 2, size.width, size.height) : rest
-        nativeLens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: theme.appearance, backingScale: backingScaleFactor, animation: animation, contentSources: trackSources)
+        nativeLens.update(lensFrame: frame, interactionProgress: lifted ? 1 : 0, appearance: theme.appearance, backingScale: backingScaleFactor, animation: animation, contentSources: trackSources(frame))
         let opacity: Float = lifted && nativeLens.hasActiveSurface ? 0 : 1
         if thumbView.layer?.opacity != opacity {
             let previous = thumbView.layer?.presentation()?.opacity ?? thumbView.layer?.opacity ?? 1
@@ -803,7 +807,14 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         let current = renderedPosition
         let track = geometry.trackRect
         let radius = track.height / 2
-        let fillX = geometry.centers.isEmpty ? track.minX : min(max(geometry.centers[0] + (geometry.centers.count > 1 ? (geometry.centers[1] - geometry.centers[0]) : 0) * current, track.minX), track.maxX)
+        var fillX = geometry.centers.isEmpty ? track.minX : min(max(geometry.centers[0] + (geometry.centers.count > 1 ? (geometry.centers[1] - geometry.centers[0]) : 0) * current, track.minX), track.maxX)
+        if geometry.centers.count > 1, let last = geometry.centers.last {
+            let maxPosition = CGFloat(geometry.centers.count - 1)
+            let tail = maxPosition * NativeSliderGeometry.endFillFraction
+            let progress = min(1, max(0, (current - (maxPosition - tail)) / tail))
+            let eased = progress * progress * (3 - 2 * progress)
+            fillX = min(track.maxX, fillX + (track.maxX - last) * eased)
+        }
         let trackColor = theme.colors.text.withAlphaComponent(0.13)
 
         func segment(_ from: CGFloat, _ to: CGFloat, dotted: Bool) {
