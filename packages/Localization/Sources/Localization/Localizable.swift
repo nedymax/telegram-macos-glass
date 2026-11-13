@@ -9269,6 +9269,22 @@ public final class L10n {
   public static var generalSettingsForceTouchPreviewMedia: String  { return L10n.tr("Localizable", "GeneralSettings.ForceTouch.PreviewMedia") }
   /// Add Reaction
   public static var generalSettingsForceTouchReact: String  { return L10n.tr("Localizable", "GeneralSettings.ForceTouch.React") }
+  /// Messages
+  public static var generalSettingsViewControllerMessagesHeader: String  { return L10n.tr("Localizable", "GeneralSettings.ViewController.MessagesHeader") }
+  /// Force Click on a message
+  public static var generalSettingsViewControllerForceClick: String  { return L10n.tr("Localizable", "GeneralSettings.ViewController.ForceClick") }
+  /// Reply
+  public static var generalSettingsViewControllerForceClickReply: String  { return L10n.tr("Localizable", "GeneralSettings.ViewController.ForceClickReply") }
+  /// Edit
+  public static var generalSettingsViewControllerForceClickEdit: String  { return L10n.tr("Localizable", "GeneralSettings.ViewController.ForceClickEdit") }
+  /// Forward
+  public static var generalSettingsViewControllerForceClickForward: String  { return L10n.tr("Localizable", "GeneralSettings.ViewController.ForceClickForward") }
+  /// Send message with
+  public static var generalSettingsViewControllerSendWith: String  { return L10n.tr("Localizable", "GeneralSettings.ViewController.SendWith") }
+  /// Return
+  public static var generalSettingsViewControllerSendWithReturn: String  { return L10n.tr("Localizable", "GeneralSettings.ViewController.SendWithReturn") }
+  /// ⌘ Return
+  public static var generalSettingsViewControllerSendWithCmdReturn: String  { return L10n.tr("Localizable", "GeneralSettings.ViewController.SendWithCmdReturn") }
   /// Reply to Message
   public static var generalSettingsForceTouchReply: String  { return L10n.tr("Localizable", "GeneralSettings.ForceTouch.Reply") }
   /// Scroll With Spacebar
