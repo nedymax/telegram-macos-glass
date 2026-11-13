@@ -342,7 +342,7 @@ private class SelectSizeRowView : TableRowView, ViewDisplayDelegate {
         guard trackView.superview === nativeLens?.contentView else {
             return []
         }
-        return [LiquidGlassLensContentSource(view: trackView, magnificationCenter: NSMakePoint(lensFrame.midX, lensFrame.midY))]
+        return [LiquidGlassLensContentSource(view: trackView, magnificationCenter: NSMakePoint(lensFrame.midX, lensFrame.midY), magnifies: false)]
     }
 
     public override func hitTest(_ point: NSPoint) -> NSView? {
