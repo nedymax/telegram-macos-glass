@@ -80,8 +80,9 @@ open class GeneralInteractedRowView: GeneralContainableRowView, ViewDisplayDeleg
             }
             if case let .selectableLeft(value) = item.type {
                 
-                let unselected: CGImage = item.customTheme?.unselectedImage ?? theme.icons.chatToggleUnselected
-                let selected: CGImage = item.customTheme?.selectedImage ?? theme.icons.chatToggleSelected
+                let settingsCheckbox = item.settingsPresentation != nil && item.customTheme == nil
+                let unselected: CGImage = settingsCheckbox ? SettingsCheckbox.unselected : (item.customTheme?.unselectedImage ?? theme.icons.chatToggleUnselected)
+                let selected: CGImage = settingsCheckbox ? SettingsCheckbox.selected() : (item.customTheme?.selectedImage ?? theme.icons.chatToggleSelected)
 
                 let current: SelectingControl
                 if let view = self.selectLeftControl {

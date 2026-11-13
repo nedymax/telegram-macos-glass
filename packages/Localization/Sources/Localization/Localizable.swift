@@ -17857,6 +17857,10 @@ public final class L10n {
   public static var storageUsageClear: String  { return L10n.tr("Localizable", "StorageUsage.Clear") }
   /// Clear
   public static var storageUsageClearDisabled: String  { return L10n.tr("Localizable", "StorageUsage.ClearDisabled") }
+  /// %1$@ selected
+  public static func storageUsageClearButtonItemSelected(_ p1: String) -> String {
+    return L10n.tr("Localizable", "StorageUsage.ClearButtonItem.Selected", p1)
+  }
   /// Storage Cleared
   public static var storageUsageCleared: String  { return L10n.tr("Localizable", "StorageUsage.Cleared") }
   /// %@ freed on your Device!
