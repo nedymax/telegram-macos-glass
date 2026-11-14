@@ -933,6 +933,13 @@ fileprivate final class TitleView : Control {
         self.updateLayout(size: frame.size, transition: .immediate)
     }
     
+    func textCapCenterY(height: CGFloat) -> CGFloat? {
+        guard let capCenterY = textView.capCenterY else {
+            return nil
+        }
+        return floorToScreenPixels(backingScaleFactor, (height - textView.frame.height) / 2) + capCenterY
+    }
+
     func updateLayout(size: NSSize, transition: ContainedViewLayoutTransition) {
         transition.updateFrame(view: textView, frame: textView.centerFrameY(x: 0))
         if let premiumStatus = self.premiumStatus {
@@ -1777,7 +1784,11 @@ public class PeerListContainerView : Control {
         }
 
 
-        transition.updateFrame(view: titleView, frame: CGRect(origin: CGPoint(x: titleX, y: floorToScreenPixels(bsc, (statusHeight - titleView.size.height) / 2) - 2), size: titleView.size))
+        var titleY = floorToScreenPixels(bsc, (statusHeight - titleView.size.height) / 2) - 2
+        if System.edgeToEdgeSidebar, let lightsY = statusContainer.trafficLightsCenterY, let capY = titleView.textCapCenterY(height: titleView.size.height) {
+            titleY = floorToScreenPixels(bsc, lightsY - capY)
+        }
+        transition.updateFrame(view: titleView, frame: CGRect(origin: CGPoint(x: titleX, y: titleY), size: titleView.size))
         titleView.updateLayout(size: titleView.size, transition: transition)
         transition.updateAlpha(view: titleView, alpha: progress)
 

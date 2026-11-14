@@ -859,7 +859,8 @@ public final class AccountControllerView : Control {
         edit.setFrameOrigin(NSMakePoint(statusContainer.frame.width - edit.frame.width - 10, statusContainer.frame.height - edit.frame.height))
         textView.centerX(y: 14)
         if let centerY = windowControlsCenterY {
-            textView.setFrameOrigin(NSMakePoint(textView.frame.minX, floorToScreenPixels(backingScaleFactor, centerY - textView.frame.height / 2)))
+            let textCenter = textView.capCenterY ?? textView.frame.height / 2
+            textView.setFrameOrigin(NSMakePoint(textView.frame.minX, floorToScreenPixels(backingScaleFactor, centerY - textCenter)))
             edit.setFrameOrigin(NSMakePoint(edit.frame.minX, floorToScreenPixels(backingScaleFactor, centerY - edit.frame.height / 2)))
         }
 
