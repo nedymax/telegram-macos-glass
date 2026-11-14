@@ -930,6 +930,12 @@ open class NavigationViewController: ViewController, CALayerDelegate,CAAnimation
         stack.insert(controller, at: at)
     }
     
+    public func inheritSettingsScreen(_ controller: ViewController) {
+        if self.controller.isSettingsScreen, controller.acceptsSettingsLayout {
+            controller.isSettingsScreen = true
+        }
+    }
+
     open func push(_ controller:ViewController, _ animated:Bool = true, style: ViewControllerStyle? = nil, clearStack: Bool = false) -> Void {
         
 //        if isLocked {
@@ -945,6 +951,7 @@ open class NavigationViewController: ViewController, CALayerDelegate,CAAnimation
         }
 
         controller.navigationController = self
+        inheritSettingsScreen(controller)
         controller.loadViewIfNeeded(self.bounds)
         self.controller.readyToDetach()
         self.pushDisposable.set((controller.ready.get() |> take(1)).start(next: {[weak self] _ in
