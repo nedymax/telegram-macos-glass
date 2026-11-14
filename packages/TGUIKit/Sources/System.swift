@@ -159,7 +159,7 @@ public struct System {
 
 }
 
-let systemLiquidGlassDidChange = Notification.Name("TGUIKitLiquidGlassDidChange")
+public let systemLiquidGlassDidChange = Notification.Name("TGUIKitLiquidGlassDidChange")
 public let systemWindowMaterialDidChange = Notification.Name("TGUIKitWindowMaterialDidChange")
 
 public var uiLocalizationFunc:((String)->String)?
