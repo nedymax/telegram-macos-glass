@@ -3237,48 +3237,53 @@ final class PickerFrostView: NSVisualEffectView {
 }
 
 final class PickerHeaderBlur {
-    private var filter: CIFilter?
-    private var maskKey: NSRect?
+    private var strip: PickerHeaderBlurStrip?
 
     func update(_ view: NSView, enabled: Bool, height: CGFloat) -> Bool {
-        guard #available(macOS 26.0, *), enabled, let layer = view.layer else {
-            if filter != nil {
-                view.layer?.filters = nil
-                filter = nil
-                maskKey = nil
-            }
+        guard #available(macOS 26.0, *), enabled, let superview = view.superview else {
+            strip?.removeFromSuperview()
+            strip = nil
             return false
         }
-        if filter == nil {
-            guard let created = CIFilter(name: "CIMaskedVariableBlur") else {
-                return false
-            }
-            created.setDefaults()
-            created.setValue(14, forKey: kCIInputRadiusKey)
-            view.layerUsesCoreImageFilters = true
-            filter = created
+        let strip = self.strip ?? PickerHeaderBlurStrip(frame: .zero)
+        self.strip = strip
+        if strip.superview !== superview {
+            strip.removeFromSuperview()
+            superview.layerUsesCoreImageFilters = true
+            superview.addSubview(strip, positioned: .above, relativeTo: view)
         }
-        guard let filter else {
-            return false
-        }
-        let size = NSMakeSize(floor(layer.bounds.width), floor(layer.bounds.height))
-        let blurHeight = floor(max(0, height))
-        let key = NSMakeRect(0, blurHeight, size.width, size.height)
-        if key != maskKey, size.width > 0, size.height > 0 {
-            maskKey = key
-            filter.setValue(PickerHeaderBlur.mask(blurHeight: blurHeight, size: size), forKey: "inputMask")
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            layer.filters = [filter]
-            CATransaction.commit()
-        }
+        let blurHeight = min(max(0, floor(height)), view.frame.height)
+        let y = superview.isFlipped ? view.frame.minY : view.frame.maxY - blurHeight
+        strip.frame = NSMakeRect(view.frame.minX, y, view.frame.width, blurHeight)
+        strip.isHidden = blurHeight <= 0
         return true
     }
+}
 
-    private static func mask(blurHeight: CGFloat, size: NSSize) -> CIImage {
-        let bounds = CGRect(origin: .zero, size: size)
-        let clear = CIImage(color: CIColor.black).cropped(to: bounds)
-        let blurred = CIImage(color: CIColor.white).cropped(to: CGRect(x: 0, y: 0, width: size.width, height: min(blurHeight, size.height)))
-        return blurred.composited(over: clear)
+private final class PickerHeaderBlurStrip: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layerUsesCoreImageFilters = true
+        layer?.masksToBounds = true
+        var filters: [CIFilter] = []
+        if let clamp = CIFilter(name: "CIAffineClamp") {
+            clamp.setDefaults()
+            filters.append(clamp)
+        }
+        if let blur = CIFilter(name: "CIGaussianBlur") {
+            blur.setDefaults()
+            blur.setValue(14, forKey: kCIInputRadiusKey)
+            filters.append(blur)
+        }
+        layer?.backgroundFilters = filters
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        return nil
     }
 }
