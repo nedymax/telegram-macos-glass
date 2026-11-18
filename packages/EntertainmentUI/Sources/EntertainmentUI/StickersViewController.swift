@@ -757,7 +757,6 @@ public class NStickersView : View {
     private let searchBackdrop = View()
     private let searchFrost = PickerFrostView()
     private var selectionFrost: NSVisualEffectView?
-    private let headerBlurFilter = PickerHeaderBlur()
 
     public var isGlass: Bool = false {
         didSet {
@@ -1154,14 +1153,6 @@ public class NStickersView : View {
         transition.updateFrame(view: packsView, frame: tabsContainer.focus(NSMakeSize(size.width, 36)))
 
         
-        let headerInset: CGFloat = usesMenuPanel && !TelegramUtilsHooks.shared.isLite(.blur) ? 46 : 0
-        let tableY = headerInset > 0 ? max(0, tabsContainer.frame.maxY - headerInset) : tabsContainer.frame.maxY
-        let topInset = headerInset > 0 ? tabsContainer.frame.maxY - tableY : 0
-        if tableView.contentInsets.top != topInset {
-            var insets = tableView.contentInsets
-            insets.top = topInset
-            tableView.contentInsets = insets
-        }
         separator.isHidden = usesMenuPanel
 
         let dest = max(0, min(tableView.rectOf(index: 0).minY + (tableView.clipView.destination?.y ?? tableView.documentOffset.y) + topInset, 46))
@@ -1196,8 +1187,7 @@ public class NStickersView : View {
         if let restrictedView = restrictedView {
             transition.updateFrame(view: restrictedView, frame: size.bounds)
         }
-        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tableY, size.width, headerInset > 0 ? size.height - tableY : size.height))
-        headerBlurFilter.update(tableView, enabled: headerInset > 0, height: 46 - tableView.frame.minY)
+        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabsContainer.frame.maxY, size.width, size.height))
 
                 
         transition.updateFrame(view: searchStatusView, frame: NSMakeRect(0, searchContainer.frame.maxY, size.width, max(0, size.height - searchContainer.frame.maxY - 56)))
@@ -1448,16 +1438,7 @@ public class NStickersViewController<Context: AccountContextProtocol>: TelegramG
             guard let `self` = self, position.visibleRows.length > 0 else {
                 return
             }
-            let tableView = self.genericView.tableView
-            var firstRow = position.visibleRows.location
-            let headerInset = tableView.contentInsets.top
-            if headerInset > 0 {
-                let row = tableView.row(at: NSMakePoint(1, tableView.documentOffset.y + headerInset + 1))
-                if row >= 0 {
-                    firstRow = row
-                }
-            }
-            let item = tableView.item(at: min(firstRow, tableView.count - 1))
+            let item = self.genericView.tableView.item(at: position.visibleRows.location)
             self.genericView.packsView.changeSelection(stableId: item.stableId)
             self.genericView.packsView.scroll(to: .center(id: item.stableId, innerId: nil, animated: true, focus: .init(focus: false), inset: 0))
             self.genericView.updateSelectionState(animated: true)
