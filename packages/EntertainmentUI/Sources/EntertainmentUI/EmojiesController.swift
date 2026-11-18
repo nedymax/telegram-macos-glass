@@ -3200,4 +3200,3 @@ final class PickerFrostView: NSVisualEffectView {
         set {}
     }
 }
-
