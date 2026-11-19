@@ -871,27 +871,40 @@ private final class EmojiesSectionRowView : TableRowView, ModalPreviewRowViewPro
             } else if let selected = selectedLayers[key] {
                 selected.animate(from: NSNumber(value: selected.frame.height / 2), to: NSNumber(value: 10), keyPath: "cornerRadius", timingFunction: .easeOut, duration: 0.2, forKey: "cornerRadius")
             }
-            if let view = initialPlayers[key.index], view.currentState == .playing {
+            if let view = initialPlayers[key.index] {
                 view.frame = value.frame
                 value.superview?.addSubview(view)
-                value.stopped = true
-                value.reset()
                 value.opacity = 0
                 appearanceViews.append(.init(value: view))
-                view.contextAnimation?.triggerOn = (.last, { [weak view, weak value] in
-                    if let value = value {
-                        value.triggerNextState = { [weak value] _ in
+                if view.currentState == .playing {
+                    view.contextAnimation?.triggerOn = (.last, { [weak self, weak view, weak value] in
+                        guard let self, let value else {
                             view?.removeFromSuperview()
-                            value?.opacity = 1
+                            return
                         }
-                        value.stopped = false
-                        value.apply()
-                    } else {
-                        view?.removeFromSuperview()
-                    }
-                }, {})
+                        self.updateAnimatableContent()
+                        self.reveal(value, replacing: view)
+                    }, {})
+                } else {
+                    reveal(value, replacing: view)
+                }
             }
         }
+    }
+
+    private func reveal(_ value: InlineStickerItemLayer, replacing view: NSView?, attempts: Int = 60) {
+        if (value.contents != nil && value.playerState == .playing) || attempts == 0 {
+            view?.removeFromSuperview()
+            value.opacity = 1
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60.0, execute: { [weak self, weak value, weak view] in
+            guard let self, let value else {
+                view?.removeFromSuperview()
+                return
+            }
+            self.reveal(value, replacing: view, attempts: attempts - 1)
+        })
     }
 
     
