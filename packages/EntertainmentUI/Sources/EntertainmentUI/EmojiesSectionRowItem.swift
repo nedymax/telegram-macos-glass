@@ -874,25 +874,15 @@ private final class EmojiesSectionRowView : TableRowView, ModalPreviewRowViewPro
             if let view = initialPlayers[key.index], view.currentState == .playing {
                 view.frame = value.frame
                 value.superview?.addSubview(view)
-                value.stopped = true
-                value.reset()
                 value.opacity = 0
                 appearanceViews.append(.init(value: view))
                 view.contextAnimation?.triggerOn = (.last, { [weak self, weak view, weak value] in
-                    self?.updateAnimatableContent()
-                    if let value = value {
-                        value.triggerNextState = { [weak self, weak value] _ in
-                            guard let self, let value else {
-                                view?.removeFromSuperview()
-                                return
-                            }
-                            self.reveal(value, replacing: view)
-                        }
-                        value.stopped = false
-                        value.apply()
-                    } else {
+                    guard let self, let value else {
                         view?.removeFromSuperview()
+                        return
                     }
+                    self.updateAnimatableContent()
+                    self.reveal(value, replacing: view)
                 }, {})
             }
         }
