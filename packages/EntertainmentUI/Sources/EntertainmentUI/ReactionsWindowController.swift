@@ -26,6 +26,7 @@ public final class ReactionsWindowController : NSObject {
         private var tintGlass: NSView?
         private var morphAnimator: ConstantDisplayLinkAnimator?
         private var isMorphing = false
+        private let morphMask = CAShapeLayer()
         init(_ content: NSView, theme: TelegramPresentationTheme) {
             
             self.theme = theme
@@ -127,6 +128,7 @@ public final class ReactionsWindowController : NSObject {
             morphAnimator?.invalidate()
             morphAnimator = nil
             isMorphing = false
+            contentView.layer?.mask = nil
             tintGlass?.removeFromSuperview()
             tintGlass = nil
             glassView?.alphaValue = 1
@@ -148,6 +150,7 @@ public final class ReactionsWindowController : NSObject {
 
         func initFake(_ bar: NSRect) {
             isMorphing = true
+            contentView.layer?.mask = morphMask
             if #available(macOS 26.0, *), let glassView {
                 let tint = NSGlassEffectView(frame: .zero)
                 tint.style = .regular
@@ -165,13 +168,17 @@ public final class ReactionsWindowController : NSObject {
         private func applyMorph(_ rect: NSRect) {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            container.frame = rect
-            let inner = rect.size.bounds
-            glassView?.frame = inner
-            tintGlass?.frame = inner
-            visualView.frame = inner
-            backgroundView.frame = inner
-            contentView.frame = NSRect(origin: NSMakePoint(-rect.minX, -rect.minY), size: bounds.size)
+            container.frame = bounds
+            glassView?.frame = rect
+            tintGlass?.frame = rect
+            visualView.frame = rect
+            backgroundView.frame = rect
+            contentView.frame = bounds
+            if let layer = contentView.layer, layer.mask === morphMask {
+                let radius = min(20, rect.height / 2)
+                morphMask.frame = layer.bounds
+                morphMask.path = CGPath(roundedRect: contentView.convertToLayer(rect), cornerWidth: radius, cornerHeight: radius, transform: nil)
+            }
             CATransaction.commit()
         }
         
