@@ -233,6 +233,7 @@ private func entries(_ state: State, arguments: Arguments, mediaArguments: Enter
 
 public final class GifKeyboardView : View {
     public let tableView = TableView()
+    private let tableClip = PickerTableClip(frame: .zero)
     public let packsView = HorizontalTableView(frame: NSZeroRect)
     fileprivate var restrictedView:RestrictionWrappedView?
     private let borderView = View()
@@ -277,7 +278,8 @@ public final class GifKeyboardView : View {
         self.tableView.getBackgroundColor = {
             .clear
         }
-        addSubview(self.tableView)
+        tableClip.addSubview(self.tableView)
+        addSubview(tableClip)
 
         searchFrost.wantsLayer = true
         searchFrost.material = .selection
@@ -356,7 +358,7 @@ public final class GifKeyboardView : View {
         transition.updateFrame(view: searchFrost, frame: searchView.frame)
         transition.updateFrame(view: searchBorder, frame: NSMakeRect(0, searchContainer.frame.height - .borderSize, size.width, .borderSize))
         
-        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabs.frame.maxY, size.width, size.height))
+        tableClip.update(table: tableView, tableFrame: NSMakeRect(0, tabs.frame.maxY, size.width, size.height), coveredUntil: searchContainer.frame.maxY, size: size, transition: transition)
 
         transition.updateFrame(view: searchStatusView, frame: NSMakeRect(0, searchContainer.frame.maxY, size.width, max(0, size.height - searchContainer.frame.maxY - 56)))
 

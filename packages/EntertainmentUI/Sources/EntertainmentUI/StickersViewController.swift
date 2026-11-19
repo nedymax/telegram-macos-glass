@@ -736,6 +736,7 @@ private func stickerSearchHasResults(_ table: TableView) -> Bool {
 
 public class NStickersView : View {
     let tableView:TableView = TableView(frame: NSZeroRect)
+    private let tableClip = PickerTableClip(frame: .zero)
     fileprivate var restrictedView:RestrictionWrappedView?
     private let searchStatusView = PanelSearchStatusView(frame: .zero)
     private var searchStatus: PanelSearchPresentation = .hidden
@@ -779,7 +780,8 @@ public class NStickersView : View {
     public required init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         
-        addSubview(tableView)
+        tableClip.addSubview(tableView)
+        addSubview(tableClip)
         tableView.getBackgroundColor = { [weak self] in
             return self?.usesMenuPanel == true ? .clear : (self?.presentation ?? theme).colors.background
         }
@@ -1187,7 +1189,7 @@ public class NStickersView : View {
         if let restrictedView = restrictedView {
             transition.updateFrame(view: restrictedView, frame: size.bounds)
         }
-        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabsContainer.frame.maxY, size.width, size.height))
+        tableClip.update(table: tableView, tableFrame: NSMakeRect(0, tabsContainer.frame.maxY, size.width, size.height), coveredUntil: searchContainer.frame.maxY, size: size, transition: transition)
 
                 
         transition.updateFrame(view: searchStatusView, frame: NSMakeRect(0, searchContainer.frame.maxY, size.width, max(0, size.height - searchContainer.frame.maxY - 56)))

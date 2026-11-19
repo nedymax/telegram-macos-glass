@@ -1440,6 +1440,7 @@ public final class AnimatedEmojiesCategories : Control {
 
 public final class AnimatedEmojiesView : Control {
     public let tableView = TableView(frame: NSMakeRect(0, 0, 350, 350))
+    private let tableClip = PickerTableClip(frame: .zero)
     public let packsView = HorizontalTableView(frame: NSMakeRect(0, 0, 350, 46))
     private let borderView = View()
     private let tabs = View()
@@ -1528,7 +1529,8 @@ public final class AnimatedEmojiesView : Control {
         self.tableView.getBackgroundColor = {
             .clear
         }
-        addSubview(self.tableView)
+        tableClip.addSubview(self.tableView)
+        addSubview(tableClip)
         
         searchView.isLeftOrientated = true
         searchView.layer?.cornerRadius = 15
@@ -1607,7 +1609,6 @@ public final class AnimatedEmojiesView : Control {
         transition.updateFrame(view: tabs, frame: NSMakeRect(0, initial, size.width, 46))
         transition.updateFrame(view: packsView, frame: tabs.focus(NSMakeSize(size.width, 36)))
         transition.updateFrame(view: borderView, frame: NSMakeRect(0, tabs.frame.maxY, size.width, .borderSize))
-        transition.updateFrame(view: tableView, frame: NSMakeRect(0, tabs.frame.maxY, size.width, size.height - initial))
         
         transition.updateAlpha(view: borderView, alpha: inSearch || usesPickerStyle ? 0 : 1)
 
@@ -1616,6 +1617,7 @@ public final class AnimatedEmojiesView : Control {
 
         let searchDest = inSearch ? 0 : dest
         transition.updateFrame(view: searchContainer, frame: NSMakeRect(0, tabs.frame.maxY, size.width, 46 - min(searchDest, 46)))
+        tableClip.update(table: tableView, tableFrame: NSMakeRect(0, tabs.frame.maxY, size.width, size.height - initial), coveredUntil: searchContainer.frame.maxY, size: size, transition: transition)
 
         
         let searchInsideRect: CGRect = CGRect(origin: CGPoint(x: 0, y: searchContainer.frame.height - 46), size: NSMakeSize(size.width, 46))
@@ -3198,5 +3200,22 @@ final class PickerFrostView: NSVisualEffectView {
     override var isEmphasized: Bool {
         get { false }
         set {}
+    }
+}
+
+final class PickerTableClip: View {
+    required init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        self.layer?.masksToBounds = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(table: NSView, tableFrame: NSRect, coveredUntil coverBottom: CGFloat, size: NSSize, transition: ContainedViewLayoutTransition) {
+        let top = min(max(coverBottom, tableFrame.minY), size.height)
+        transition.updateFrame(view: self, frame: NSMakeRect(0, top, size.width, size.height - top))
+        transition.updateFrame(view: table, frame: tableFrame.offsetBy(dx: 0, dy: -top))
     }
 }
