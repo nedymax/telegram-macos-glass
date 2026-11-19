@@ -881,9 +881,12 @@ private final class EmojiesSectionRowView : TableRowView, ModalPreviewRowViewPro
                 view.contextAnimation?.triggerOn = (.last, { [weak self, weak view, weak value] in
                     self?.updateAnimatableContent()
                     if let value = value {
-                        value.triggerNextState = { [weak value] _ in
-                            view?.removeFromSuperview()
-                            value?.opacity = 1
+                        value.triggerNextState = { [weak self, weak value] _ in
+                            guard let self, let value else {
+                                view?.removeFromSuperview()
+                                return
+                            }
+                            self.reveal(value, replacing: view)
                         }
                         value.stopped = false
                         value.apply()
@@ -896,6 +899,21 @@ private final class EmojiesSectionRowView : TableRowView, ModalPreviewRowViewPro
     }
 
     
+    private func reveal(_ value: InlineStickerItemLayer, replacing view: NSView?, attempts: Int = 60) {
+        if value.contents != nil || attempts == 0 {
+            view?.removeFromSuperview()
+            value.opacity = 1
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60.0, execute: { [weak self, weak value, weak view] in
+            guard let self, let value else {
+                view?.removeFromSuperview()
+                return
+            }
+            self.reveal(value, replacing: view, attempts: attempts - 1)
+        })
+    }
+
     override func set(item: TableRowItem, animated: Bool = false) {
         super.set(item: item, animated: animated)
         
