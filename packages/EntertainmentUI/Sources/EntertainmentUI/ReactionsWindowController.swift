@@ -131,7 +131,6 @@ public final class ReactionsWindowController : NSObject {
             tintGlass = nil
             glassView?.alphaValue = 1
             applyMorph(bounds)
-            refreshAnimatableContent(in: contentView)
             if glassView == nil {
                 let shadow = NSShadow()
                 shadow.shadowBlurRadius = 2
@@ -141,16 +140,6 @@ public final class ReactionsWindowController : NSObject {
                 self.layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 20, cornerHeight: 20, transform: nil)
             }
             needsLayout = true
-        }
-
-        private func refreshAnimatableContent(in view: NSView) {
-            if let table = view as? TableView {
-                table.enumerateVisibleViews(with: { $0.updateAnimatableContent() })
-                return
-            }
-            for subview in view.subviews {
-                refreshAnimatableContent(in: subview)
-            }
         }
 
         var usesGlass: Bool {
