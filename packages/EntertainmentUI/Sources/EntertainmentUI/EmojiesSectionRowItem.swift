@@ -902,7 +902,7 @@ private final class EmojiesSectionRowView : TableRowView, ModalPreviewRowViewPro
     }
 
     private func reveal(_ value: InlineStickerItemLayer, replacing view: NSView?, attempts: Int = 60) {
-        if (value.contents != nil && value.playerState == .playing) || attempts == 0 {
+        if value.contents != nil || attempts == 0 {
             view?.removeFromSuperview()
             value.opacity = 1
             return
@@ -1106,6 +1106,15 @@ private final class EmojiesSectionRowView : TableRowView, ModalPreviewRowViewPro
         
         self.updateInlineStickers(context: item.context, color: color, contentView: contentView, items: item.items, selected: item.selectedItems, animated: animated, uniqueGifts: item.uniqueGifts)
 
+        if !appearanceViews.isEmpty {
+            for value in inlineStickerItemViews.values where value.opacity == 0 {
+                value.opacity = 1
+                if value.stopped {
+                    value.stopped = false
+                    value.apply()
+                }
+            }
+        }
         while !appearanceViews.isEmpty {
             appearanceViews.removeLast().value?.removeFromSuperview()
         }
