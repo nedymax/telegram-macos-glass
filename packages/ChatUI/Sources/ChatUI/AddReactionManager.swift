@@ -291,7 +291,13 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
             player.set(animation, reset: true, saveContext: true, animated: false)
             self.currentKey = key
         }
-        
+
+        func handOverPlayer() -> LottiePlayerView {
+            disposable.set(nil)
+            appearDisposable.set(nil)
+            return player
+        }
+
         deinit {
             disposable.dispose()
             stateDisposable.dispose()
@@ -693,7 +699,7 @@ public final class ContextAddReactionsListView : View, StickerFramesCollector, A
         var frames:[Int : LottiePlayerView] = [:]
         for (i, view) in self.documentView.subviews.enumerated() {
             if let view = view as? ReactionView {
-                frames[i] = view.player
+                frames[i] = view.handOverPlayer()
             }
         }
         return frames
